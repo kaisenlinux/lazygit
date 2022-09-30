@@ -10,7 +10,7 @@ Author: Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>
 +	version     = "0.35"
  	date        string
 -	buildSource = "unknown"
-+	buildSource = "Builded by the Kaisen Linux team"
++	buildSource = "Built by the Kaisen Linux developers"
  )
  
  func main() {
