@@ -1,0 +1,25 @@
+Author: Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>
+
+--- lazygit-0.35.orig/main.go
++++ lazygit-0.35/main.go
+@@ -21,9 +21,9 @@ import (
+ 
+ var (
+ 	commit      string
+-	version     = "unversioned"
++	version     = "0.35"
+ 	date        string
+-	buildSource = "unknown"
++	buildSource = "Builded by the Kaisen Linux team"
+ )
+ 
+ func main() {
+@@ -97,7 +97,7 @@ func main() {
+ 	}
+ 
+ 	if versionFlag {
+-		fmt.Printf("commit=%s, build date=%s, build source=%s, version=%s, os=%s, arch=%s\n", commit, date, buildSource, version, runtime.GOOS, runtime.GOARCH)
++		fmt.Printf("version=%s, build source=%s, arch=%s\n", version, buildSource, runtime.GOARCH)
+ 		os.Exit(0)
+ 	}
+ 
