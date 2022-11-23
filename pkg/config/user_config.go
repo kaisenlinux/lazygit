@@ -55,7 +55,6 @@ type GuiConfig struct {
 }
 
 type ThemeConfig struct {
-	LightTheme                bool     `yaml:"lightTheme"`
 	ActiveBorderColor         []string `yaml:"activeBorderColor"`
 	InactiveBorderColor       []string `yaml:"inactiveBorderColor"`
 	OptionsTextColor          []string `yaml:"optionsTextColor"`
@@ -265,7 +264,8 @@ type KeybindingCommitsConfig struct {
 }
 
 type KeybindingStashConfig struct {
-	PopStash string `yaml:"popStash"`
+	PopStash    string `yaml:"popStash"`
+	RenameStash string `yaml:"renameStash"`
 }
 
 type KeybindingCommitFilesConfig struct {
@@ -310,10 +310,15 @@ type CustomCommand struct {
 	LoadingText string                `yaml:"loadingText"`
 	Description string                `yaml:"description"`
 	Stream      bool                  `yaml:"stream"`
+	ShowOutput  bool                  `yaml:"showOutput"`
 }
 
 type CustomCommandPrompt struct {
-	Type  string `yaml:"type"` // one of 'input', 'menu', or 'confirm'
+	Key string `yaml:"key"`
+
+	// one of 'input', 'menu', 'confirm', or 'menuFromCommand'
+	Type string `yaml:"type"`
+
 	Title string `yaml:"title"`
 
 	// this only apply to input prompts
@@ -352,9 +357,8 @@ func GetDefaultConfig() *UserConfig {
 			Language:               "auto",
 			TimeFormat:             time.RFC822,
 			Theme: ThemeConfig{
-				LightTheme:                false,
 				ActiveBorderColor:         []string{"green", "bold"},
-				InactiveBorderColor:       []string{"white"},
+				InactiveBorderColor:       []string{"default"},
 				OptionsTextColor:          []string{"blue"},
 				SelectedLineBgColor:       []string{"blue"},
 				SelectedRangeBgColor:      []string{"blue"},
@@ -542,7 +546,8 @@ func GetDefaultConfig() *UserConfig {
 				ViewBisectOptions:              "b",
 			},
 			Stash: KeybindingStashConfig{
-				PopStash: "g",
+				PopStash:    "g",
+				RenameStash: "r",
 			},
 			CommitFiles: KeybindingCommitFilesConfig{
 				CheckoutCommitFile: "c",

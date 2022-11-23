@@ -3,7 +3,7 @@ package hosting_service
 // if you want to make a custom regex for a given service feel free to test it out
 // at regoio.herokuapp.com
 var defaultUrlRegexStrings = []string{
-	`^(?:https?|ssh)://.*/(?P<owner>.*)/(?P<repo>.*?)(?:\.git)?$`,
+	`^(?:https?|ssh)://[^/]+/(?P<owner>.*)/(?P<repo>.*?)(?:\.git)?$`,
 	`^git@.*:(?P<owner>.*)/(?P<repo>.*?)(?:\.git)?$`,
 }
 var defaultRepoURLTemplate = "https://{{.webDomain}}/{{.owner}}/{{.repo}}"
@@ -24,8 +24,11 @@ var bitbucketServiceDef = ServiceDefinition{
 	pullRequestURLIntoDefaultBranch: "/pull-requests/new?source={{.From}}&t=1",
 	pullRequestURLIntoTargetBranch:  "/pull-requests/new?source={{.From}}&dest={{.To}}&t=1",
 	commitURL:                       "/commits/{{.CommitSha}}",
-	regexStrings:                    defaultUrlRegexStrings,
-	repoURLTemplate:                 defaultRepoURLTemplate,
+	regexStrings: []string{
+		`^(?:https?|ssh)://.*/(?P<owner>.*)/(?P<repo>.*?)(?:\.git)?$`,
+		`^.*@.*:(?P<owner>.*)/(?P<repo>.*?)(?:\.git)?$`,
+	},
+	repoURLTemplate: defaultRepoURLTemplate,
 }
 
 var gitLabServiceDef = ServiceDefinition{

@@ -101,3 +101,9 @@ func (self *Resolver) resolveMenuOption(option *config.CustomCommandMenuOption, 
 		Value:       value,
 	}, nil
 }
+
+type CustomCommandObject struct {
+	// deprecated. Use Responses instead
+	PromptResponses []string
+	Form            map[string]string
+}

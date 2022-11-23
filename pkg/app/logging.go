@@ -1,7 +1,7 @@
 package app
 
 import (
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
 
@@ -11,7 +11,7 @@ import (
 
 func newLogger(config config.AppConfigurer) *logrus.Entry {
 	var log *logrus.Logger
-	if config.GetDebug() || os.Getenv("DEBUG") == "TRUE" {
+	if config.GetDebug() {
 		log = newDevelopmentLogger()
 	} else {
 		log = newProductionLogger()
@@ -21,17 +21,12 @@ func newLogger(config config.AppConfigurer) *logrus.Entry {
 	// https://github.com/aybabtme/humanlog
 	log.Formatter = &logrus.JSONFormatter{}
 
-	return log.WithFields(logrus.Fields{
-		"debug":     config.GetDebug(),
-		"version":   config.GetVersion(),
-		"commit":    config.GetCommit(),
-		"buildDate": config.GetBuildDate(),
-	})
+	return log.WithFields(logrus.Fields{})
 }
 
 func newProductionLogger() *logrus.Logger {
 	log := logrus.New()
-	log.Out = ioutil.Discard
+	log.Out = io.Discard
 	log.SetLevel(logrus.ErrorLevel)
 	return log
 }

@@ -5,7 +5,6 @@ import (
 
 	"github.com/jesseduffield/generics/slices"
 	"github.com/jesseduffield/lazygit/pkg/gui/keybindings"
-	"github.com/jesseduffield/lazygit/pkg/gui/presentation"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
 	"github.com/samber/lo"
 )
@@ -21,12 +20,12 @@ func (gui *Gui) getBindings(context types.Context) []*types.Binding {
 	bindings = append(customBindings, bindings...)
 
 	for _, binding := range bindings {
-		if keybindings.GetKeyDisplay(binding.Key) != "" && binding.Description != "" {
-			if len(binding.Contexts) == 0 && binding.ViewName == "" {
+		if keybindings.LabelFromKey(binding.Key) != "" && binding.Description != "" {
+			if binding.ViewName == "" {
 				bindingsGlobal = append(bindingsGlobal, binding)
 			} else if binding.Tag == "navigation" {
 				bindingsNavigation = append(bindingsNavigation, binding)
-			} else if lo.Contains(binding.Contexts, string(context.GetKey())) {
+			} else if binding.ViewName == context.GetViewName() {
 				bindingsPanel = append(bindingsPanel, binding)
 			}
 		}
@@ -50,23 +49,16 @@ func uniqueBindings(bindings []*types.Binding) []*types.Binding {
 	})
 }
 
-func (gui *Gui) displayDescription(binding *types.Binding) string {
-	if binding.OpensMenu {
-		return presentation.OpensMenuStyle(binding.Description)
-	}
-
-	return binding.Description
-}
-
 func (gui *Gui) handleCreateOptionsMenu() error {
 	context := gui.currentContext()
 	bindings := gui.getBindings(context)
 
 	menuItems := slices.Map(bindings, func(binding *types.Binding) *types.MenuItem {
 		return &types.MenuItem{
-			Label: gui.displayDescription(binding),
+			OpensMenu: binding.OpensMenu,
+			Label:     binding.Description,
 			OnPress: func() error {
-				if binding.Key == nil {
+				if binding.Handler == nil {
 					return nil
 				}
 

@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,7 +14,6 @@ import (
 type AppConfig struct {
 	Debug            bool   `long:"debug" env:"DEBUG" default:"false"`
 	Version          string `long:"version" env:"VERSION" default:"unversioned"`
-	Commit           string `long:"commit" env:"COMMIT"`
 	BuildDate        string `long:"build-date" env:"BUILD_DATE"`
 	Name             string `long:"name" env:"NAME" default:"lazygit"`
 	BuildSource      string `long:"build-source" env:"BUILD_SOURCE" default:""`
@@ -28,15 +26,11 @@ type AppConfig struct {
 	IsNewRepo        bool
 }
 
-// AppConfigurer interface allows individual app config structs to inherit Fields
-// from AppConfig and still be used by lazygit.
 type AppConfigurer interface {
 	GetDebug() bool
 
 	// build info
 	GetVersion() string
-	GetCommit() string
-	GetBuildDate() string
 	GetName() string
 	GetBuildSource() string
 
@@ -80,10 +74,6 @@ func NewAppConfig(
 		return nil, err
 	}
 
-	if os.Getenv("DEBUG") == "TRUE" {
-		debuggingFlag = true
-	}
-
 	appState, err := loadAppState()
 	if err != nil {
 		return nil, err
@@ -92,7 +82,6 @@ func NewAppConfig(
 	appConfig := &AppConfig{
 		Name:            name,
 		Version:         version,
-		Commit:          commit,
 		BuildDate:       date,
 		Debug:           debuggingFlag,
 		BuildSource:     buildSource,
@@ -162,7 +151,7 @@ func loadUserConfig(configFiles []string, base *UserConfig) (*UserConfig, error)
 			file.Close()
 		}
 
-		content, err := ioutil.ReadFile(path)
+		content, err := os.ReadFile(path)
 		if err != nil {
 			return nil, err
 		}
@@ -181,14 +170,6 @@ func (c *AppConfig) GetDebug() bool {
 
 func (c *AppConfig) GetVersion() string {
 	return c.Version
-}
-
-func (c *AppConfig) GetCommit() string {
-	return c.Commit
-}
-
-func (c *AppConfig) GetBuildDate() string {
-	return c.BuildDate
 }
 
 func (c *AppConfig) GetName() string {
@@ -261,7 +242,7 @@ func (c *AppConfig) SaveAppState() error {
 		return err
 	}
 
-	err = ioutil.WriteFile(filepath, marshalledAppState, 0o644)
+	err = os.WriteFile(filepath, marshalledAppState, 0o644)
 	if err != nil && os.IsPermission(err) {
 		// apparently when people have read-only permissions they prefer us to fail silently
 		return nil
@@ -281,7 +262,7 @@ func loadAppState() (*AppState, error) {
 		return nil, err
 	}
 
-	appStateBytes, err := ioutil.ReadFile(filepath)
+	appStateBytes, err := os.ReadFile(filepath)
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}

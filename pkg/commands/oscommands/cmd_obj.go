@@ -2,7 +2,8 @@ package oscommands
 
 import (
 	"os/exec"
-	"sync"
+
+	"github.com/sasha-s/go-deadlock"
 )
 
 // A command object is a general way to represent a command to be run on the
@@ -21,6 +22,8 @@ type ICmdObj interface {
 	Run() error
 	// runs the command and returns the output as a string, and an error if any
 	RunWithOutput() (string, error)
+	// runs the command and returns stdout and stderr as a string, and an error if any
+	RunWithOutputs() (string, string, error)
 	// runs the command and runs a callback function on each line of the output. If the callback returns true for the boolean value, we kill the process and return.
 	RunAndProcessLines(onLine func(line string) (bool, error)) error
 
@@ -51,8 +54,8 @@ type ICmdObj interface {
 	PromptOnCredentialRequest() ICmdObj
 	FailOnCredentialRequest() ICmdObj
 
-	WithMutex(mutex *sync.Mutex) ICmdObj
-	Mutex() *sync.Mutex
+	WithMutex(mutex *deadlock.Mutex) ICmdObj
+	Mutex() *deadlock.Mutex
 
 	GetCredentialStrategy() CredentialStrategy
 }
@@ -76,7 +79,7 @@ type CmdObj struct {
 	credentialStrategy CredentialStrategy
 
 	// can be set so that we don't run certain commands simultaneously
-	mutex *sync.Mutex
+	mutex *deadlock.Mutex
 }
 
 type CredentialStrategy int
@@ -139,11 +142,11 @@ func (self *CmdObj) IgnoreEmptyError() ICmdObj {
 	return self
 }
 
-func (self *CmdObj) Mutex() *sync.Mutex {
+func (self *CmdObj) Mutex() *deadlock.Mutex {
 	return self.mutex
 }
 
-func (self *CmdObj) WithMutex(mutex *sync.Mutex) ICmdObj {
+func (self *CmdObj) WithMutex(mutex *deadlock.Mutex) ICmdObj {
 	self.mutex = mutex
 
 	return self
@@ -159,6 +162,10 @@ func (self *CmdObj) Run() error {
 
 func (self *CmdObj) RunWithOutput() (string, error) {
 	return self.runner.RunWithOutput(self)
+}
+
+func (self *CmdObj) RunWithOutputs() (string, string, error) {
+	return self.runner.RunWithOutputs(self)
 }
 
 func (self *CmdObj) RunAndProcessLines(onLine func(line string) (bool, error)) error {

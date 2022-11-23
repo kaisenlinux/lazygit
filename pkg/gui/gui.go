@@ -2,7 +2,7 @@ package gui
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jesseduffield/gocui"
+	appTypes "github.com/jesseduffield/lazygit/pkg/app/types"
 	"github.com/jesseduffield/lazygit/pkg/commands"
 	"github.com/jesseduffield/lazygit/pkg/commands/git_commands"
 	"github.com/jesseduffield/lazygit/pkg/commands/git_config"
@@ -19,8 +20,7 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/config"
 	"github.com/jesseduffield/lazygit/pkg/gui/context"
 	"github.com/jesseduffield/lazygit/pkg/gui/controllers/helpers"
-	"github.com/jesseduffield/lazygit/pkg/gui/lbl"
-	"github.com/jesseduffield/lazygit/pkg/gui/mergeconflicts"
+	"github.com/jesseduffield/lazygit/pkg/gui/keybindings"
 	"github.com/jesseduffield/lazygit/pkg/gui/modes/cherrypicking"
 	"github.com/jesseduffield/lazygit/pkg/gui/modes/diffing"
 	"github.com/jesseduffield/lazygit/pkg/gui/modes/filtering"
@@ -32,10 +32,12 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/gui/services/custom_commands"
 	"github.com/jesseduffield/lazygit/pkg/gui/style"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
+	integrationTypes "github.com/jesseduffield/lazygit/pkg/integration/types"
 	"github.com/jesseduffield/lazygit/pkg/tasks"
 	"github.com/jesseduffield/lazygit/pkg/theme"
 	"github.com/jesseduffield/lazygit/pkg/updates"
 	"github.com/jesseduffield/lazygit/pkg/utils"
+	"github.com/sasha-s/go-deadlock"
 	"gopkg.in/ozeidan/fuzzy-patricia.v3/patricia"
 )
 
@@ -91,13 +93,17 @@ type Gui struct {
 	waitForIntro         sync.WaitGroup
 	fileWatcher          *fileWatcher
 	viewBufferManagerMap map[string]*tasks.ViewBufferManager
-	stopChan             chan struct{}
+	// holds a mapping of view names to ptmx's. This is for rendering command outputs
+	// from within a pty. The point of keeping track of them is so that if we re-size
+	// the window, we can tell the pty it needs to resize accordingly.
+	viewPtmxMap map[string]*os.File
+	stopChan    chan struct{}
 
 	// when lazygit is opened outside a git directory we want to open to the most
 	// recent repo with the recent repos popup showing
 	showRecentRepos bool
 
-	Mutexes guiMutexes
+	Mutexes types.Mutexes
 
 	// findSuggestions will take a string that the user has typed into a prompt
 	// and return a slice of suggestions which match that string.
@@ -166,25 +172,20 @@ type GuiRepoState struct {
 	Suggestions []*types.Suggestion
 
 	Updating       bool
-	Panels         *panelStates
 	SplitMainPanel bool
 	LimitCommits   bool
 
 	IsRefreshingFiles bool
 	Searching         searchingState
-	Ptmx              *os.File
 	StartupStage      StartupStage // Allows us to not load everything at once
 
-	MainContext       types.ContextKey // used to keep the main and secondary views' contexts in sync
-	ContextManager    ContextManager
-	Contexts          *context.ContextTree
-	ViewContextMap    *context.ViewContextMap
-	ViewTabContextMap map[string][]context.TabContext
+	ContextManager ContextManager
+	Contexts       *context.ContextTree
 
 	// WindowViewNameMap is a mapping of windows to the current view of that window.
 	// Some views move between windows for example the commitFiles view and when cycling through
 	// side windows we need to know which view to give focus to for a given window
-	WindowViewNameMap map[string]string
+	WindowViewNameMap *utils.ThreadSafeMap[string, string]
 
 	// tells us whether we've set up our views for the current repo. We'll need to
 	// do this whenever we switch back and forth between repos to get the views
@@ -198,29 +199,6 @@ type GuiRepoState struct {
 	ScreenMode WindowMaximisation
 
 	CurrentPopupOpts *types.CreatePopupPanelOpts
-}
-
-// for now the staging panel state, unlike the other panel states, is going to be
-// non-mutative, so that we don't accidentally end up
-// with mismatches of data. We might change this in the future
-type LblPanelState struct {
-	*lbl.State
-	SecondaryFocused bool // this is for if we show the left or right panel
-}
-
-type MergingPanelState struct {
-	*mergeconflicts.State
-
-	// UserVerticalScrolling tells us if the user has started scrolling through the file themselves
-	// in which case we won't auto-scroll to a conflict.
-	UserVerticalScrolling bool
-}
-
-// as we move things to the new context approach we're going to eventually
-// remove this struct altogether and store this state on the contexts.
-type panelStates struct {
-	LineByLine *LblPanelState
-	Merging    *MergingPanelState
 }
 
 type searchingState struct {
@@ -237,19 +215,7 @@ const (
 	COMPLETE
 )
 
-// if you add a new mutex here be sure to instantiate it. We're using pointers to
-// mutexes so that we can pass the mutexes to controllers.
-type guiMutexes struct {
-	RefreshingFilesMutex  *sync.Mutex
-	RefreshingStatusMutex *sync.Mutex
-	SyncMutex             *sync.Mutex
-	LocalCommitsMutex     *sync.Mutex
-	LineByLinePanelMutex  *sync.Mutex
-	SubprocessMutex       *sync.Mutex
-	PopupMutex            *sync.Mutex
-}
-
-func (gui *Gui) onNewRepo(startArgs types.StartArgs, reuseState bool) error {
+func (gui *Gui) onNewRepo(startArgs appTypes.StartArgs, reuseState bool) error {
 	var err error
 	gui.git, err = commands.NewGitCommand(
 		gui.Common,
@@ -281,7 +247,7 @@ func (gui *Gui) onNewRepo(startArgs types.StartArgs, reuseState bool) error {
 // it gets a bit confusing to land back in the status panel when visiting a repo
 // you've already switched from. There's no doubt some easy way to make the UX
 // optimal for all cases but I'm too lazy to think about what that is right now
-func (gui *Gui) resetState(startArgs types.StartArgs, reuseState bool) {
+func (gui *Gui) resetState(startArgs appTypes.StartArgs, reuseState bool) {
 	currentDir, err := os.Getwd()
 
 	if reuseState {
@@ -296,7 +262,6 @@ func (gui *Gui) resetState(startArgs types.StartArgs, reuseState bool) {
 				gui.State.CurrentPopupOpts = nil
 				gui.Mutexes.PopupMutex.Unlock()
 
-				gui.syncViewContexts()
 				return
 			}
 		} else {
@@ -309,10 +274,7 @@ func (gui *Gui) resetState(startArgs types.StartArgs, reuseState bool) {
 	initialContext := initialContext(contextTree, startArgs)
 	initialScreenMode := initialScreenMode(startArgs)
 
-	viewContextMap := context.NewViewContextMap()
-	for viewName, context := range initialViewContextMapping(contextTree) {
-		viewContextMap.Set(viewName, context)
-	}
+	initialWindowViewNameMap := gui.initialWindowViewNameMap(contextTree)
 
 	gui.State = &GuiRepoState{
 		Model: &types.Model{
@@ -325,54 +287,43 @@ func (gui *Gui) resetState(startArgs types.StartArgs, reuseState bool) {
 			BisectInfo:            git_commands.NewNullBisectInfo(),
 			FilesTrie:             patricia.NewTrie(),
 		},
-
-		Panels: &panelStates{
-			Merging: &MergingPanelState{
-				State:                 mergeconflicts.NewState(),
-				UserVerticalScrolling: false,
-			},
-		},
-		Ptmx: nil,
 		Modes: &types.Modes{
 			Filtering:     filtering.New(startArgs.FilterPath),
 			CherryPicking: cherrypicking.New(),
 			Diffing:       diffing.New(),
 		},
-		ViewContextMap:    viewContextMap,
-		ViewTabContextMap: gui.initialViewTabContextMap(contextTree),
-		ScreenMode:        initialScreenMode,
+		ScreenMode: initialScreenMode,
 		// TODO: put contexts in the context manager
-		ContextManager: NewContextManager(initialContext),
-		Contexts:       contextTree,
+		ContextManager:    NewContextManager(initialContext),
+		Contexts:          contextTree,
+		WindowViewNameMap: initialWindowViewNameMap,
 	}
-
-	gui.syncViewContexts()
 
 	gui.RepoStateMap[Repo(currentDir)] = gui.State
 }
 
-func initialScreenMode(startArgs types.StartArgs) WindowMaximisation {
-	if startArgs.FilterPath != "" || startArgs.GitArg != types.GitArgNone {
+func initialScreenMode(startArgs appTypes.StartArgs) WindowMaximisation {
+	if startArgs.FilterPath != "" || startArgs.GitArg != appTypes.GitArgNone {
 		return SCREEN_HALF
 	} else {
 		return SCREEN_NORMAL
 	}
 }
 
-func initialContext(contextTree *context.ContextTree, startArgs types.StartArgs) types.IListContext {
+func initialContext(contextTree *context.ContextTree, startArgs appTypes.StartArgs) types.IListContext {
 	var initialContext types.IListContext = contextTree.Files
 
 	if startArgs.FilterPath != "" {
 		initialContext = contextTree.LocalCommits
-	} else if startArgs.GitArg != types.GitArgNone {
+	} else if startArgs.GitArg != appTypes.GitArgNone {
 		switch startArgs.GitArg {
-		case types.GitArgStatus:
+		case appTypes.GitArgStatus:
 			initialContext = contextTree.Files
-		case types.GitArgBranch:
+		case appTypes.GitArgBranch:
 			initialContext = contextTree.Branches
-		case types.GitArgLog:
+		case appTypes.GitArgLog:
 			initialContext = contextTree.LocalCommits
-		case types.GitArgStash:
+		case appTypes.GitArgStash:
 			initialContext = contextTree.Stash
 		default:
 			panic("unhandled git arg")
@@ -380,16 +331,6 @@ func initialContext(contextTree *context.ContextTree, startArgs types.StartArgs)
 	}
 
 	return initialContext
-}
-
-func (gui *Gui) syncViewContexts() {
-	for viewName, context := range gui.State.ViewContextMap.Entries() {
-		view, err := gui.g.View(viewName)
-		if err != nil {
-			panic(err)
-		}
-		view.Context = string(context.GetKey())
-	}
 }
 
 // for now the split view will always be on
@@ -408,6 +349,7 @@ func NewGui(
 		Updater:                 updater,
 		statusManager:           &statusManager{},
 		viewBufferManagerMap:    map[string]*tasks.ViewBufferManager{},
+		viewPtmxMap:             map[string]*os.File{},
 		showRecentRepos:         showRecentRepos,
 		RepoPathStack:           &utils.StringStack{},
 		RepoStateMap:            map[Repo]*GuiRepoState{},
@@ -418,14 +360,14 @@ func NewGui(
 		// but now we do it via state. So we need to still support the config for the
 		// sake of backwards compatibility. We're making use of short circuiting here
 		ShowExtrasWindow: cmn.UserConfig.Gui.ShowCommandLog && !config.GetAppState().HideCommandLog,
-		Mutexes: guiMutexes{
-			RefreshingFilesMutex:  &sync.Mutex{},
-			RefreshingStatusMutex: &sync.Mutex{},
-			SyncMutex:             &sync.Mutex{},
-			LocalCommitsMutex:     &sync.Mutex{},
-			LineByLinePanelMutex:  &sync.Mutex{},
-			SubprocessMutex:       &sync.Mutex{},
-			PopupMutex:            &sync.Mutex{},
+		Mutexes: types.Mutexes{
+			RefreshingFilesMutex:  &deadlock.Mutex{},
+			RefreshingStatusMutex: &deadlock.Mutex{},
+			SyncMutex:             &deadlock.Mutex{},
+			LocalCommitsMutex:     &deadlock.Mutex{},
+			SubprocessMutex:       &deadlock.Mutex{},
+			PopupMutex:            &deadlock.Mutex{},
+			PtyMutex:              &deadlock.Mutex{},
 		},
 		InitialDir: initialDir,
 	}
@@ -436,7 +378,8 @@ func NewGui(
 		cmn,
 		gui.createPopupPanel,
 		func() error { return gui.c.Refresh(types.RefreshOptions{Mode: types.ASYNC}) },
-		func() error { return gui.closeConfirmationPrompt(false) },
+		gui.popContext,
+		gui.currentContext,
 		gui.createMenu,
 		gui.withWaitingStatus,
 		gui.toast,
@@ -476,16 +419,18 @@ var RuneReplacements = map[rune]string{
 	graph.CommitSymbol: "o",
 }
 
-func (gui *Gui) initGocui() (*gocui.Gui, error) {
-	recordEvents := recordingEvents()
+func (gui *Gui) initGocui(headless bool, test integrationTypes.IntegrationTest) (*gocui.Gui, error) {
+	recordEvents := RecordingEvents()
 	playMode := gocui.NORMAL
 	if recordEvents {
 		playMode = gocui.RECORDING
-	} else if replaying() {
+	} else if Replaying() {
 		playMode = gocui.REPLAYING
+	} else if test != nil {
+		playMode = gocui.REPLAYING_NEW
 	}
 
-	g, err := gocui.NewGui(gocui.OutputTrue, OverlappingEdges, playMode, headless(), RuneReplacements)
+	g, err := gocui.NewGui(gocui.OutputTrue, OverlappingEdges, playMode, headless, RuneReplacements)
 	if err != nil {
 		return nil, err
 	}
@@ -493,48 +438,48 @@ func (gui *Gui) initGocui() (*gocui.Gui, error) {
 	return g, nil
 }
 
-func (gui *Gui) initialViewTabContextMap(contextTree *context.ContextTree) map[string][]context.TabContext {
-	return map[string][]context.TabContext{
+func (gui *Gui) viewTabMap() map[string][]context.TabView {
+	return map[string][]context.TabView{
 		"branches": {
 			{
-				Tab:     gui.c.Tr.LocalBranchesTitle,
-				Context: contextTree.Branches,
+				Tab:      gui.c.Tr.LocalBranchesTitle,
+				ViewName: "localBranches",
 			},
 			{
-				Tab:     gui.c.Tr.RemotesTitle,
-				Context: contextTree.Remotes,
+				Tab:      gui.c.Tr.RemotesTitle,
+				ViewName: "remotes",
 			},
 			{
-				Tab:     gui.c.Tr.TagsTitle,
-				Context: contextTree.Tags,
+				Tab:      gui.c.Tr.TagsTitle,
+				ViewName: "tags",
 			},
 		},
 		"commits": {
 			{
-				Tab:     gui.c.Tr.CommitsTitle,
-				Context: contextTree.LocalCommits,
+				Tab:      gui.c.Tr.CommitsTitle,
+				ViewName: "commits",
 			},
 			{
-				Tab:     gui.c.Tr.ReflogCommitsTitle,
-				Context: contextTree.ReflogCommits,
+				Tab:      gui.c.Tr.ReflogCommitsTitle,
+				ViewName: "reflogCommits",
 			},
 		},
 		"files": {
 			{
-				Tab:     gui.c.Tr.FilesTitle,
-				Context: contextTree.Files,
+				Tab:      gui.c.Tr.FilesTitle,
+				ViewName: "files",
 			},
 			{
-				Tab:     gui.c.Tr.SubmodulesTitle,
-				Context: contextTree.Submodules,
+				Tab:      gui.c.Tr.SubmodulesTitle,
+				ViewName: "submodules",
 			},
 		},
 	}
 }
 
 // Run: setup the gui with keybindings and start the mainloop
-func (gui *Gui) Run(startArgs types.StartArgs) error {
-	g, err := gui.initGocui()
+func (gui *Gui) Run(startArgs appTypes.StartArgs) error {
+	g, err := gui.initGocui(Headless(), startArgs.IntegrationTest)
 	if err != nil {
 		return err
 	}
@@ -542,32 +487,21 @@ func (gui *Gui) Run(startArgs types.StartArgs) error {
 	gui.g = g
 	defer gui.g.Close()
 
-	if replaying() {
-		gui.g.RecordingConfig = gocui.RecordingConfig{
-			Speed:  getRecordingSpeed(),
-			Leeway: 100,
-		}
-
-		var err error
-		gui.g.Recording, err = gui.loadRecording()
-		if err != nil {
-			return err
-		}
-
-		go utils.Safe(func() {
-			time.Sleep(time.Second * 40)
-			log.Fatal("40 seconds is up, lazygit recording took too long to complete")
-		})
-	}
+	// if the deadlock package wants to report a deadlock, we first need to
+	// close the gui so that we can actually read what it prints.
+	deadlock.Opts.LogBuf = utils.NewOnceWriter(os.Stderr, func() {
+		gui.g.Close()
+	})
+	deadlock.Opts.Disable = !gui.Debug
 
 	gui.g.OnSearchEscape = gui.onSearchEscape
 	if err := gui.Config.ReloadUserConfig(); err != nil {
 		return nil
 	}
 	userConfig := gui.UserConfig
-	gui.g.SearchEscapeKey = gui.getKey(userConfig.Keybinding.Universal.Return)
-	gui.g.NextSearchMatchKey = gui.getKey(userConfig.Keybinding.Universal.NextMatch)
-	gui.g.PrevSearchMatchKey = gui.getKey(userConfig.Keybinding.Universal.PrevMatch)
+	gui.g.SearchEscapeKey = keybindings.GetKey(userConfig.Keybinding.Universal.Return)
+	gui.g.NextSearchMatchKey = keybindings.GetKey(userConfig.Keybinding.Universal.NextMatch)
+	gui.g.PrevSearchMatchKey = keybindings.GetKey(userConfig.Keybinding.Universal.PrevMatch)
 
 	gui.g.ShowListFooter = userConfig.Gui.ShowListFooter
 
@@ -616,10 +550,12 @@ func (gui *Gui) Run(startArgs types.StartArgs) error {
 
 	gui.c.Log.Info("starting main loop")
 
+	gui.handleTestMode(startArgs.IntegrationTest)
+
 	return gui.g.MainLoop()
 }
 
-func (gui *Gui) RunAndHandleError(startArgs types.StartArgs) error {
+func (gui *Gui) RunAndHandleError(startArgs appTypes.StartArgs) error {
 	gui.stopChan = make(chan struct{})
 	return utils.SafeWithError(func() error {
 		if err := gui.Run(startArgs); err != nil {
@@ -645,7 +581,7 @@ func (gui *Gui) RunAndHandleError(startArgs types.StartArgs) error {
 					}
 				}
 
-				if err := gui.saveRecording(gui.g.Recording); err != nil {
+				if err := SaveRecording(gui.g.Recording); err != nil {
 					return err
 				}
 
@@ -679,7 +615,7 @@ func (gui *Gui) runSubprocessWithSuspense(subprocess oscommands.ICmdObj) (bool, 
 	gui.Mutexes.SubprocessMutex.Lock()
 	defer gui.Mutexes.SubprocessMutex.Unlock()
 
-	if replaying() {
+	if Replaying() {
 		// we do not yet support running subprocesses within integration tests. So if
 		// we're replaying an integration test and we're inside this method, something
 		// has gone wrong, so we should fail
@@ -720,13 +656,16 @@ func (gui *Gui) runSubprocess(cmdObj oscommands.ICmdObj) error { //nolint:unpara
 
 	err := subprocess.Run()
 
-	subprocess.Stdout = ioutil.Discard
-	subprocess.Stderr = ioutil.Discard
+	subprocess.Stdout = io.Discard
+	subprocess.Stderr = io.Discard
 	subprocess.Stdin = nil
 
 	if gui.Config.GetUserConfig().PromptToReturnFromSubprocess {
 		fmt.Fprintf(os.Stdout, "\n%s", style.FgGreen.Sprint(gui.Tr.PressEnterToReturn))
-		fmt.Scanln() // wait for enter press
+
+		// scan to buffer to prevent run unintentional operations when TUI resumes.
+		var buffer string
+		fmt.Scanln(&buffer) // wait for enter press
 	}
 
 	return err
@@ -832,7 +771,7 @@ func (gui *Gui) setColorScheme() error {
 	return nil
 }
 
-func (gui *Gui) OnUIThread(f func() error) {
+func (gui *Gui) onUIThread(f func() error) {
 	gui.g.Update(func(*gocui.Gui) error {
 		return f()
 	})

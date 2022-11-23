@@ -7,12 +7,13 @@ import (
 
 	"github.com/jesseduffield/generics/set"
 	"github.com/jesseduffield/generics/slices"
-	"github.com/jesseduffield/lazygit/pkg/commands/loaders"
+	"github.com/jesseduffield/lazygit/pkg/commands/git_commands"
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
 	"github.com/jesseduffield/lazygit/pkg/commands/types/enums"
 	"github.com/jesseduffield/lazygit/pkg/gui/context"
 	"github.com/jesseduffield/lazygit/pkg/gui/filetree"
 	"github.com/jesseduffield/lazygit/pkg/gui/mergeconflicts"
+	"github.com/jesseduffield/lazygit/pkg/gui/patch_exploring"
 	"github.com/jesseduffield/lazygit/pkg/gui/presentation"
 	"github.com/jesseduffield/lazygit/pkg/gui/style"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
@@ -21,16 +22,18 @@ import (
 
 func getScopeNames(scopes []types.RefreshableView) []string {
 	scopeNameMap := map[types.RefreshableView]string{
-		types.COMMITS:     "commits",
-		types.BRANCHES:    "branches",
-		types.FILES:       "files",
-		types.SUBMODULES:  "submodules",
-		types.STASH:       "stash",
-		types.REFLOG:      "reflog",
-		types.TAGS:        "tags",
-		types.REMOTES:     "remotes",
-		types.STATUS:      "status",
-		types.BISECT_INFO: "bisect",
+		types.COMMITS:         "commits",
+		types.BRANCHES:        "branches",
+		types.FILES:           "files",
+		types.SUBMODULES:      "submodules",
+		types.STASH:           "stash",
+		types.REFLOG:          "reflog",
+		types.TAGS:            "tags",
+		types.REMOTES:         "remotes",
+		types.STATUS:          "status",
+		types.BISECT_INFO:     "bisect",
+		types.STAGING:         "staging",
+		types.MERGE_CONFLICTS: "mergeConflicts",
 	}
 
 	return slices.Map(scopes, func(scope types.RefreshableView) string {
@@ -70,6 +73,8 @@ func (gui *Gui) Refresh(options types.RefreshOptions) error {
 	f := func() {
 		var scopeSet *set.Set[types.RefreshableView]
 		if len(options.Scope) == 0 {
+			// not refreshing staging/patch-building unless explicitly requested because we only need
+			// to refresh those while focused.
 			scopeSet = set.NewFromSlice([]types.RefreshableView{
 				types.COMMITS,
 				types.BRANCHES,
@@ -105,6 +110,11 @@ func (gui *Gui) Refresh(options types.RefreshOptions) error {
 			refresh(func() { _ = gui.refreshRebaseCommits() })
 		}
 
+		// reason we're not doing this if the COMMITS type is included is that if the COMMITS type _is_ included we will refresh the commit files context anyway
+		if scopeSet.Includes(types.COMMIT_FILES) && !scopeSet.Includes(types.COMMITS) {
+			refresh(func() { _ = gui.refreshCommitFilesContext() })
+		}
+
 		if scopeSet.Includes(types.FILES) || scopeSet.Includes(types.SUBMODULES) {
 			refresh(func() { _ = gui.refreshFilesAndSubmodules() })
 		}
@@ -121,6 +131,18 @@ func (gui *Gui) Refresh(options types.RefreshOptions) error {
 			refresh(func() { _ = gui.refreshRemotes() })
 		}
 
+		if scopeSet.Includes(types.STAGING) {
+			refresh(func() { _ = gui.refreshStagingPanel(types.OnFocusOpts{}) })
+		}
+
+		if scopeSet.Includes(types.PATCH_BUILDING) {
+			refresh(func() { _ = gui.refreshPatchBuildingPanel(types.OnFocusOpts{}) })
+		}
+
+		if scopeSet.Includes(types.MERGE_CONFLICTS) || scopeSet.Includes(types.FILES) {
+			refresh(func() { _ = gui.refreshMergeState() })
+		}
+
 		wg.Wait()
 
 		gui.refreshStatus()
@@ -131,7 +153,7 @@ func (gui *Gui) Refresh(options types.RefreshOptions) error {
 	}
 
 	if options.Mode == types.BLOCK_UI {
-		gui.OnUIThread(func() error {
+		gui.c.OnUIThread(func() error {
 			f()
 			return nil
 		})
@@ -201,8 +223,8 @@ func (gui *Gui) refreshCommitsWithLimit() error {
 	gui.Mutexes.LocalCommitsMutex.Lock()
 	defer gui.Mutexes.LocalCommitsMutex.Unlock()
 
-	commits, err := gui.git.Loaders.Commits.GetCommits(
-		loaders.GetCommitsOptions{
+	commits, err := gui.git.Loaders.CommitLoader.GetCommits(
+		git_commands.GetCommitsOptions{
 			Limit:                gui.State.Contexts.LocalCommits.GetLimitCommits(),
 			FilterPath:           gui.State.Modes.Filtering.GetPath(),
 			IncludeRebaseCommits: true,
@@ -218,11 +240,26 @@ func (gui *Gui) refreshCommitsWithLimit() error {
 	return gui.c.PostRefreshUpdate(gui.State.Contexts.LocalCommits)
 }
 
+func (gui *Gui) refreshCommitFilesContext() error {
+	ref := gui.State.Contexts.CommitFiles.GetRef()
+	to := ref.RefName()
+	from, reverse := gui.State.Modes.Diffing.GetFromAndReverseArgsForDiff(ref.ParentRefName())
+
+	files, err := gui.git.Loaders.CommitFileLoader.GetFilesInDiff(from, to, reverse)
+	if err != nil {
+		return gui.c.Error(err)
+	}
+	gui.State.Model.CommitFiles = files
+	gui.State.Contexts.CommitFiles.CommitFileTreeViewModel.SetTree()
+
+	return gui.c.PostRefreshUpdate(gui.State.Contexts.CommitFiles)
+}
+
 func (gui *Gui) refreshRebaseCommits() error {
 	gui.Mutexes.LocalCommitsMutex.Lock()
 	defer gui.Mutexes.LocalCommitsMutex.Unlock()
 
-	updatedCommits, err := gui.git.Loaders.Commits.MergeRebasingCommits(gui.State.Model.Commits)
+	updatedCommits, err := gui.git.Loaders.CommitLoader.MergeRebasingCommits(gui.State.Model.Commits)
 	if err != nil {
 		return err
 	}
@@ -232,7 +269,7 @@ func (gui *Gui) refreshRebaseCommits() error {
 }
 
 func (self *Gui) refreshTags() error {
-	tags, err := self.git.Loaders.Tags.GetTags()
+	tags, err := self.git.Loaders.TagLoader.GetTags()
 	if err != nil {
 		return self.c.Error(err)
 	}
@@ -263,13 +300,13 @@ func (gui *Gui) refreshBranches() {
 		// which allows us to order them correctly. So if we're filtering we'll just
 		// manually load all the reflog commits here
 		var err error
-		reflogCommits, _, err = gui.git.Loaders.ReflogCommits.GetReflogCommits(nil, "")
+		reflogCommits, _, err = gui.git.Loaders.ReflogCommitLoader.GetReflogCommits(nil, "")
 		if err != nil {
 			gui.c.Log.Error(err)
 		}
 	}
 
-	branches, err := gui.git.Loaders.Branches.Load(reflogCommits)
+	branches, err := gui.git.Loaders.BranchLoader.Load(reflogCommits)
 	if err != nil {
 		_ = gui.c.Error(err)
 	}
@@ -291,13 +328,7 @@ func (gui *Gui) refreshFilesAndSubmodules() error {
 		gui.Mutexes.RefreshingFilesMutex.Unlock()
 	}()
 
-	prevSelectedPath := gui.getSelectedPath()
-
 	if err := gui.refreshStateSubmoduleConfigs(); err != nil {
-		return err
-	}
-
-	if err := gui.refreshMergeState(); err != nil {
 		return err
 	}
 
@@ -305,21 +336,13 @@ func (gui *Gui) refreshFilesAndSubmodules() error {
 		return err
 	}
 
-	gui.OnUIThread(func() error {
+	gui.c.OnUIThread(func() error {
 		if err := gui.c.PostRefreshUpdate(gui.State.Contexts.Submodules); err != nil {
 			gui.c.Log.Error(err)
 		}
 
 		if err := gui.c.PostRefreshUpdate(gui.State.Contexts.Files); err != nil {
 			gui.c.Log.Error(err)
-		}
-
-		if gui.currentContext().GetKey() == context.FILES_CONTEXT_KEY {
-			currentSelectedPath := gui.getSelectedPath()
-			alreadySelected := prevSelectedPath != "" && currentSelectedPath == prevSelectedPath
-			if !alreadySelected {
-				gui.takeOverMergeConflictScrolling()
-			}
 		}
 
 		return nil
@@ -329,20 +352,20 @@ func (gui *Gui) refreshFilesAndSubmodules() error {
 }
 
 func (gui *Gui) refreshMergeState() error {
-	gui.State.Panels.Merging.Lock()
-	defer gui.State.Panels.Merging.Unlock()
+	gui.State.Contexts.MergeConflicts.GetMutex().Lock()
+	defer gui.State.Contexts.MergeConflicts.GetMutex().Unlock()
 
-	if gui.currentContext().GetKey() != context.MAIN_MERGING_CONTEXT_KEY {
+	if gui.currentContext().GetKey() != context.MERGE_CONFLICTS_CONTEXT_KEY {
 		return nil
 	}
 
-	hasConflicts, err := gui.setConflictsAndRender(gui.State.Panels.Merging.GetPath(), true)
+	hasConflicts, err := gui.helpers.MergeConflicts.SetConflictsAndRender(gui.State.Contexts.MergeConflicts.GetState().GetPath(), true)
 	if err != nil {
 		return gui.c.Error(err)
 	}
 
 	if !hasConflicts {
-		return gui.escapeMerge()
+		return gui.helpers.MergeConflicts.EscapeMerge()
 	}
 
 	return nil
@@ -383,8 +406,8 @@ func (gui *Gui) refreshStateFiles() error {
 		}
 	}
 
-	files := gui.git.Loaders.Files.
-		GetStatusFiles(loaders.GetStatusFileOptions{})
+	files := gui.git.Loaders.FileLoader.
+		GetStatusFiles(git_commands.GetStatusFileOptions{})
 
 	conflictFileCount := 0
 	for _, file := range files {
@@ -394,7 +417,7 @@ func (gui *Gui) refreshStateFiles() error {
 	}
 
 	if gui.git.Status.WorkingTreeState() != enums.REBASE_MODE_NONE && conflictFileCount == 0 && prevConflictFileCount > 0 {
-		gui.OnUIThread(func() error { return gui.helpers.MergeAndRebase.PromptToContinueRebase() })
+		gui.c.OnUIThread(func() error { return gui.helpers.MergeAndRebase.PromptToContinueRebase() })
 	}
 
 	fileTreeViewModel.RWMutex.Lock()
@@ -440,7 +463,7 @@ func (gui *Gui) refreshReflogCommits() error {
 	}
 
 	refresh := func(stateCommits *[]*models.Commit, filterPath string) error {
-		commits, onlyObtainedNewReflogCommits, err := gui.git.Loaders.ReflogCommits.
+		commits, onlyObtainedNewReflogCommits, err := gui.git.Loaders.ReflogCommitLoader.
 			GetReflogCommits(lastReflogCommit, filterPath)
 		if err != nil {
 			return gui.c.Error(err)
@@ -472,7 +495,7 @@ func (gui *Gui) refreshReflogCommits() error {
 func (gui *Gui) refreshRemotes() error {
 	prevSelectedRemote := gui.State.Contexts.Remotes.GetSelected()
 
-	remotes, err := gui.git.Loaders.Remotes.GetRemotes()
+	remotes, err := gui.git.Loaders.RemoteLoader.GetRemotes()
 	if err != nil {
 		return gui.c.Error(err)
 	}
@@ -502,7 +525,7 @@ func (gui *Gui) refreshRemotes() error {
 }
 
 func (gui *Gui) refreshStashEntries() error {
-	gui.State.Model.StashEntries = gui.git.Loaders.Stash.
+	gui.State.Model.StashEntries = gui.git.Loaders.StashLoader.
 		GetStashEntries(gui.State.Modes.Filtering.GetPath())
 
 	return gui.postRefreshUpdate(gui.State.Contexts.Stash)
@@ -534,4 +557,157 @@ func (gui *Gui) refreshStatus() {
 	status += fmt.Sprintf("%s → %s ", repoName, name)
 
 	gui.setViewContent(gui.Views.Status, status)
+}
+
+func (gui *Gui) refreshStagingPanel(focusOpts types.OnFocusOpts) error {
+	secondaryFocused := gui.secondaryStagingFocused()
+
+	mainSelectedLineIdx := -1
+	secondarySelectedLineIdx := -1
+	if focusOpts.ClickedViewLineIdx > 0 {
+		if secondaryFocused {
+			secondarySelectedLineIdx = focusOpts.ClickedViewLineIdx
+		} else {
+			mainSelectedLineIdx = focusOpts.ClickedViewLineIdx
+		}
+	}
+
+	mainContext := gui.State.Contexts.Staging
+	secondaryContext := gui.State.Contexts.StagingSecondary
+
+	file := gui.getSelectedFile()
+	if file == nil || (!file.HasUnstagedChanges && !file.HasStagedChanges) {
+		return gui.handleStagingEscape()
+	}
+
+	mainDiff := gui.git.WorkingTree.WorktreeFileDiff(file, true, false, false)
+	secondaryDiff := gui.git.WorkingTree.WorktreeFileDiff(file, true, true, false)
+
+	// grabbing locks here and releasing before we finish the function
+	// because pushing say the secondary context could mean entering this function
+	// again, and we don't want to have a deadlock
+	mainContext.GetMutex().Lock()
+	secondaryContext.GetMutex().Lock()
+
+	mainContext.SetState(
+		patch_exploring.NewState(mainDiff, mainSelectedLineIdx, mainContext.GetState(), gui.Log),
+	)
+
+	secondaryContext.SetState(
+		patch_exploring.NewState(secondaryDiff, secondarySelectedLineIdx, secondaryContext.GetState(), gui.Log),
+	)
+
+	mainState := mainContext.GetState()
+	secondaryState := secondaryContext.GetState()
+
+	mainContent := mainContext.GetContentToRender(!secondaryFocused)
+	secondaryContent := secondaryContext.GetContentToRender(secondaryFocused)
+
+	mainContext.GetMutex().Unlock()
+	secondaryContext.GetMutex().Unlock()
+
+	if mainState == nil && secondaryState == nil {
+		return gui.handleStagingEscape()
+	}
+
+	if mainState == nil && !secondaryFocused {
+		return gui.c.PushContext(secondaryContext, focusOpts)
+	}
+
+	if secondaryState == nil && secondaryFocused {
+		return gui.c.PushContext(mainContext, focusOpts)
+	}
+
+	return gui.c.RenderToMainViews(types.RefreshMainOpts{
+		Pair: gui.c.MainViewPairs().Staging,
+		Main: &types.ViewUpdateOpts{
+			Task:  types.NewRenderStringWithoutScrollTask(mainContent),
+			Title: gui.Tr.UnstagedChanges,
+		},
+		Secondary: &types.ViewUpdateOpts{
+			Task:  types.NewRenderStringWithoutScrollTask(secondaryContent),
+			Title: gui.Tr.StagedChanges,
+		},
+	})
+}
+
+func (gui *Gui) handleStagingEscape() error {
+	return gui.c.PushContext(gui.State.Contexts.Files)
+}
+
+func (gui *Gui) secondaryStagingFocused() bool {
+	return gui.currentStaticContext().GetKey() == gui.State.Contexts.StagingSecondary.GetKey()
+}
+
+func (gui *Gui) refreshPatchBuildingPanel(opts types.OnFocusOpts) error {
+	selectedLineIdx := -1
+	if opts.ClickedWindowName == "main" {
+		selectedLineIdx = opts.ClickedViewLineIdx
+	}
+
+	if !gui.git.Patch.PatchManager.Active() {
+		return gui.helpers.PatchBuilding.Escape()
+	}
+
+	// get diff from commit file that's currently selected
+	path := gui.State.Contexts.CommitFiles.GetSelectedPath()
+	if path == "" {
+		return nil
+	}
+
+	ref := gui.State.Contexts.CommitFiles.CommitFileTreeViewModel.GetRef()
+	to := ref.RefName()
+	from, reverse := gui.State.Modes.Diffing.GetFromAndReverseArgsForDiff(ref.ParentRefName())
+	diff, err := gui.git.WorkingTree.ShowFileDiff(from, to, reverse, path, true)
+	if err != nil {
+		return err
+	}
+
+	secondaryDiff := gui.git.Patch.PatchManager.RenderPatchForFile(path, false, false, true)
+	if err != nil {
+		return err
+	}
+
+	context := gui.State.Contexts.CustomPatchBuilder
+
+	oldState := context.GetState()
+
+	state := patch_exploring.NewState(diff, selectedLineIdx, oldState, gui.Log)
+	context.SetState(state)
+	if state == nil {
+		return gui.helpers.PatchBuilding.Escape()
+	}
+
+	mainContent := context.GetContentToRender(true)
+
+	return gui.c.RenderToMainViews(types.RefreshMainOpts{
+		Pair: gui.c.MainViewPairs().PatchBuilding,
+		Main: &types.ViewUpdateOpts{
+			Task:  types.NewRenderStringWithoutScrollTask(mainContent),
+			Title: gui.Tr.Patch,
+		},
+		Secondary: &types.ViewUpdateOpts{
+			Task:  types.NewRenderStringWithoutScrollTask(secondaryDiff),
+			Title: gui.Tr.CustomPatch,
+		},
+	})
+}
+
+func (gui *Gui) refreshMergePanel(isFocused bool) error {
+	content := gui.State.Contexts.MergeConflicts.GetContentToRender(isFocused)
+
+	var task types.UpdateTask
+	if gui.State.Contexts.MergeConflicts.IsUserScrolling() {
+		task = types.NewRenderStringWithoutScrollTask(content)
+	} else {
+		originY := gui.State.Contexts.MergeConflicts.GetOriginY()
+		task = types.NewRenderStringWithScrollTask(content, 0, originY)
+	}
+
+	return gui.c.RenderToMainViews(types.RefreshMainOpts{
+		Pair: gui.c.MainViewPairs().MergeConflicts,
+		Main: &types.ViewUpdateOpts{
+			Task: task,
+		},
+	})
 }

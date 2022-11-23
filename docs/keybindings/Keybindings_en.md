@@ -30,11 +30,11 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
 ## List Panel Navigation
 
 <pre>
-  <kbd>.</kbd>: next page
   <kbd>,</kbd>: previous page
+  <kbd>.</kbd>: next page
   <kbd><</kbd>: scroll to top
-  <kbd>></kbd>: scroll to bottom
   <kbd>/</kbd>: start search
+  <kbd>></kbd>: scroll to bottom
   <kbd>H</kbd>: scroll left
   <kbd>L</kbd>: scroll right
   <kbd>]</kbd>: next tab
@@ -102,7 +102,7 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
   <kbd>C</kbd>: commit changes using git editor
   <kbd>e</kbd>: edit file
   <kbd>o</kbd>: open file
-  <kbd>i</kbd>: Ignore or Exclude file
+  <kbd>i</kbd>: ignore or exclude file
   <kbd>r</kbd>: refresh files
   <kbd>s</kbd>: stash all changes
   <kbd>S</kbd>: view stash options
@@ -140,59 +140,56 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
 ## Main Panel (Merging)
 
 <pre>
-  <kbd>esc</kbd>: return to files panel
-  <kbd>M</kbd>: open external merge tool (git mergetool)
-  <kbd>space</kbd>: pick hunk
-  <kbd>b</kbd>: pick all hunks
+  <kbd>e</kbd>: edit file
+  <kbd>o</kbd>: open file
   <kbd>◄</kbd>: select previous conflict
   <kbd>►</kbd>: select next conflict
   <kbd>▲</kbd>: select previous hunk
   <kbd>▼</kbd>: select next hunk
-  <kbd>e</kbd>: edit file
-  <kbd>o</kbd>: open file
   <kbd>z</kbd>: undo
+  <kbd>M</kbd>: open external merge tool (git mergetool)
+  <kbd>space</kbd>: pick hunk
+  <kbd>b</kbd>: pick all hunks
+  <kbd>esc</kbd>: return to files panel
 </pre>
 
 ## Main Panel (Normal)
 
 <pre>
-  <kbd>mouse wheel down</kbd>: scroll down (fn+up)
-  <kbd>mouse wheel up</kbd>: scroll up (fn+down)
+  <kbd>mouse wheel ▼</kbd>: scroll down (fn+up)
+  <kbd>mouse wheel ▲</kbd>: scroll up (fn+down)
 </pre>
 
 ## Main Panel (Patch Building)
 
 <pre>
-  <kbd>esc</kbd>: exit line-by-line mode
-  <kbd>o</kbd>: open file
-  <kbd>▲</kbd>: select previous line
-  <kbd>▼</kbd>: select next line
   <kbd>◄</kbd>: select previous hunk
   <kbd>►</kbd>: select next hunk
-  <kbd>ctrl+o</kbd>: copy the selected text to the clipboard
-  <kbd>space</kbd>: add/remove line(s) to patch
   <kbd>v</kbd>: toggle drag select
   <kbd>V</kbd>: toggle drag select
   <kbd>a</kbd>: toggle select hunk
+  <kbd>ctrl+o</kbd>: copy the selected text to the clipboard
+  <kbd>o</kbd>: open file
+  <kbd>e</kbd>: edit file
+  <kbd>space</kbd>: add/remove line(s) to patch
+  <kbd>esc</kbd>: exit custom patch builder
 </pre>
 
 ## Main Panel (Staging)
 
 <pre>
-  <kbd>esc</kbd>: return to files panel
-  <kbd>space</kbd>: toggle line staged / unstaged
-  <kbd>d</kbd>: delete change (git reset)
-  <kbd>tab</kbd>: switch to other panel
-  <kbd>o</kbd>: open file
-  <kbd>▲</kbd>: select previous line
-  <kbd>▼</kbd>: select next line
   <kbd>◄</kbd>: select previous hunk
   <kbd>►</kbd>: select next hunk
-  <kbd>ctrl+o</kbd>: copy the selected text to the clipboard
-  <kbd>e</kbd>: edit file
   <kbd>v</kbd>: toggle drag select
   <kbd>V</kbd>: toggle drag select
   <kbd>a</kbd>: toggle select hunk
+  <kbd>ctrl+o</kbd>: copy the selected text to the clipboard
+  <kbd>o</kbd>: open file
+  <kbd>e</kbd>: edit file
+  <kbd>esc</kbd>: return to files panel
+  <kbd>tab</kbd>: switch to other panel (staged/unstaged changes)
+  <kbd>space</kbd>: toggle line staged / unstaged
+  <kbd>d</kbd>: delete change (git reset)
   <kbd>E</kbd>: edit hunk
 </pre>
 
@@ -241,6 +238,7 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
   <kbd>g</kbd>: pop
   <kbd>d</kbd>: drop
   <kbd>n</kbd>: new branch
+  <kbd>r</kbd>: rename stash
   <kbd>enter</kbd>: view selected item's files
 </pre>
 

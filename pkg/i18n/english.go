@@ -128,6 +128,8 @@ type TranslationSet struct {
 	NoTrackedStagedFilesStash           string
 	NoFilesToStash                      string
 	StashChanges                        string
+	LcRenameStash                       string
+	RenameStashPrompt                   string
 	OpenConfig                          string
 	EditConfig                          string
 	ForcePush                           string
@@ -176,7 +178,7 @@ type TranslationSet struct {
 	ToggleSelectHunk                    string
 	ToggleSelectionForPatch             string
 	EditHunk                            string
-	TogglePanel                         string
+	ToggleStagingPanel                  string
 	ReturnToFilesPanel                  string
 	FastForward                         string
 	Fetching                            string
@@ -259,8 +261,10 @@ type TranslationSet struct {
 	DiscardFileChangesPrompt            string
 	DisabledForGPG                      string
 	CreateRepo                          string
+	BareRepo                            string
 	InitialBranch                       string
 	NoRecentRepositories                string
+	IncorrectNotARepository             string
 	AutoStashTitle                      string
 	AutoStashPrompt                     string
 	StashPrefix                         string
@@ -291,6 +295,7 @@ type TranslationSet struct {
 	LcStashStagedChanges                string
 	LcStashAllChangesKeepIndex          string
 	LcStashUnstagedChanges              string
+	LcStashIncludeUntrackedChanges      string
 	LcStashOptions                      string
 	NotARepository                      string
 	LcJump                              string
@@ -307,7 +312,7 @@ type TranslationSet struct {
 	PatchOptionsTitle                   string
 	NoPatchError                        string
 	LcEnterFile                         string
-	ExitLineByLineMode                  string
+	ExitCustomPatchBuilder              string
 	EnterUpstream                       string
 	InvalidUpstream                     string
 	ReturnToRemotesList                 string
@@ -409,6 +414,7 @@ type TranslationSet struct {
 	NoFilesStagedPrompt                 string
 	BranchNotFoundTitle                 string
 	BranchNotFoundPrompt                string
+	LcBranchUnknown                     string
 	UnstageLinesTitle                   string
 	UnstageLinesPrompt                  string
 	LcCreateNewBranchFromCommit         string
@@ -501,6 +507,11 @@ type TranslationSet struct {
 	UpstreamGone                        string
 	NukeDescription                     string
 	DiscardStagedChangesDescription     string
+	EmptyOutput                         string
+	Patch                               string
+	CustomPatch                         string
+	LcCommitsCopied                     string
+	LcCommitCopied                      string
 	Actions                             Actions
 	Bisect                              Bisect
 }
@@ -564,8 +575,7 @@ type Actions struct {
 	UnstageFile                       string
 	UnstageAllFiles                   string
 	StageAllFiles                     string
-	IgnoreExcludeFile                 string
-	IgnoreFile                        string
+	LcIgnoreExcludeFile               string
 	IgnoreFileErr                     string
 	ExcludeFile                       string
 	ExcludeFileErr                    string
@@ -579,6 +589,7 @@ type Actions struct {
 	StashAllChangesKeepIndex          string
 	StashStagedChanges                string
 	StashUnstagedChanges              string
+	StashIncludeUntrackedChanges      string
 	GitFlowFinish                     string
 	GitFlowStart                      string
 	CopyToClipboard                   string
@@ -594,6 +605,7 @@ type Actions struct {
 	UpdateRemote                      string
 	ApplyPatch                        string
 	Stash                             string
+	RenameStash                       string
 	RemoveSubmodule                   string
 	ResetSubmodule                    string
 	AddSubmodule                      string
@@ -762,6 +774,8 @@ func EnglishTranslationSet() TranslationSet {
 		NoTrackedStagedFilesStash:           "You have no tracked/staged files to stash",
 		NoFilesToStash:                      "You have no files to stash",
 		StashChanges:                        "Stash changes",
+		LcRenameStash:                       "rename stash",
+		RenameStashPrompt:                   "Rename stash: {{.stashName}}",
 		OpenConfig:                          "open config file",
 		EditConfig:                          "edit config file",
 		ForcePush:                           "Force push",
@@ -810,7 +824,7 @@ func EnglishTranslationSet() TranslationSet {
 		ToggleSelectHunk:                    `toggle select hunk`,
 		ToggleSelectionForPatch:             `add/remove line(s) to patch`,
 		EditHunk:                            `edit hunk`,
-		TogglePanel:                         `switch to other panel`,
+		ToggleStagingPanel:                  `switch to other panel (staged/unstaged changes)`,
 		ReturnToFilesPanel:                  `return to files panel`,
 		FastForward:                         `fast-forward this branch from its upstream`,
 		Fetching:                            "fetching and fast-forwarding {{.from}} -> {{.to}} ...",
@@ -894,8 +908,10 @@ func EnglishTranslationSet() TranslationSet {
 		DiscardFileChangesPrompt:            "Are you sure you want to discard this commit's changes to this file? If this file was created in this commit, it will be deleted",
 		DisabledForGPG:                      "Feature not available for users using GPG",
 		CreateRepo:                          "Not in a git repository. Create a new git repository? (y/n): ",
+		BareRepo:                            "You've attempted to open Lazygit in a bare repo but Lazygit does not yet support bare repos. Open most recent repo? (y/n) ",
 		InitialBranch:                       "Branch name? (leave empty for git's default): ",
 		NoRecentRepositories:                "Must open lazygit in a git repository. No valid recent repositories. Exiting.",
+		IncorrectNotARepository:             "The value of 'notARepository' is incorrect. It should be one of 'prompt', 'create', 'skip', or 'quit'.",
 		AutoStashTitle:                      "Autostash?",
 		AutoStashPrompt:                     "You must stash and pop your changes to bring them across. Do this automatically? (enter/esc)",
 		StashPrefix:                         "Auto-stashing changes for ",
@@ -926,6 +942,7 @@ func EnglishTranslationSet() TranslationSet {
 		LcStashStagedChanges:                "stash staged changes",
 		LcStashAllChangesKeepIndex:          "stash all changes and keep index",
 		LcStashUnstagedChanges:              "stash unstaged changes",
+		LcStashIncludeUntrackedChanges:      "stash all changes including untracked files",
 		LcStashOptions:                      "Stash options",
 		NotARepository:                      "Error: must be run inside a git repository",
 		LcJump:                              "jump to panel",
@@ -942,7 +959,7 @@ func EnglishTranslationSet() TranslationSet {
 		PatchOptionsTitle:                   "Patch Options",
 		NoPatchError:                        "No patch created yet. To start building a patch, use 'space' on a commit file or enter to add specific lines",
 		LcEnterFile:                         "enter file to add selected lines to the patch (or toggle directory collapsed)",
-		ExitLineByLineMode:                  `exit line-by-line mode`,
+		ExitCustomPatchBuilder:              `exit custom patch builder`,
 		EnterUpstream:                       `Enter upstream as '<remote> <branchname>'`,
 		InvalidUpstream:                     "Invalid upstream. Must be in the format '<remote> <branchname>'",
 		ReturnToRemotesList:                 `Return to remotes list`,
@@ -1045,6 +1062,7 @@ func EnglishTranslationSet() TranslationSet {
 		NoFilesStagedPrompt:                 "You have not staged any files. Commit all files?",
 		BranchNotFoundTitle:                 "Branch not found",
 		BranchNotFoundPrompt:                "Branch not found. Create a new branch named",
+		LcBranchUnknown:                     "branch unknown",
 		UnstageLinesTitle:                   "Unstage lines",
 		UnstageLinesPrompt:                  "Are you sure you want to delete the selected lines (git reset)? It is irreversible.\nTo disable this dialogue set the config key of 'gui.skipUnstageLineWarning' to true",
 		LcCreateNewBranchFromCommit:         "create new branch off of commit",
@@ -1136,6 +1154,11 @@ func EnglishTranslationSet() TranslationSet {
 		UpstreamGone:                        "(upstream gone)",
 		NukeDescription:                     "If you want to make all the changes in the worktree go away, this is the way to do it. If there are dirty submodule changes this will stash those changes in the submodule(s).",
 		DiscardStagedChangesDescription:     "This will create a new stash entry containing only staged files and then drop it, so that the working tree is left with only unstaged changes",
+		EmptyOutput:                         "<empty output>",
+		Patch:                               "Patch",
+		CustomPatch:                         "Custom patch",
+		LcCommitsCopied:                     "commits copied",
+		LcCommitCopied:                      "commit copied",
 		Actions: Actions{
 			// TODO: combine this with the original keybinding descriptions (those are all in lowercase atm)
 			CheckoutCommit:                    "Checkout commit",
@@ -1182,8 +1205,7 @@ func EnglishTranslationSet() TranslationSet {
 			UnstageFile:                       "Unstage file",
 			UnstageAllFiles:                   "Unstage all files",
 			StageAllFiles:                     "Stage all files",
-			IgnoreExcludeFile:                 "Ignore or Exclude file",
-			IgnoreFile:                        "Ignore or Exclude file",
+			LcIgnoreExcludeFile:               "ignore or exclude file",
 			IgnoreFileErr:                     "Cannot ignore .gitignore",
 			ExcludeFile:                       "Exclude file",
 			ExcludeFileErr:                    "Cannot exclude .git/info/exclude",
@@ -1197,6 +1219,7 @@ func EnglishTranslationSet() TranslationSet {
 			StashAllChangesKeepIndex:          "Stash all changes and keep index",
 			StashStagedChanges:                "Stash staged changes",
 			StashUnstagedChanges:              "Stash unstaged changes",
+			StashIncludeUntrackedChanges:      "Stash all changes including untracked files",
 			GitFlowFinish:                     "Git flow finish",
 			GitFlowStart:                      "Git Flow start",
 			CopyToClipboard:                   "Copy to clipboard",
@@ -1212,6 +1235,7 @@ func EnglishTranslationSet() TranslationSet {
 			UpdateRemote:                      "Update remote",
 			ApplyPatch:                        "Apply patch",
 			Stash:                             "Stash",
+			RenameStash:                       "Rename stash",
 			RemoveSubmodule:                   "Remove submodule",
 			ResetSubmodule:                    "Reset submodule",
 			AddSubmodule:                      "Add submodule",

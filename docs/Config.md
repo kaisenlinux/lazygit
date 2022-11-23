@@ -12,6 +12,10 @@ For old installations (slightly embarrassing: I didn't realise at the time that 
 - MacOS: `~/Library/Application Support/jesseduffield/lazygit/config.yml`
 - Windows: `%APPDATA%\jesseduffield\lazygit\config.yml`
 
+If you want to change the config directory:
+
+- MacOS: `export XDG_CONFIG_HOME="$HOME/.config"`
+
 ## Default
 
 ```yaml
@@ -25,7 +29,6 @@ gui:
   language: 'auto' # one of 'auto' | 'en' | 'zh' | 'pl' | 'nl' | 'ja' | 'ko'
   timeFormat: '02 Jan 06 15:04 MST' # https://pkg.go.dev/time#Time.Format
   theme:
-    lightTheme: false # For terminals with a light background
     activeBorderColor:
       - green
       - bold
@@ -101,7 +104,7 @@ confirmOnQuit: false
 # determines whether hitting 'esc' will quit the application when there is nothing to cancel/close
 quitOnTopLevelReturn: false
 disableStartupPopups: false
-notARepository: 'prompt' # one of: 'prompt' | 'create' | 'skip'
+notARepository: 'prompt' # one of: 'prompt' | 'create' | 'skip' | 'quit'
 promptToReturnFromSubprocess: true # display confirmation when subprocess terminates
 keybinding:
   universal:
@@ -219,6 +222,7 @@ keybinding:
     viewBisectOptions: 'b'
   stash:
     popStash: 'g'
+    renameStash: 'r'
   commitFiles:
     checkoutCommitFile: 'c'
   main:
@@ -274,7 +278,7 @@ os:
 
 Lazygit will log an error if none of these options are set.
 
-You can specify a line number you are currently at when in the line-by-line mode.
+You can specify the current line number when you're in the patch explorer.
 
 ```yaml
 os:
@@ -338,23 +342,6 @@ The available attributes are:
 - default
 - reverse # useful for high-contrast
 - underline
-
-## Light terminal theme
-
-If you have issues with a light terminal theme where you can't read / see the text add these settings
-
-```yaml
-gui:
-  theme:
-    lightTheme: true
-    activeBorderColor:
-      - black
-      - bold
-    inactiveBorderColor:
-      - black
-    selectedLineBgColor:
-      - default
-```
 
 ## Highlighting the selected line
 
@@ -430,6 +417,14 @@ gui:
 ## Keybindings
 
 For all possible keybinding options, check [Custom_Keybindings.md](https://github.com/jesseduffield/lazygit/blob/master/docs/keybindings/Custom_Keybindings.md)
+
+You can disable certain key bindings by specifying `null`.
+
+```yaml
+keybinding:
+  universal:
+    edit: null # disable 'edit file'
+```
 
 ### Example Keybindings For Colemak Users
 
@@ -530,4 +525,9 @@ notARepository: 'create'
 ```yaml
 # to skip without creating a new repo
 notARepository: 'skip'
+```
+
+```yaml
+# to exit immediately if run outside of the Git repository
+notARepository: 'quit'
 ```

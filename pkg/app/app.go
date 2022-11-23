@@ -14,7 +14,9 @@ import (
 	"github.com/go-errors/errors"
 
 	"github.com/jesseduffield/generics/slices"
+	appTypes "github.com/jesseduffield/lazygit/pkg/app/types"
 	"github.com/jesseduffield/lazygit/pkg/commands"
+	"github.com/jesseduffield/lazygit/pkg/commands/git_commands"
 	"github.com/jesseduffield/lazygit/pkg/commands/git_config"
 	"github.com/jesseduffield/lazygit/pkg/commands/oscommands"
 	"github.com/jesseduffield/lazygit/pkg/common"
@@ -22,7 +24,6 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/constants"
 	"github.com/jesseduffield/lazygit/pkg/env"
 	"github.com/jesseduffield/lazygit/pkg/gui"
-	"github.com/jesseduffield/lazygit/pkg/gui/types"
 	"github.com/jesseduffield/lazygit/pkg/i18n"
 	"github.com/jesseduffield/lazygit/pkg/updates"
 )
@@ -38,7 +39,11 @@ type App struct {
 	Updater   *updates.Updater // may only need this on the Gui
 }
 
-func Run(config config.AppConfigurer, common *common.Common, startArgs types.StartArgs) {
+func Run(
+	config config.AppConfigurer,
+	common *common.Common,
+	startArgs appTypes.StartArgs,
+) {
 	app, err := NewApp(config, common)
 
 	if err == nil {
@@ -148,7 +153,19 @@ func isGitVersionValid(versionStr string) bool {
 
 func isDirectoryAGitRepository(dir string) (bool, error) {
 	info, err := os.Stat(filepath.Join(dir, ".git"))
-	return info != nil && info.IsDir(), err
+	return info != nil, err
+}
+
+func openRecentRepo(app *App) bool {
+	for _, repoDir := range app.Config.GetAppState().RecentRepos {
+		if isRepo, _ := isDirectoryAGitRepository(repoDir); isRepo {
+			if err := os.Chdir(repoDir); err == nil {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func (app *App) setupRepo() (bool, error) {
@@ -167,53 +184,85 @@ func (app *App) setupRepo() (bool, error) {
 		if err != nil {
 			return false, err
 		}
+
 		if isRepo, err := isDirectoryAGitRepository(cwd); isRepo {
 			return false, err
 		}
 
-		shouldInitRepo := true
-		notARepository := app.UserConfig.NotARepository
-		initialBranch := ""
-		if notARepository == "prompt" {
+		var shouldInitRepo bool
+		initialBranchArg := ""
+		switch app.UserConfig.NotARepository {
+		case "prompt":
 			// Offer to initialize a new repository in current directory.
 			fmt.Print(app.Tr.CreateRepo)
 			response, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-			if strings.Trim(response, " \r\n") != "y" {
-				shouldInitRepo = false
-			} else {
+			shouldInitRepo = (strings.Trim(response, " \r\n") == "y")
+			if shouldInitRepo {
 				// Ask for the initial branch name
 				fmt.Print(app.Tr.InitialBranch)
 				response, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 				if trimmedResponse := strings.Trim(response, " \r\n"); len(trimmedResponse) > 0 {
-					initialBranch += "--initial-branch=" + trimmedResponse
+					initialBranchArg += "--initial-branch=" + app.OSCommand.Quote(trimmedResponse)
 				}
 			}
-		} else if notARepository == "skip" {
+		case "create":
+			shouldInitRepo = true
+		case "skip":
 			shouldInitRepo = false
-		}
-
-		if !shouldInitRepo {
-			// check if we have a recent repo we can open
-			for _, repoDir := range app.Config.GetAppState().RecentRepos {
-				if isRepo, _ := isDirectoryAGitRepository(repoDir); isRepo {
-					if err := os.Chdir(repoDir); err == nil {
-						return true, nil
-					}
-				}
-			}
-
-			fmt.Println(app.Tr.NoRecentRepositories)
+		case "quit":
+			fmt.Fprintln(os.Stderr, app.Tr.NotARepository)
+			os.Exit(1)
+		default:
+			fmt.Fprintln(os.Stderr, app.Tr.IncorrectNotARepository)
 			os.Exit(1)
 		}
-		if err := app.OSCommand.Cmd.New("git init " + initialBranch).Run(); err != nil {
+
+		if shouldInitRepo {
+			if err := app.OSCommand.Cmd.New("git init " + initialBranchArg).Run(); err != nil {
+				return false, err
+			}
+			return false, nil
+		}
+
+		// check if we have a recent repo we can open
+		for _, repoDir := range app.Config.GetAppState().RecentRepos {
+			if isRepo, _ := isDirectoryAGitRepository(repoDir); isRepo {
+				if err := os.Chdir(repoDir); err == nil {
+					return true, nil
+				}
+			}
+		}
+
+		fmt.Fprintln(os.Stderr, app.Tr.NoRecentRepositories)
+		os.Exit(1)
+	}
+
+	// Run this afterward so that the previous repo creation steps can run without this interfering
+	if isBare, err := git_commands.IsBareRepo(app.OSCommand); isBare {
+		if err != nil {
 			return false, err
 		}
+
+		fmt.Print(app.Tr.BareRepo)
+
+		response, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+
+		if shouldOpenRecent := strings.Trim(response, " \r\n") == "y"; !shouldOpenRecent {
+			os.Exit(0)
+		}
+
+		if didOpenRepo := openRecentRepo(app); didOpenRepo {
+			return true, nil
+		}
+
+		fmt.Println(app.Tr.NoRecentRepositories)
+		os.Exit(1)
 	}
 
 	return false, nil
 }
 
-func (app *App) Run(startArgs types.StartArgs) error {
+func (app *App) Run(startArgs appTypes.StartArgs) error {
 	err := app.Gui.RunAndHandleError(startArgs)
 	return err
 }

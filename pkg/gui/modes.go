@@ -34,7 +34,7 @@ func (gui *Gui) modeStatuses() []modeStatus {
 			description: func() string {
 				return gui.withResetButton(gui.c.Tr.LcBuildingPatch, style.FgYellow.SetBold())
 			},
-			reset: gui.handleResetPatch,
+			reset: gui.helpers.PatchBuilding.Reset,
 		},
 		{
 			isActive: gui.State.Modes.Filtering.Active,
@@ -53,10 +53,17 @@ func (gui *Gui) modeStatuses() []modeStatus {
 		{
 			isActive: gui.State.Modes.CherryPicking.Active,
 			description: func() string {
+				copiedCount := len(gui.State.Modes.CherryPicking.CherryPickedCommits)
+				text := gui.c.Tr.LcCommitsCopied
+				if copiedCount == 1 {
+					text = gui.c.Tr.LcCommitCopied
+				}
+
 				return gui.withResetButton(
 					fmt.Sprintf(
-						"%d commits copied",
-						len(gui.State.Modes.CherryPicking.CherryPickedCommits),
+						"%d %s",
+						copiedCount,
+						text,
 					),
 					style.FgCyan,
 				)

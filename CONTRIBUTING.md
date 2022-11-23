@@ -23,6 +23,26 @@ welcome your pull requests:
 
 If you've never written Go in your life, then join the club! Lazygit was the maintainer's first Go program, and most contributors have never used Go before. Go is widely considered an easy-to-learn language, so if you're looking for an open source project to gain dev experience, you've come to the right place.
 
+## Running in a VSCode dev container
+
+If you want to spare yourself the hassle of setting up your dev environment yourself (i.e. installing Go, extensions, and extra tools), you can run the Lazygit code in a VSCode dev container like so:
+
+![image](https://user-images.githubusercontent.com/8456633/201500508-0d55f99f-5035-4a6f-a0f8-eaea5c003e5d.png)
+
+This requires that:
+* you have docker installed
+* you have the dev containers extension installed in VSCode
+
+See [here](https://code.visualstudio.com/docs/devcontainers/containers) for more info about dev containers.
+
+## Running in a Github Codespace
+
+If you want to start contributing to Lazygit with the click of a button, you can open the lazygit codebase in a Codespace:
+
+![image](https://user-images.githubusercontent.com/8456633/201500566-ffe9105d-6030-4cc7-a525-6570b0b413a2.png)
+
+This allows you to contribute to Lazygit without needing to install anything on your local machine. The Codespace has all the necessary tools and extensions pre-installed.
+
 ## Code of conduct
 
 Please note by participating in this project, you agree to abide by the [code of conduct].
@@ -63,15 +83,21 @@ by setting [`formatting.gofumpt`](https://github.com/golang/tools/blob/master/go
 ```jsonc
 // .vscode/settings.json
 {
-    "gopls": {
-        "formatting.gofumpt": true
-    }
+  "gopls": {
+    "formatting.gofumpt": true
+  }
 }
+```
+
+To run gofumpt from your terminal go:
+
+```
+go install mvdan.cc/gofumpt@latest && gofumpt -l -w .
 ```
 
 ## Internationalisation
 
-Boy that's a hard word to spell. Anyway, lazygit is translated into several languages within the pkg/i18n package. If you need to render text to the user, you should add a new field to the TranslationSet struct in `pkg/i18n/english.go` and add the actual content within the `EnglishTranslationSet()` method in the same file. Although it is appreciated if you translate the text into other languages, it's not expected of you (google translate will likely do a bad job anyway!).
+Boy that's a hard word to spell. Anyway, lazygit is translated into several languages within the pkg/i18n package. If you need to render text to the user, you should add a new field to the TranslationSet struct in `pkg/i18n/english.go` and add the actual content within the `EnglishTranslationSet()` method in the same file. Then you can access via `gui.Tr.YourNewText` (or `app.Tr.YourNewText`, etc). Although it is appreciated if you translate the text into other languages, it's not expected of you (google translate will likely do a bad job anyway!).
 
 ## Debugging
 
@@ -82,6 +108,7 @@ From most places in the codebase you have access to a logger e.g. `gui.Log.Warn(
 If you find that the existing logs are too noisy, you can set the log level with e.g. `LOG_LEVEL=warn go run main.go -debug` and then only use `Warn` logs yourself.
 
 If you need to log from code in the vendor directory (e.g. the `gocui` package), you won't have access to the logger, but you can easily add logging support by adding the following:
+
 ```go
 func newLogger() *logrus.Entry {
 	// REPLACE THE BELOW PATH WITH YOUR ACTUAL LOG PATH (YOU'LL SEE THIS PRINTED WHEN YOU RUN `lazygit --logs`
@@ -118,24 +145,50 @@ If you want to trigger a debug session from VSCode, you can use the following sn
       "request": "launch",
       "mode": "auto",
       "program": "main.go",
-      "args": [
-        "--debug"
-      ],
+      "args": ["--debug"],
       "console": "externalTerminal" // <-- you need this to actually see the lazygit UI in a window while debugging
     }
   ]
 }
 ```
 
+## Profiling
+
+If you want to investigate what's contributing to CPU usage you can add the following to the top of the `main()` function in `main.go`
+
+```go
+import "runtime/pprof"
+
+func main() {
+	f, err := os.Create("cpu.prof")
+	if err != nil {
+		log.Fatal("could not create CPU profile: ", err)
+	}
+	defer f.Close()
+	if err := pprof.StartCPUProfile(f); err != nil {
+		log.Fatal("could not start CPU profile: ", err)
+	}
+	defer pprof.StopCPUProfile()
+	...
+```
+
+Then run lazygit, and afterwards, from your terminal, run:
+
+```sh
+go tool pprof --web cpu.prof
+```
+
+That should open an application which allows you to view the breakdown of CPU usage.
+
 ## Testing
 
-Lazygit has two kinds of tests: unit tests and integration tests. Unit tests go in files that end in `_test.go`, and are written in Go. Lazygit has its own integration test system where you can build a sandbox repo with a shell script, record yourself doing something, and commit the resulting repo snapshot. It's pretty damn cool! To learn more see [here](https://github.com/jesseduffield/lazygit/blob/master/docs/Integration_Tests.md)
+Lazygit has two kinds of tests: unit tests and integration tests. Unit tests go in files that end in `_test.go`, and are written in Go. For integration tests, see [here](https://github.com/jesseduffield/lazygit/blob/master/pkg/integration/README.md)
 
 ## Updating Gocui
 
 Sometimes you will need to make a change in the gocui fork (https://github.com/jesseduffield/gocui). Gocui is the package responsible for rendering windows and handling user input. Here's the typical process to follow:
 
-1. Make the changes in gocui inside the vendor directory so it's easy to test against lazygit
+1. Make the changes in gocui inside lazygit's vendor directory so it's easy to test against lazygit
 2. Copy the changes over to the actual gocui repo (clone it if you haven't already, and use the `awesome` branch, not `master`)
 3. Raise a PR on the gocui repo with your changes
 4. After that PR is merged, make a PR in lazygit bumping the gocui version. You can bump the version by running the following at the lazygit repo root:
@@ -143,6 +196,23 @@ Sometimes you will need to make a change in the gocui fork (https://github.com/j
 ```sh
 ./scripts/bump_gocui.sh
 ```
+
+5. Raise a PR in lazygit with those changes
+
+## Updating Lazycore
+
+[Lazycore](https://github.com/jesseduffield/lazycore) is a repo containing shared functionality between lazygit and lazydocker. Sometimes you will need to make a change to that repo and import the changes into lazygit. Similar to updating Gocui, here's what you do:
+
+1. Make the changes in lazycore inside lazygit's vendor directory so it's easy to test against lazygit
+2. Copy the changes over to the actual lazycore repo (clone it if you haven't already, and use the `master` branch)
+3. Raise a PR on the lazycore repo with your changes
+4. After that PR is merged, make a PR in lazygit bumping the lazycore version. You can bump the version by running the following at the lazygit repo root:
+
+```sh
+./scripts/bump_lazycore.sh
+```
+
+Or if you're using VSCode, there is a bump lazycore task you can find by going `cmd+shift+p` and typing 'Run task'
 
 5. Raise a PR in lazygit with those changes
 

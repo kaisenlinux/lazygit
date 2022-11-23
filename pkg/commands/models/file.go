@@ -2,6 +2,7 @@ package models
 
 import (
 	"github.com/jesseduffield/lazygit/pkg/utils"
+	"github.com/samber/lo"
 )
 
 // File : A file from git status
@@ -28,6 +29,7 @@ type IFile interface {
 	GetIsTracked() bool
 	GetPath() string
 	GetPreviousPath() string
+	GetIsFile() bool
 }
 
 func (f *File) IsRename() bool {
@@ -43,7 +45,7 @@ func (f *File) Names() []string {
 	return result
 }
 
-// returns true if the file names are the same or if a a file rename includes the filename of the other
+// returns true if the file names are the same or if a file rename includes the filename of the other
 func (f *File) Matches(f2 *File) bool {
 	return utils.StringArraysOverlap(f.Names(), f2.Names())
 }
@@ -89,4 +91,53 @@ func (f *File) GetPath() string {
 
 func (f *File) GetPreviousPath() string {
 	return f.PreviousName
+}
+
+func (f *File) GetIsFile() bool {
+	return true
+}
+
+type StatusFields struct {
+	HasStagedChanges        bool
+	HasUnstagedChanges      bool
+	Tracked                 bool
+	Deleted                 bool
+	Added                   bool
+	HasMergeConflicts       bool
+	HasInlineMergeConflicts bool
+	ShortStatus             string
+}
+
+func SetStatusFields(file *File, shortStatus string) {
+	derived := deriveStatusFields(shortStatus)
+
+	file.HasStagedChanges = derived.HasStagedChanges
+	file.HasUnstagedChanges = derived.HasUnstagedChanges
+	file.Tracked = derived.Tracked
+	file.Deleted = derived.Deleted
+	file.Added = derived.Added
+	file.HasMergeConflicts = derived.HasMergeConflicts
+	file.HasInlineMergeConflicts = derived.HasInlineMergeConflicts
+	file.ShortStatus = derived.ShortStatus
+}
+
+// shortStatus is something like '??' or 'A '
+func deriveStatusFields(shortStatus string) StatusFields {
+	stagedChange := shortStatus[0:1]
+	unstagedChange := shortStatus[1:2]
+	tracked := !lo.Contains([]string{"??", "A ", "AM"}, shortStatus)
+	hasStagedChanges := !lo.Contains([]string{" ", "U", "?"}, stagedChange)
+	hasInlineMergeConflicts := lo.Contains([]string{"UU", "AA"}, shortStatus)
+	hasMergeConflicts := hasInlineMergeConflicts || lo.Contains([]string{"DD", "AU", "UA", "UD", "DU"}, shortStatus)
+
+	return StatusFields{
+		HasStagedChanges:        hasStagedChanges,
+		HasUnstagedChanges:      unstagedChange != " ",
+		Tracked:                 tracked,
+		Deleted:                 unstagedChange == "D" || stagedChange == "D",
+		Added:                   unstagedChange == "A" || !tracked,
+		HasMergeConflicts:       hasMergeConflicts,
+		HasInlineMergeConflicts: hasInlineMergeConflicts,
+		ShortStatus:             shortStatus,
+	}
 }
