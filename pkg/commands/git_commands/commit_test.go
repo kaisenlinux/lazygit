@@ -27,7 +27,7 @@ func TestCommitResetToCommit(t *testing.T) {
 	runner.CheckForMissingCalls()
 }
 
-func TestCommitCommitObj(t *testing.T) {
+func TestCommitCommitCmdObj(t *testing.T) {
 	type scenario struct {
 		testName             string
 		message              string
@@ -84,6 +84,62 @@ func TestCommitCommitObj(t *testing.T) {
 			instance := buildCommitCommands(commonDeps{userConfig: userConfig})
 
 			cmdStr := instance.CommitCmdObj(s.message).ToString()
+			assert.Equal(t, s.expected, cmdStr)
+		})
+	}
+}
+
+func TestCommitCommitEditorCmdObj(t *testing.T) {
+	type scenario struct {
+		testName      string
+		configSignoff bool
+		configVerbose string
+		expected      string
+	}
+
+	scenarios := []scenario{
+		{
+			testName:      "Commit using editor",
+			configSignoff: false,
+			configVerbose: "default",
+			expected:      `git commit`,
+		},
+		{
+			testName:      "Commit with --no-verbose flag",
+			configSignoff: false,
+			configVerbose: "never",
+			expected:      `git commit --no-verbose`,
+		},
+		{
+			testName:      "Commit with --verbose flag",
+			configSignoff: false,
+			configVerbose: "always",
+			expected:      `git commit --verbose`,
+		},
+		{
+			testName:      "Commit with --signoff",
+			configSignoff: true,
+			configVerbose: "default",
+			expected:      `git commit --signoff`,
+		},
+		{
+			testName:      "Commit with --signoff and --no-verbose",
+			configSignoff: true,
+			configVerbose: "never",
+			expected:      `git commit --signoff --no-verbose`,
+		},
+	}
+
+	for _, s := range scenarios {
+		s := s
+		t.Run(s.testName, func(t *testing.T) {
+			userConfig := config.GetDefaultConfig()
+			userConfig.Git.Commit.SignOff = s.configSignoff
+			userConfig.Git.Commit.Verbose = s.configVerbose
+
+			instance := buildCommitCommands(commonDeps{userConfig: userConfig})
+
+			cmdStr := instance.CommitEditorCmdObj().ToString()
 			assert.Equal(t, s.expected, cmdStr)
 		})
 	}

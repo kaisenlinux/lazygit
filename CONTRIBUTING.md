@@ -37,9 +37,11 @@ See [here](https://code.visualstudio.com/docs/devcontainers/containers) for more
 
 ## Running in a Github Codespace
 
-If you want to start contributing to Lazygit with the click of a button, you can open the lazygit codebase in a Codespace:
+If you want to start contributing to Lazygit with the click of a button, you can open the lazygit codebase in a Codespace. First fork the repo, then click to create a codespace:
 
 ![image](https://user-images.githubusercontent.com/8456633/201500566-ffe9105d-6030-4cc7-a525-6570b0b413a2.png)
+
+To run lazygit from within the integrated terminal just go `go run main.go`
 
 This allows you to contribute to Lazygit without needing to install anything on your local machine. The Codespace has all the necessary tools and extensions pre-installed.
 

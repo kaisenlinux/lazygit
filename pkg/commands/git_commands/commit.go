@@ -62,13 +62,24 @@ func (self *CommitCommands) CommitCmdObj(message string) oscommands.ICmdObj {
 
 // runs git commit without the -m argument meaning it will invoke the user's editor
 func (self *CommitCommands) CommitEditorCmdObj() oscommands.ICmdObj {
-	return self.cmd.New(fmt.Sprintf("git commit%s", self.signoffFlag()))
+	return self.cmd.New(fmt.Sprintf("git commit%s%s", self.signoffFlag(), self.verboseFlag()))
 }
 
 func (self *CommitCommands) signoffFlag() string {
 	if self.UserConfig.Git.Commit.SignOff {
 		return " --signoff"
 	} else {
+		return ""
+	}
+}
+
+func (self *CommitCommands) verboseFlag() string {
+	switch self.config.UserConfig.Git.Commit.Verbose {
+	case "always":
+		return " --verbose"
+	case "never":
+		return " --no-verbose"
+	default:
 		return ""
 	}
 }

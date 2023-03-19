@@ -9,8 +9,6 @@ type UserConfig struct {
 	Git                  GitConfig        `yaml:"git"`
 	Update               UpdateConfig     `yaml:"update"`
 	Refresher            RefresherConfig  `yaml:"refresher"`
-	Reporting            string           `yaml:"reporting"`
-	SplashUpdatesIndex   int              `yaml:"splashUpdatesIndex"`
 	ConfirmOnQuit        bool             `yaml:"confirmOnQuit"`
 	QuitOnTopLevelReturn bool             `yaml:"quitOnTopLevelReturn"`
 	Keybinding           KeybindingConfig `yaml:"keybinding"`
@@ -29,29 +27,31 @@ type RefresherConfig struct {
 }
 
 type GuiConfig struct {
-	AuthorColors             map[string]string  `yaml:"authorColors"`
-	BranchColors             map[string]string  `yaml:"branchColors"`
-	ScrollHeight             int                `yaml:"scrollHeight"`
-	ScrollPastBottom         bool               `yaml:"scrollPastBottom"`
-	MouseEvents              bool               `yaml:"mouseEvents"`
-	SkipUnstageLineWarning   bool               `yaml:"skipUnstageLineWarning"`
-	SkipStashWarning         bool               `yaml:"skipStashWarning"`
-	SidePanelWidth           float64            `yaml:"sidePanelWidth"`
-	ExpandFocusedSidePanel   bool               `yaml:"expandFocusedSidePanel"`
-	MainPanelSplitMode       string             `yaml:"mainPanelSplitMode"`
-	Language                 string             `yaml:"language"`
-	TimeFormat               string             `yaml:"timeFormat"`
-	Theme                    ThemeConfig        `yaml:"theme"`
-	CommitLength             CommitLengthConfig `yaml:"commitLength"`
-	SkipNoStagedFilesWarning bool               `yaml:"skipNoStagedFilesWarning"`
-	ShowListFooter           bool               `yaml:"showListFooter"`
-	ShowFileTree             bool               `yaml:"showFileTree"`
-	ShowRandomTip            bool               `yaml:"showRandomTip"`
-	ShowCommandLog           bool               `yaml:"showCommandLog"`
-	ShowBottomLine           bool               `yaml:"showBottomLine"`
-	ShowIcons                bool               `yaml:"showIcons"`
-	CommandLogSize           int                `yaml:"commandLogSize"`
-	SplitDiff                string             `yaml:"splitDiff"`
+	AuthorColors              map[string]string  `yaml:"authorColors"`
+	BranchColors              map[string]string  `yaml:"branchColors"`
+	ScrollHeight              int                `yaml:"scrollHeight"`
+	ScrollPastBottom          bool               `yaml:"scrollPastBottom"`
+	MouseEvents               bool               `yaml:"mouseEvents"`
+	SkipUnstageLineWarning    bool               `yaml:"skipUnstageLineWarning"`
+	SkipStashWarning          bool               `yaml:"skipStashWarning"`
+	SidePanelWidth            float64            `yaml:"sidePanelWidth"`
+	ExpandFocusedSidePanel    bool               `yaml:"expandFocusedSidePanel"`
+	MainPanelSplitMode        string             `yaml:"mainPanelSplitMode"`
+	Language                  string             `yaml:"language"`
+	TimeFormat                string             `yaml:"timeFormat"`
+	Theme                     ThemeConfig        `yaml:"theme"`
+	CommitLength              CommitLengthConfig `yaml:"commitLength"`
+	SkipNoStagedFilesWarning  bool               `yaml:"skipNoStagedFilesWarning"`
+	ShowListFooter            bool               `yaml:"showListFooter"`
+	ShowFileTree              bool               `yaml:"showFileTree"`
+	ShowRandomTip             bool               `yaml:"showRandomTip"`
+	ShowCommandLog            bool               `yaml:"showCommandLog"`
+	ShowBottomLine            bool               `yaml:"showBottomLine"`
+	ShowIcons                 bool               `yaml:"showIcons"`
+	CommandLogSize            int                `yaml:"commandLogSize"`
+	SplitDiff                 string             `yaml:"splitDiff"`
+	SkipRewordInEditorWarning bool               `yaml:"skipRewordInEditorWarning"`
+	WindowSize                string             `yaml:"windowSize"`
 }
 
 type ThemeConfig struct {
@@ -63,6 +63,7 @@ type ThemeConfig struct {
 	CherryPickedCommitBgColor []string `yaml:"cherryPickedCommitBgColor"`
 	CherryPickedCommitFgColor []string `yaml:"cherryPickedCommitFgColor"`
 	UnstagedChangesColor      []string `yaml:"unstagedChangesColor"`
+	DefaultFgColor            []string `yaml:"defaultFgColor"`
 }
 
 type CommitLengthConfig struct {
@@ -94,7 +95,8 @@ type PagingConfig struct {
 }
 
 type CommitConfig struct {
-	SignOff bool `yaml:"signOff"`
+	SignOff bool   `yaml:"signOff"`
+	Verbose string `yaml:"verbose"`
 }
 
 type MergingConfig struct {
@@ -135,6 +137,7 @@ type KeybindingUniversalConfig struct {
 	Quit                         string   `yaml:"quit"`
 	QuitAlt1                     string   `yaml:"quit-alt1"`
 	Return                       string   `yaml:"return"`
+	ReturnAlt1                   string   `yaml:"return-alt1"`
 	QuitWithoutChangingDirectory string   `yaml:"quitWithoutChangingDirectory"`
 	TogglePanel                  string   `yaml:"togglePanel"`
 	PrevItem                     string   `yaml:"prevItem"`
@@ -209,7 +212,7 @@ type KeybindingFilesConfig struct {
 	CommitChangesWithoutHook string `yaml:"commitChangesWithoutHook"`
 	AmendLastCommit          string `yaml:"amendLastCommit"`
 	CommitChangesWithEditor  string `yaml:"commitChangesWithEditor"`
-	IgnoreOrExcludeFile      string `yaml:"IgnoreOrExcludeFile"`
+	IgnoreFile               string `yaml:"ignoreFile"`
 	RefreshFiles             string `yaml:"refreshFiles"`
 	StashAllChanges          string `yaml:"stashAllChanges"`
 	ViewStashOptions         string `yaml:"viewStashOptions"`
@@ -365,17 +368,19 @@ func GetDefaultConfig() *UserConfig {
 				CherryPickedCommitBgColor: []string{"cyan"},
 				CherryPickedCommitFgColor: []string{"blue"},
 				UnstagedChangesColor:      []string{"red"},
+				DefaultFgColor:            []string{"default"},
 			},
-			CommitLength:             CommitLengthConfig{Show: true},
-			SkipNoStagedFilesWarning: false,
-			ShowListFooter:           true,
-			ShowCommandLog:           true,
-			ShowBottomLine:           true,
-			ShowFileTree:             true,
-			ShowRandomTip:            true,
-			ShowIcons:                false,
-			CommandLogSize:           8,
-			SplitDiff:                "auto",
+			CommitLength:              CommitLengthConfig{Show: true},
+			SkipNoStagedFilesWarning:  false,
+			ShowListFooter:            true,
+			ShowCommandLog:            true,
+			ShowBottomLine:            true,
+			ShowFileTree:              true,
+			ShowRandomTip:             true,
+			ShowIcons:                 false,
+			CommandLogSize:            8,
+			SplitDiff:                 "auto",
+			SkipRewordInEditorWarning: false,
 		},
 		Git: GitConfig{
 			Paging: PagingConfig{
@@ -385,6 +390,7 @@ func GetDefaultConfig() *UserConfig {
 			},
 			Commit: CommitConfig{
 				SignOff: false,
+				Verbose: "default",
 			},
 			Merging: MergingConfig{
 				ManualCommit: false,
@@ -413,8 +419,6 @@ func GetDefaultConfig() *UserConfig {
 			Method: "prompt",
 			Days:   14,
 		},
-		Reporting:            "undetermined",
-		SplashUpdatesIndex:   0,
 		ConfirmOnQuit:        false,
 		QuitOnTopLevelReturn: false,
 		Keybinding: KeybindingConfig{
@@ -422,6 +426,7 @@ func GetDefaultConfig() *UserConfig {
 				Quit:                         "q",
 				QuitAlt1:                     "<c-c>",
 				Return:                       "<esc>",
+				ReturnAlt1:                   "",
 				QuitWithoutChangingDirectory: "Q",
 				TogglePanel:                  "<tab>",
 				PrevItem:                     "<up>",
@@ -494,7 +499,7 @@ func GetDefaultConfig() *UserConfig {
 				CommitChangesWithoutHook: "w",
 				AmendLastCommit:          "A",
 				CommitChangesWithEditor:  "C",
-				IgnoreOrExcludeFile:      "i",
+				IgnoreFile:               "i",
 				RefreshFiles:             "r",
 				StashAllChanges:          "s",
 				ViewStashOptions:         "S",

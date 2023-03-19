@@ -17,6 +17,8 @@ type TranslationSet struct {
 	BranchesTitle                       string
 	CommitsTitle                        string
 	StashTitle                          string
+	SnakeTitle                          string
+	EasterEgg                           string
 	UnstagedChanges                     string
 	StagedChanges                       string
 	MainTitle                           string
@@ -29,6 +31,7 @@ type TranslationSet struct {
 	CredentialsUsername                 string
 	CredentialsPassword                 string
 	CredentialsPassphrase               string
+	CredentialsPIN                      string
 	PassUnameWrong                      string
 	CommitChanges                       string
 	AmendLastCommit                     string
@@ -56,8 +59,6 @@ type TranslationSet struct {
 	MergeConflictsTitle                 string
 	LcCheckout                          string
 	NoChangedFiles                      string
-	NoFilesDisplay                      string
-	NotAFile                            string
 	PullWait                            string
 	PushWait                            string
 	FetchWait                           string
@@ -86,7 +87,6 @@ type TranslationSet struct {
 	LcQuit                              string
 	LcSquashDown                        string
 	LcFixupCommit                       string
-	OnlySquashTopmostCommit             string
 	YouNoCommitsToSquash                string
 	Fixup                               string
 	SureFixupThisCommit                 string
@@ -212,6 +212,7 @@ type TranslationSet struct {
 	ErrorOccurred                       string
 	NoRoom                              string
 	YouAreHere                          string
+	YouDied                             string
 	LcRewordNotSupported                string
 	LcCherryPickCopy                    string
 	LcCherryPickCopyRange               string
@@ -462,6 +463,7 @@ type TranslationSet struct {
 	CommitURLCopiedToClipboard          string
 	CommitMessageCopiedToClipboard      string
 	CommitAuthorCopiedToClipboard       string
+	PatchCopiedToClipboard              string
 	LcCopiedToClipboard                 string
 	ErrCannotEditDirectory              string
 	ErrStageDirWithInlineMergeConflicts string
@@ -565,6 +567,7 @@ type Actions struct {
 	CopyCommitURLToClipboard          string
 	CopyCommitAuthorToClipboard       string
 	CopyCommitAttributeToClipboard    string
+	CopyPatchToClipboard              string
 	CustomCommand                     string
 	DiscardAllChangesInDirectory      string
 	DiscardUnstagedChangesInDirectory string
@@ -664,6 +667,8 @@ func EnglishTranslationSet() TranslationSet {
 		BranchesTitle:                       "Branches",
 		CommitsTitle:                        "Commits",
 		StashTitle:                          "Stash",
+		SnakeTitle:                          "Snake",
+		EasterEgg:                           "easter egg",
 		UnstagedChanges:                     `Unstaged Changes`,
 		StagedChanges:                       `Staged Changes`,
 		MainTitle:                           "Main",
@@ -676,6 +681,7 @@ func EnglishTranslationSet() TranslationSet {
 		CredentialsUsername:                 "Username",
 		CredentialsPassword:                 "Password",
 		CredentialsPassphrase:               "Enter passphrase for SSH key",
+		CredentialsPIN:                      "Enter PIN for SSH key",
 		PassUnameWrong:                      "Password, passphrase and/or username wrong",
 		CommitChanges:                       "commit changes",
 		AmendLastCommit:                     "amend last commit",
@@ -702,8 +708,6 @@ func EnglishTranslationSet() TranslationSet {
 		FilterUnstagedFiles:                 "Show only unstaged files",
 		ResetCommitFilterState:              "Reset filter",
 		NoChangedFiles:                      "No changed files",
-		NoFilesDisplay:                      "No file to display",
-		NotAFile:                            "Not a file",
 		PullWait:                            "Pulling...",
 		PushWait:                            "Pushing...",
 		FetchWait:                           "Fetching...",
@@ -733,7 +737,6 @@ func EnglishTranslationSet() TranslationSet {
 		LcSquashDown:                        "squash down",
 		LcFixupCommit:                       "fixup commit",
 		NoCommitsThisBranch:                 "No commits for this branch",
-		OnlySquashTopmostCommit:             "Can only squash topmost commit",
 		YouNoCommitsToSquash:                "You have no commits to squash with",
 		Fixup:                               "Fixup",
 		SureFixupThisCommit:                 "Are you sure you want to 'fixup' this commit? It will be merged into the commit below",
@@ -851,7 +854,7 @@ func EnglishTranslationSet() TranslationSet {
 		GlobalTitle:                         "Global Keybindings",
 		ConflictsResolved:                   "all merge conflicts resolved. Continue?",
 		RebasingTitle:                       "Rebasing",
-		ConfirmRebase:                       "Are you sure you want to rebase '{{.checkedOutBranch}}' onto '{{.selectedBranch}}'?",
+		ConfirmRebase:                       "Are you sure you want to rebase '{{.checkedOutBranch}}' on top of '{{.selectedBranch}}'?",
 		ConfirmMerge:                        "Are you sure you want to merge '{{.selectedBranch}}' into '{{.checkedOutBranch}}'?",
 		FwdNoUpstream:                       "Cannot fast-forward a branch with no upstream",
 		FwdNoLocalUpstream:                  "Cannot fast-forward a branch whose remote is not registered locally",
@@ -859,6 +862,7 @@ func EnglishTranslationSet() TranslationSet {
 		ErrorOccurred:                       "An error occurred! Please create an issue at",
 		NoRoom:                              "Not enough room",
 		YouAreHere:                          "YOU ARE HERE",
+		YouDied:                             "YOU DIED!",
 		LcRewordNotSupported:                "rewording commits while interactively rebasing is not currently supported",
 		LcCherryPickCopy:                    "copy commit (cherry-pick)",
 		LcCherryPickCopyRange:               "copy commit range (cherry-pick)",
@@ -1109,6 +1113,7 @@ func EnglishTranslationSet() TranslationSet {
 		CommitURLCopiedToClipboard:          "Commit URL copied to clipboard",
 		CommitMessageCopiedToClipboard:      "Commit message copied to clipboard",
 		CommitAuthorCopiedToClipboard:       "Commit author copied to clipboard",
+		PatchCopiedToClipboard:              "Patch copied to clipboard",
 		LcCopiedToClipboard:                 "copied to clipboard",
 		ErrCannotEditDirectory:              "Cannot edit directory: you can only edit individual files",
 		ErrStageDirWithInlineMergeConflicts: "Cannot stage/unstage directory containing files with inline merge conflicts. Please fix up the merge conflicts first",
@@ -1193,6 +1198,7 @@ func EnglishTranslationSet() TranslationSet {
 			CopyCommitURLToClipboard:          "Copy commit URL to clipboard",
 			CopyCommitAuthorToClipboard:       "Copy commit author to clipboard",
 			CopyCommitAttributeToClipboard:    "Copy to clipboard",
+			CopyPatchToClipboard:              "Copy patch to clipboard",
 			MoveCommitUp:                      "Move commit up",
 			MoveCommitDown:                    "Move commit down",
 			CustomCommand:                     "Custom command",

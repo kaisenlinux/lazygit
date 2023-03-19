@@ -21,6 +21,7 @@ If you want to change the config directory:
 ```yaml
 gui:
   # stuff relating to the UI
+  windowSize: 'normal' # one of 'normal' | 'half' | 'full' default is 'normal'
   scrollHeight: 2 # how many lines you scroll by
   scrollPastBottom: true # enable scrolling past the bottom
   sidePanelWidth: 0.3333 # number from 0 to 1
@@ -46,6 +47,8 @@ gui:
       - blue
     unstagedChangesColor:
       - red
+    defaultFgColor:
+      - default
   commitLength:
     show: true
   mouseEvents: true
@@ -59,19 +62,21 @@ gui:
   showIcons: false
   commandLogSize: 8
   splitDiff: 'auto' # one of 'auto' | 'always'
+  skipRewordInEditorWarning: false # for skipping the confirmation before launching the reword editor
 git:
   paging:
     colorArg: always
     useConfig: false
   commit:
     signOff: false
+    verbose: default # one of 'default' | 'always' | 'never'
   merging:
     # only applicable to unix users
     manualCommit: false
     # extra args passed to `git merge`, e.g. --no-ff
     args: ''
   log:
-    # one of date-order, author-date-order, topo-order.
+    # one of date-order, author-date-order, topo-order or default.
     # topo-order makes it easier to read the git log graph, but commits may not
     # appear chronologically. See https://git-scm.com/docs/git-log#_commit_ordering
     order: 'topo-order'
@@ -99,7 +104,6 @@ refresher:
 update:
   method: prompt # can be: prompt | background | never
   days: 14 # how often an update is checked for
-reporting: 'undetermined' # one of: 'on' | 'off' | 'undetermined'
 confirmOnQuit: false
 # determines whether hitting 'esc' will quit the application when there is nothing to cancel/close
 quitOnTopLevelReturn: false
@@ -111,6 +115,8 @@ keybinding:
     quit: 'q'
     quit-alt1: '<c-c>' # alternative/alias of quit
     return: '<esc>' # return to previous menu, will quit if there's nowhere to return
+    # When set to a printable character, this will work for returning from non-prompt panels
+    return-alt1: null
     quitWithoutChangingDirectory: 'Q'
     togglePanel: '<tab>' # goto the next panel
     prevItem: '<up>' # go one line up
@@ -185,6 +191,8 @@ keybinding:
     viewResetOptions: 'D'
     fetch: 'f'
     toggleTreeView: '`'
+    openMergeTool: 'M'
+    openStatusFilter: '<c-b>'
   branches:
     createPullRequest: 'o'
     viewPullRequestOptions: 'O'
