@@ -11,13 +11,14 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
   <kbd>m</kbd>: 查看 合并/变基 选项
   <kbd>ctrl+p</kbd>: 查看自定义补丁选项
   <kbd>R</kbd>: 刷新
-  <kbd>x</kbd>: 打开菜单
+  <kbd>?</kbd>: 打开菜单
   <kbd>+</kbd>: 下一屏模式（正常/半屏/全屏）
   <kbd>_</kbd>: 上一屏模式
   <kbd>ctrl+s</kbd>: 查看按路径过滤选项
   <kbd>W</kbd>: 打开 diff 菜单
   <kbd>ctrl+e</kbd>: 打开 diff 菜单
   <kbd>@</kbd>: 打开命令日志菜单
+  <kbd>ctrl+w</kbd>: 切换是否在差异视图中显示空白字符差异
   <kbd>}</kbd>: 扩大差异视图中显示的上下文范围
   <kbd>{</kbd>: 缩小差异视图中显示的上下文范围
   <kbd>:</kbd>: 执行自定义命令
@@ -72,6 +73,7 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
   <kbd>r</kbd>: 将已检出的分支变基到该分支
   <kbd>M</kbd>: 合并到当前检出的分支
   <kbd>f</kbd>: 从上游快进此分支
+  <kbd>T</kbd>: 创建标签
   <kbd>g</kbd>: 查看重置选项
   <kbd>R</kbd>: 重命名分支
   <kbd>u</kbd>: set/unset upstream
@@ -157,7 +159,6 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
 
 <pre>
   <kbd>ctrl+o</kbd>: 将文件名复制到剪贴板
-  <kbd>ctrl+w</kbd>: 切换是否在差异视图中显示空白字符差异
   <kbd>d</kbd>: 查看'放弃更改'选项
   <kbd>space</kbd>: 切换暂存状态
   <kbd>ctrl+b</kbd>: Filter files (staged/unstaged)
@@ -183,8 +184,8 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
 ## 构建补丁中
 
 <pre>
-  <kbd>◄</kbd>: 选择上一个区块
-  <kbd>►</kbd>: 选择下一个区块
+  <kbd>◀</kbd>: 选择上一个区块
+  <kbd>▶</kbd>: 选择下一个区块
   <kbd>v</kbd>: 切换拖动选择
   <kbd>V</kbd>: 切换拖动选择
   <kbd>a</kbd>: 切换选择区块
@@ -211,8 +212,8 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
 <pre>
   <kbd>e</kbd>: 编辑文件
   <kbd>o</kbd>: 打开文件
-  <kbd>◄</kbd>: 选择上一个冲突
-  <kbd>►</kbd>: 选择下一个冲突
+  <kbd>◀</kbd>: 选择上一个冲突
+  <kbd>▶</kbd>: 选择下一个冲突
   <kbd>▲</kbd>: 选择顶部块
   <kbd>▼</kbd>: 选择底部块
   <kbd>z</kbd>: 撤销
@@ -225,8 +226,8 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
 ## 正在暂存
 
 <pre>
-  <kbd>◄</kbd>: 选择上一个区块
-  <kbd>►</kbd>: 选择下一个区块
+  <kbd>◀</kbd>: 选择上一个区块
+  <kbd>▶</kbd>: 选择下一个区块
   <kbd>v</kbd>: 切换拖动选择
   <kbd>V</kbd>: 切换拖动选择
   <kbd>a</kbd>: 切换选择区块
@@ -274,6 +275,7 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
 ## 远程分支
 
 <pre>
+  <kbd>ctrl+o</kbd>: 将分支名称复制到剪贴板
   <kbd>space</kbd>: 检出
   <kbd>n</kbd>: 新分支
   <kbd>M</kbd>: 合并到当前检出的分支

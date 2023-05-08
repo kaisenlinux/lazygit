@@ -3,8 +3,8 @@ package hosting_service
 import (
 	"testing"
 
+	"github.com/jesseduffield/lazygit/pkg/fakes"
 	"github.com/jesseduffield/lazygit/pkg/i18n"
-	"github.com/jesseduffield/lazygit/pkg/test"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -81,6 +81,16 @@ func TestGetPullRequestURL(t *testing.T) {
 			from:      "feature/sum-operation",
 			to:        "feature/operations",
 			remoteUrl: "git@github.com:peter/calculator.git",
+			test: func(url string, err error) {
+				assert.NoError(t, err)
+				assert.Equal(t, "https://github.com/peter/calculator/compare/feature%2Foperations...feature%2Fsum-operation?expand=1", url)
+			},
+		},
+		{
+			testName:  "Opens a link to new pull request on github with specific target branch (different git username)",
+			from:      "feature/sum-operation",
+			to:        "feature/operations",
+			remoteUrl: "ssh://org-12345@github.com:peter/calculator.git",
 			test: func(url string, err error) {
 				assert.NoError(t, err)
 				assert.Equal(t, "https://github.com/peter/calculator/compare/feature%2Foperations...feature%2Fsum-operation?expand=1", url)
@@ -255,6 +265,60 @@ func TestGetPullRequestURL(t *testing.T) {
 			},
 		},
 		{
+			testName:  "Opens a link to new pull request on Gitea Server (SSH)",
+			from:      "feature/new",
+			remoteUrl: "ssh://git@mycompany.gitea.io/myproject/myrepo.git",
+			configServiceDomains: map[string]string{
+				// valid configuration for a gitea server URL
+				"mycompany.gitea.io": "gitea:mycompany.gitea.io",
+			},
+			test: func(url string, err error) {
+				assert.NoError(t, err)
+				assert.Equal(t, "https://mycompany.gitea.io/myproject/myrepo/compare/feature%2Fnew", url)
+			},
+		},
+		{
+			testName:  "Opens a link to new pull request on Gitea Server (SSH) with specific target",
+			from:      "feature/new",
+			to:        "dev",
+			remoteUrl: "ssh://git@mycompany.gitea.io/myproject/myrepo.git",
+			configServiceDomains: map[string]string{
+				// valid configuration for a gitea server URL
+				"mycompany.gitea.io": "gitea:mycompany.gitea.io",
+			},
+			test: func(url string, err error) {
+				assert.NoError(t, err)
+				assert.Equal(t, "https://mycompany.gitea.io/myproject/myrepo/compare/dev...feature%2Fnew", url)
+			},
+		},
+		{
+			testName:  "Opens a link to new pull request on Gitea Server (HTTP)",
+			from:      "feature/new",
+			remoteUrl: "https://mycompany.gitea.io/myproject/myrepo.git",
+			configServiceDomains: map[string]string{
+				// valid configuration for a gitea server URL
+				"mycompany.gitea.io": "gitea:mycompany.gitea.io",
+			},
+			test: func(url string, err error) {
+				assert.NoError(t, err)
+				assert.Equal(t, "https://mycompany.gitea.io/myproject/myrepo/compare/feature%2Fnew", url)
+			},
+		},
+		{
+			testName:  "Opens a link to new pull request on Gitea Server (HTTP) with specific target",
+			from:      "feature/new",
+			to:        "dev",
+			remoteUrl: "https://mycompany.gitea.io/myproject/myrepo.git",
+			configServiceDomains: map[string]string{
+				// valid configuration for a gitea server URL
+				"mycompany.gitea.io": "gitea:mycompany.gitea.io",
+			},
+			test: func(url string, err error) {
+				assert.NoError(t, err)
+				assert.Equal(t, "https://mycompany.gitea.io/myproject/myrepo/compare/dev...feature%2Fnew", url)
+			},
+		},
+		{
 			testName:  "Throws an error if git service is unsupported",
 			from:      "feature/divide-operation",
 			remoteUrl: "git@something.com:peter/calculator.git",
@@ -300,7 +364,7 @@ func TestGetPullRequestURL(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, "https://bitbucket.org/johndoe/social_network/pull-requests/new?source=feature%2Fprofile-page&t=1", url)
 			},
-			expectedLoggedErrors: []string{"Unknown git service type: 'noservice'. Expected one of github, bitbucket, gitlab, azuredevops, bitbucketServer"},
+			expectedLoggedErrors: []string{"Unknown git service type: 'noservice'. Expected one of github, bitbucket, gitlab, azuredevops, bitbucketServer, gitea"},
 		},
 		{
 			testName:  "Escapes reserved URL characters in from branch name",
@@ -328,7 +392,7 @@ func TestGetPullRequestURL(t *testing.T) {
 		s := s
 		t.Run(s.testName, func(t *testing.T) {
 			tr := i18n.EnglishTranslationSet()
-			log := &test.FakeFieldLogger{}
+			log := &fakes.FakeFieldLogger{}
 			hostingServiceMgr := NewHostingServiceMgr(log, &tr, s.remoteUrl, s.configServiceDomains)
 			s.test(hostingServiceMgr.GetPullRequestURL(s.from, s.to))
 			log.AssertErrors(t, s.expectedLoggedErrors)

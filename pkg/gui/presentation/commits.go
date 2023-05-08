@@ -1,11 +1,14 @@
 package presentation
 
 import (
+	"fmt"
 	"strings"
 
+	"github.com/fsmiamoto/git-todo-parser/todo"
 	"github.com/jesseduffield/generics/set"
 	"github.com/jesseduffield/lazygit/pkg/commands/git_commands"
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
+	"github.com/jesseduffield/lazygit/pkg/common"
 	"github.com/jesseduffield/lazygit/pkg/gui/presentation/authors"
 	"github.com/jesseduffield/lazygit/pkg/gui/presentation/graph"
 	"github.com/jesseduffield/lazygit/pkg/gui/presentation/icons"
@@ -32,6 +35,7 @@ type bisectBounds struct {
 }
 
 func GetCommitListDisplayStrings(
+	common *common.Common,
 	commits []*models.Commit,
 	fullDescription bool,
 	cherryPickedCommitShaSet *set.Set[string],
@@ -43,6 +47,7 @@ func GetCommitListDisplayStrings(
 	length int,
 	showGraph bool,
 	bisectInfo *git_commands.BisectInfo,
+	showYouAreHereLabel bool,
 ) [][]string {
 	mutex.Lock()
 	defer mutex.Unlock()
@@ -95,7 +100,9 @@ func GetCommitListDisplayStrings(
 	for i, commit := range filteredCommits {
 		unfilteredIdx := i + startIdx
 		bisectStatus = getBisectStatus(unfilteredIdx, commit.Sha, bisectInfo, bisectBounds)
+		isYouAreHereCommit := showYouAreHereLabel && unfilteredIdx == rebaseOffset
 		lines = append(lines, displayCommit(
+			common,
 			commit,
 			cherryPickedCommitShaSet,
 			diffName,
@@ -105,6 +112,7 @@ func GetCommitListDisplayStrings(
 			fullDescription,
 			bisectStatus,
 			bisectInfo,
+			isYouAreHereCommit,
 		))
 	}
 	return lines
@@ -240,6 +248,7 @@ func getBisectStatusText(bisectStatus BisectStatus, bisectInfo *git_commands.Bis
 }
 
 func displayCommit(
+	common *common.Common,
 	commit *models.Commit,
 	cherryPickedCommitShaSet *set.Set[string],
 	diffName string,
@@ -249,13 +258,15 @@ func displayCommit(
 	fullDescription bool,
 	bisectStatus BisectStatus,
 	bisectInfo *git_commands.BisectInfo,
+	isYouAreHereCommit bool,
 ) []string {
 	shaColor := getShaColor(commit, diffName, cherryPickedCommitShaSet, bisectStatus, bisectInfo)
 	bisectString := getBisectStatusText(bisectStatus, bisectInfo)
 
 	actionString := ""
-	if commit.Action != "" {
-		actionString = actionColorMap(commit.Action).Sprint(commit.Action) + " "
+	if commit.Action != models.ActionNone {
+		todoString := commit.Action.String()
+		actionString = actionColorMap(commit.Action).Sprint(todoString) + " "
 	}
 
 	tagString := ""
@@ -266,12 +277,19 @@ func displayCommit(
 	} else {
 		if len(commit.Tags) > 0 {
 			tagString = theme.DiffTerminalColor.SetBold().Sprint(strings.Join(commit.Tags, " ")) + " "
+		} else if common.UserConfig.Gui.ExperimentalShowBranchHeads && commit.ExtraInfo != "" {
+			tagString = style.FgMagenta.SetBold().Sprint("(*)") + " "
 		}
 	}
 
 	name := commit.Name
 	if parseEmoji {
 		name = emoji.Sprint(name)
+	}
+
+	if isYouAreHereCommit {
+		youAreHere := style.FgYellow.Sprintf("<-- %s ---", common.Tr.YouAreHere)
+		name = fmt.Sprintf("%s %s", youAreHere, name)
 	}
 
 	authorFunc := authors.ShortAuthor
@@ -329,19 +347,20 @@ func getShaColor(
 		return getBisectStatusColor(bisectStatus)
 	}
 
-	diffed := commit.Sha == diffName
+	diffed := commit.Sha != "" && commit.Sha == diffName
 	shaColor := theme.DefaultTextColor
 	switch commit.Status {
-	case "unpushed":
+	case models.StatusUnpushed:
 		shaColor = style.FgRed
-	case "pushed":
+	case models.StatusPushed:
 		shaColor = style.FgYellow
-	case "merged":
+	case models.StatusMerged:
 		shaColor = style.FgGreen
-	case "rebasing":
+	case models.StatusRebasing:
 		shaColor = style.FgBlue
-	case "reflog":
+	case models.StatusReflog:
 		shaColor = style.FgBlue
+	default:
 	}
 
 	if diffed {
@@ -353,15 +372,15 @@ func getShaColor(
 	return shaColor
 }
 
-func actionColorMap(str string) style.TextStyle {
-	switch str {
-	case "pick":
+func actionColorMap(action todo.TodoCommand) style.TextStyle {
+	switch action {
+	case todo.Pick:
 		return style.FgCyan
-	case "drop":
+	case todo.Drop:
 		return style.FgRed
-	case "edit":
+	case todo.Edit:
 		return style.FgGreen
-	case "fixup":
+	case todo.Fixup:
 		return style.FgMagenta
 	default:
 		return style.FgYellow

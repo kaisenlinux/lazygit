@@ -3,7 +3,6 @@ package gui
 import (
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strings"
 	"sync"
@@ -64,9 +63,9 @@ type ContextManager struct {
 	sync.RWMutex
 }
 
-func NewContextManager(initialContext types.Context) ContextManager {
+func NewContextManager() ContextManager {
 	return ContextManager{
-		ContextStack: []types.Context{initialContext},
+		ContextStack: []types.Context{},
 		RWMutex:      sync.RWMutex{},
 	}
 }
@@ -196,10 +195,6 @@ type GuiRepoState struct {
 	// back in sync with the repo state
 	ViewsSetup bool
 
-	// we store a commit message in this field if we've escaped the commit message
-	// panel without committing or if our commit failed
-	savedCommitMessage string
-
 	ScreenMode WindowMaximisation
 
 	CurrentPopupOpts *types.CreatePopupPanelOpts
@@ -299,9 +294,13 @@ func (gui *Gui) resetState(startArgs appTypes.StartArgs, reuseState bool) {
 		},
 		ScreenMode: initialScreenMode,
 		// TODO: put contexts in the context manager
-		ContextManager:    NewContextManager(initialContext),
+		ContextManager:    NewContextManager(),
 		Contexts:          contextTree,
 		WindowViewNameMap: initialWindowViewNameMap,
+	}
+
+	if err := gui.c.PushContext(initialContext); err != nil {
+		gui.c.Log.Error(err)
 	}
 
 	gui.RepoStateMap[Repo(currentDir)] = gui.State
@@ -380,6 +379,7 @@ func NewGui(
 			RefreshingStatusMutex: &deadlock.Mutex{},
 			SyncMutex:             &deadlock.Mutex{},
 			LocalCommitsMutex:     &deadlock.Mutex{},
+			SubCommitsMutex:       &deadlock.Mutex{},
 			SubprocessMutex:       &deadlock.Mutex{},
 			PopupMutex:            &deadlock.Mutex{},
 			PtyMutex:              &deadlock.Mutex{},
@@ -435,17 +435,9 @@ var RuneReplacements = map[rune]string{
 }
 
 func (gui *Gui) initGocui(headless bool, test integrationTypes.IntegrationTest) (*gocui.Gui, error) {
-	recordEvents := RecordingEvents()
-	playMode := gocui.NORMAL
-	if recordEvents {
-		playMode = gocui.RECORDING
-	} else if Replaying() {
-		playMode = gocui.REPLAYING
-	} else if test != nil && os.Getenv(components.SANDBOX_ENV_VAR) != "true" {
-		playMode = gocui.REPLAYING_NEW
-	}
+	playRecording := test != nil && os.Getenv(components.SANDBOX_ENV_VAR) != "true"
 
-	g, err := gocui.NewGui(gocui.OutputTrue, OverlappingEdges, playMode, headless, RuneReplacements)
+	g, err := gocui.NewGui(gocui.OutputTrue, OverlappingEdges, playRecording, headless, RuneReplacements)
 	if err != nil {
 		return nil, err
 	}
@@ -498,6 +490,8 @@ func (gui *Gui) Run(startArgs appTypes.StartArgs) error {
 	if err != nil {
 		return err
 	}
+
+	defer gui.checkForDeprecatedEditConfigs()
 
 	gui.g = g
 	defer gui.g.Close()
@@ -576,10 +570,6 @@ func (gui *Gui) RunAndHandleError(startArgs appTypes.StartArgs) error {
 					}
 				}
 
-				if err := SaveRecording(gui.g.Recording); err != nil {
-					return err
-				}
-
 				return nil
 
 			default:
@@ -589,6 +579,37 @@ func (gui *Gui) RunAndHandleError(startArgs appTypes.StartArgs) error {
 
 		return nil
 	})
+}
+
+func (gui *Gui) checkForDeprecatedEditConfigs() {
+	osConfig := &gui.UserConfig.OS
+	deprecatedConfigs := []struct {
+		config  string
+		oldName string
+		newName string
+	}{
+		{osConfig.EditCommand, "EditCommand", "Edit"},
+		{osConfig.EditCommandTemplate, "EditCommandTemplate", "Edit,EditAtLine"},
+		{osConfig.OpenCommand, "OpenCommand", "Open"},
+		{osConfig.OpenLinkCommand, "OpenLinkCommand", "OpenLink"},
+	}
+	deprecatedConfigStrings := []string{}
+
+	for _, dc := range deprecatedConfigs {
+		if dc.config != "" {
+			deprecatedConfigStrings = append(deprecatedConfigStrings, fmt.Sprintf("   OS.%s -> OS.%s", dc.oldName, dc.newName))
+		}
+	}
+	if len(deprecatedConfigStrings) != 0 {
+		warningMessage := utils.ResolvePlaceholderString(
+			gui.c.Tr.DeprecatedEditConfigWarning,
+			map[string]string{
+				"configs": strings.Join(deprecatedConfigStrings, "\n"),
+			},
+		)
+
+		os.Stdout.Write([]byte(warningMessage))
+	}
 }
 
 // returns whether command exited without error or not
@@ -609,14 +630,6 @@ func (gui *Gui) runSubprocessWithSuspenseAndRefresh(subprocess oscommands.ICmdOb
 func (gui *Gui) runSubprocessWithSuspense(subprocess oscommands.ICmdObj) (bool, error) {
 	gui.Mutexes.SubprocessMutex.Lock()
 	defer gui.Mutexes.SubprocessMutex.Unlock()
-
-	if Replaying() {
-		// we do not yet support running subprocesses within integration tests. So if
-		// we're replaying an integration test and we're inside this method, something
-		// has gone wrong, so we should fail
-
-		log.Fatal("opening subprocesses not yet supported in integration tests. Chances are that this test is running too fast and a subprocess is accidentally opened")
-	}
 
 	if err := gui.g.Suspend(); err != nil {
 		return false, gui.c.Error(err)

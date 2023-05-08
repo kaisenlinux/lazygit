@@ -12,12 +12,11 @@ import (
 )
 
 type FilesController struct {
-	baseController
+	baseController // nolint: unused
 	*controllerCommon
 
-	enterSubmodule        func(submodule *models.SubmoduleConfig) error
-	setCommitMessage      func(message string)
-	getSavedCommitMessage func() string
+	enterSubmodule   func(submodule *models.SubmoduleConfig) error
+	setCommitMessage func(message string)
 }
 
 var _ types.IController = &FilesController{}
@@ -26,13 +25,11 @@ func NewFilesController(
 	common *controllerCommon,
 	enterSubmodule func(submodule *models.SubmoduleConfig) error,
 	setCommitMessage func(message string),
-	getSavedCommitMessage func() string,
 ) *FilesController {
 	return &FilesController{
-		controllerCommon:      common,
-		enterSubmodule:        enterSubmodule,
-		setCommitMessage:      setCommitMessage,
-		getSavedCommitMessage: getSavedCommitMessage,
+		controllerCommon: common,
+		enterSubmodule:   enterSubmodule,
+		setCommitMessage: setCommitMessage,
 	}
 }
 
@@ -567,15 +564,7 @@ func (self *FilesController) handleAmendCommitPress() error {
 		return self.c.ErrorMsg(self.c.Tr.NoCommitToAmend)
 	}
 
-	return self.c.Confirm(types.ConfirmOpts{
-		Title:  self.c.Tr.AmendLastCommitTitle,
-		Prompt: self.c.Tr.SureToAmend,
-		HandleConfirm: func() error {
-			cmdObj := self.git.Commit.AmendHeadCmdObj()
-			self.c.LogAction(self.c.Tr.Actions.AmendCommit)
-			return self.helpers.GPG.WithGpgHandling(cmdObj, self.c.Tr.AmendingStatus, nil)
-		},
-	})
+	return self.helpers.AmendHelper.AmendHead()
 }
 
 func (self *FilesController) handleStatusFilterPressed() error {

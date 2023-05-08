@@ -27,7 +27,7 @@ type TranslationSet struct {
 	MergeConfirmTitle                   string
 	NormalTitle                         string
 	LogTitle                            string
-	CommitMessage                       string
+	CommitSummary                       string
 	CredentialsUsername                 string
 	CredentialsPassword                 string
 	CredentialsPassphrase               string
@@ -87,7 +87,7 @@ type TranslationSet struct {
 	LcQuit                              string
 	LcSquashDown                        string
 	LcFixupCommit                       string
-	YouNoCommitsToSquash                string
+	CannotSquashOrFixupFirstCommit      string
 	Fixup                               string
 	SureFixupThisCommit                 string
 	SureSquashThisCommit                string
@@ -105,6 +105,7 @@ type TranslationSet struct {
 	SureResetCommitAuthor               string
 	LcRenameCommitEditor                string
 	NoCommitsThisBranch                 string
+	UpdateRefHere                       string
 	Error                               string
 	LcSelectHunk                        string
 	LcNavigateConflicts                 string
@@ -115,6 +116,8 @@ type TranslationSet struct {
 	LcRedoReflog                        string
 	UndoTooltip                         string
 	RedoTooltip                         string
+	DiscardAllTooltip                   string
+	DiscardUnstagedTooltip              string
 	LcPop                               string
 	LcDrop                              string
 	LcApply                             string
@@ -153,6 +156,7 @@ type TranslationSet struct {
 	MergeToolTitle                      string
 	MergeToolPrompt                     string
 	IntroPopupMessage                   string
+	DeprecatedEditConfigWarning         string
 	GitconfigParseErr                   string
 	LcEditFile                          string
 	LcOpenFile                          string
@@ -188,10 +192,13 @@ type TranslationSet struct {
 	PickAllHunks                        string
 	ViewMergeRebaseOptions              string
 	NotMergingOrRebasing                string
+	AlreadyRebasing                     string
 	RecentRepos                         string
 	MergeOptionsTitle                   string
 	RebaseOptionsTitle                  string
 	CommitMessageTitle                  string
+	CommitDescriptionTitle              string
+	CommitDescriptionSubTitle           string
 	LocalBranchesTitle                  string
 	SearchTitle                         string
 	TagsTitle                           string
@@ -204,7 +211,9 @@ type TranslationSet struct {
 	ReflogCommitsTitle                  string
 	ConflictsResolved                   string
 	RebasingTitle                       string
-	ConfirmRebase                       string
+	SimpleRebase                        string
+	InteractiveRebase                   string
+	InteractiveRebaseTooltip            string
 	ConfirmMerge                        string
 	FwdNoUpstream                       string
 	FwdNoLocalUpstream                  string
@@ -214,13 +223,12 @@ type TranslationSet struct {
 	YouAreHere                          string
 	YouDied                             string
 	LcRewordNotSupported                string
+	LcChangingThisActionIsNotAllowed    string
 	LcCherryPickCopy                    string
 	LcCherryPickCopyRange               string
 	LcPasteCommits                      string
 	SureCherryPick                      string
 	CherryPick                          string
-	CannotRebaseOntoFirstCommit         string
-	CannotSquashOntoSecondCommit        string
 	Donate                              string
 	AskQuestion                         string
 	PrevLine                            string
@@ -658,6 +666,21 @@ Thanks for using lazygit! Seriously you rock. Three things to share with you:
     Or even just star the repo to share the love!
 `
 
+const englishDeprecatedEditConfigWarning = `
+### Deprecated config warning ###
+
+The following config settings are deprecated and will be removed in a future
+version:
+{{configs}}
+
+Please refer to
+
+  https://github.com/jesseduffield/lazygit/blob/master/docs/Config.md#configuring-file-editing
+
+for up-to-date information how to configure your editor.
+
+`
+
 // exporting this so we can use it in tests
 func EnglishTranslationSet() TranslationSet {
 	return TranslationSet{
@@ -677,7 +700,7 @@ func EnglishTranslationSet() TranslationSet {
 		MergingTitle:                        "Main Panel (Merging)",
 		NormalTitle:                         "Main Panel (Normal)",
 		LogTitle:                            "Log",
-		CommitMessage:                       "Commit message",
+		CommitSummary:                       "Commit summary",
 		CredentialsUsername:                 "Username",
 		CredentialsPassword:                 "Password",
 		CredentialsPassphrase:               "Enter passphrase for SSH key",
@@ -729,7 +752,7 @@ func EnglishTranslationSet() TranslationSet {
 		LcNewBranch:                         "new branch",
 		LcDeleteBranch:                      "delete branch",
 		NoBranchesThisRepo:                  "No branches for this repo",
-		CommitMessageConfirm:                "{{.keyBindClose}}: close, {{.keyBindNewLine}}: new line, {{.keyBindConfirm}}: confirm",
+		CommitMessageConfirm:                "{{.keyBindClose}}: close, {{.keyBindConfirm}}: confirm",
 		CommitWithoutMessageErr:             "You cannot commit without a commit message",
 		CloseConfirm:                        "{{.keyBindClose}}: close/cancel, {{.keyBindConfirm}}: confirm",
 		LcClose:                             "close",
@@ -737,7 +760,8 @@ func EnglishTranslationSet() TranslationSet {
 		LcSquashDown:                        "squash down",
 		LcFixupCommit:                       "fixup commit",
 		NoCommitsThisBranch:                 "No commits for this branch",
-		YouNoCommitsToSquash:                "You have no commits to squash with",
+		UpdateRefHere:                       "Update branch '{{.ref}}' here",
+		CannotSquashOrFixupFirstCommit:      "There's no commit below to squash into",
 		Fixup:                               "Fixup",
 		SureFixupThisCommit:                 "Are you sure you want to 'fixup' this commit? It will be merged into the commit below",
 		SureSquashThisCommit:                "Are you sure you want to squash this commit into the commit below?",
@@ -764,6 +788,8 @@ func EnglishTranslationSet() TranslationSet {
 		LcRedoReflog:                        "redo (via reflog) (experimental)",
 		UndoTooltip:                         "The reflog will be used to determine what git command to run to undo the last git command. This does not include changes to the working tree; only commits are taken into consideration.",
 		RedoTooltip:                         "The reflog will be used to determine what git command to run to redo the last git command. This does not include changes to the working tree; only commits are taken into consideration.",
+		DiscardAllTooltip:                   "Discard both staged and unstaged changes in '{{.path}}'.",
+		DiscardUnstagedTooltip:              "Discard unstaged changes in '{{.path}}'.",
 		LcPop:                               "pop",
 		LcDrop:                              "drop",
 		LcApply:                             "apply",
@@ -802,6 +828,7 @@ func EnglishTranslationSet() TranslationSet {
 		MergeToolTitle:                      "Merge tool",
 		MergeToolPrompt:                     "Are you sure you want to open `git mergetool`?",
 		IntroPopupMessage:                   englishIntroPopupMessage,
+		DeprecatedEditConfigWarning:         englishDeprecatedEditConfigWarning,
 		GitconfigParseErr:                   `Gogit failed to parse your gitconfig file due to the presence of unquoted '\' characters. Removing these should fix the issue.`,
 		LcEditFile:                          `edit file`,
 		LcOpenFile:                          `open file`,
@@ -837,10 +864,13 @@ func EnglishTranslationSet() TranslationSet {
 		PickAllHunks:                        "pick all hunks",
 		ViewMergeRebaseOptions:              "view merge/rebase options",
 		NotMergingOrRebasing:                "You are currently neither rebasing nor merging",
+		AlreadyRebasing:                     "Can't perform this action during a rebase",
 		RecentRepos:                         "recent repositories",
 		MergeOptionsTitle:                   "Merge Options",
 		RebaseOptionsTitle:                  "Rebase Options",
-		CommitMessageTitle:                  "Commit Message",
+		CommitMessageTitle:                  "Commit Summary",
+		CommitDescriptionTitle:              "Commit description",
+		CommitDescriptionSubTitle:           "Press tab to toggle focus",
 		LocalBranchesTitle:                  "Local Branches",
 		SearchTitle:                         "Search",
 		TagsTitle:                           "Tags",
@@ -853,8 +883,10 @@ func EnglishTranslationSet() TranslationSet {
 		ReflogCommitsTitle:                  "Reflog",
 		GlobalTitle:                         "Global Keybindings",
 		ConflictsResolved:                   "all merge conflicts resolved. Continue?",
-		RebasingTitle:                       "Rebasing",
-		ConfirmRebase:                       "Are you sure you want to rebase '{{.checkedOutBranch}}' on top of '{{.selectedBranch}}'?",
+		RebasingTitle:                       "Rebase '{{.checkedOutBranch}}' onto '{{.ref}}'",
+		SimpleRebase:                        "simple rebase",
+		InteractiveRebase:                   "interactive rebase",
+		InteractiveRebaseTooltip:            "Begin an interactive rebase with a break at the start, so you can update the TODO commits before continuing",
 		ConfirmMerge:                        "Are you sure you want to merge '{{.selectedBranch}}' into '{{.checkedOutBranch}}'?",
 		FwdNoUpstream:                       "Cannot fast-forward a branch with no upstream",
 		FwdNoLocalUpstream:                  "Cannot fast-forward a branch whose remote is not registered locally",
@@ -864,13 +896,12 @@ func EnglishTranslationSet() TranslationSet {
 		YouAreHere:                          "YOU ARE HERE",
 		YouDied:                             "YOU DIED!",
 		LcRewordNotSupported:                "rewording commits while interactively rebasing is not currently supported",
+		LcChangingThisActionIsNotAllowed:    "changing this kind of rebase todo entry is not allowed",
 		LcCherryPickCopy:                    "copy commit (cherry-pick)",
 		LcCherryPickCopyRange:               "copy commit range (cherry-pick)",
 		LcPasteCommits:                      "paste commits (cherry-pick)",
 		SureCherryPick:                      "Are you sure you want to cherry-pick the copied commits onto this branch?",
 		CherryPick:                          "Cherry-Pick",
-		CannotRebaseOntoFirstCommit:         "You cannot interactive rebase onto the first commit",
-		CannotSquashOntoSecondCommit:        "You cannot squash/fixup onto the second commit",
 		Donate:                              "Donate",
 		AskQuestion:                         "Ask Question",
 		PrevLine:                            "select previous line",
@@ -985,7 +1016,7 @@ func EnglishTranslationSet() TranslationSet {
 		LcTagCommit:                         "tag commit",
 		TagMenuTitle:                        "Create tag",
 		TagNameTitle:                        "Tag name:",
-		TagMessageTitle:                     "Tag message: ",
+		TagMessageTitle:                     "Tag message:",
 		LcAnnotatedTag:                      "annotated tag",
 		LcLightweightTag:                    "lightweight tag",
 		LcDeleteTag:                         "delete tag",
@@ -1072,7 +1103,7 @@ func EnglishTranslationSet() TranslationSet {
 		LcCreateNewBranchFromCommit:         "create new branch off of commit",
 		LcBuildingPatch:                     "building patch",
 		LcViewCommits:                       "view commits",
-		MinGitVersionError:                  "Git version must be at least 2.0 (i.e. from 2014 onwards). Please upgrade your git version. Alternatively raise an issue at https://github.com/jesseduffield/lazygit/issues for lazygit to be more backwards compatible.",
+		MinGitVersionError:                  "Git version must be at least 2.20 (i.e. from 2018 onwards). Please upgrade your git version. Alternatively raise an issue at https://github.com/jesseduffield/lazygit/issues for lazygit to be more backwards compatible.",
 		LcRunningCustomCommandStatus:        "running custom command",
 		LcSubmoduleStashAndReset:            "stash uncommitted submodule changes and update",
 		LcAndResetSubmodules:                "and reset submodules",

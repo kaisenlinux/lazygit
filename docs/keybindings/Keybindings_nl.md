@@ -11,13 +11,14 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
   <kbd>m</kbd>: bekijk merge/rebase opties
   <kbd>ctrl+p</kbd>: bekijk aangepaste patch opties
   <kbd>R</kbd>: verversen
-  <kbd>x</kbd>: open menu
+  <kbd>?</kbd>: open menu
   <kbd>+</kbd>: volgende scherm modus (normaal/half/groot)
   <kbd>_</kbd>: vorige scherm modus
   <kbd>ctrl+s</kbd>: bekijk scoping opties
   <kbd>W</kbd>: open diff menu
   <kbd>ctrl+e</kbd>: open diff menu
   <kbd>@</kbd>: open command log menu
+  <kbd>ctrl+w</kbd>: Toggle whether or not whitespace changes are shown in the diff view
   <kbd>}</kbd>: Increase the size of the context shown around changes in the diff view
   <kbd>{</kbd>: Decrease the size of the context shown around changes in the diff view
   <kbd>:</kbd>: voer aangepaste commando uit
@@ -45,7 +46,6 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
 
 <pre>
   <kbd>ctrl+o</kbd>: kopieer de bestandsnaam naar het klembord
-  <kbd>ctrl+w</kbd>: Toggle whether or not whitespace changes are shown in the diff view
   <kbd>d</kbd>: bekijk 'veranderingen ongedaan maken' opties
   <kbd>space</kbd>: toggle staged
   <kbd>ctrl+b</kbd>: Filter files (staged/unstaged)
@@ -84,6 +84,7 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
   <kbd>r</kbd>: rebase branch
   <kbd>M</kbd>: merge in met huidige checked out branch
   <kbd>f</kbd>: fast-forward deze branch vanaf zijn upstream
+  <kbd>T</kbd>: creëer tag
   <kbd>g</kbd>: bekijk reset opties
   <kbd>R</kbd>: hernoem branch
   <kbd>u</kbd>: set/unset upstream
@@ -142,8 +143,8 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
 <pre>
   <kbd>e</kbd>: verander bestand
   <kbd>o</kbd>: open bestand
-  <kbd>◄</kbd>: selecteer voorgaand conflict
-  <kbd>►</kbd>: selecteer volgende conflict
+  <kbd>◀</kbd>: selecteer voorgaand conflict
+  <kbd>▶</kbd>: selecteer volgende conflict
   <kbd>▲</kbd>: selecteer bovenste hunk
   <kbd>▼</kbd>: selecteer onderste hunk
   <kbd>z</kbd>: ongedaan maken
@@ -163,8 +164,8 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
 ## Patch Bouwen
 
 <pre>
-  <kbd>◄</kbd>: selecteer de vorige hunk
-  <kbd>►</kbd>: selecteer de volgende hunk
+  <kbd>◀</kbd>: selecteer de vorige hunk
+  <kbd>▶</kbd>: selecteer de volgende hunk
   <kbd>v</kbd>: toggle drag selecteer
   <kbd>V</kbd>: toggle drag selecteer
   <kbd>a</kbd>: toggle selecteer hunk
@@ -193,6 +194,7 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
 ## Remote Branches
 
 <pre>
+  <kbd>ctrl+o</kbd>: kopieer branch name naar klembord
   <kbd>space</kbd>: uitchecken
   <kbd>n</kbd>: nieuwe branch
   <kbd>M</kbd>: merge in met huidige checked out branch
@@ -216,8 +218,8 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
 ## Staging
 
 <pre>
-  <kbd>◄</kbd>: selecteer de vorige hunk
-  <kbd>►</kbd>: selecteer de volgende hunk
+  <kbd>◀</kbd>: selecteer de vorige hunk
+  <kbd>▶</kbd>: selecteer de volgende hunk
   <kbd>v</kbd>: toggle drag selecteer
   <kbd>V</kbd>: toggle drag selecteer
   <kbd>a</kbd>: toggle selecteer hunk

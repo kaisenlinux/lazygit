@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fsmiamoto/git-todo-parser/todo"
 	"github.com/gookit/color"
 	"github.com/jesseduffield/generics/set"
 	"github.com/jesseduffield/lazygit/pkg/commands/git_commands"
@@ -36,6 +37,7 @@ func TestGetCommitListDisplayStrings(t *testing.T) {
 		length                   int
 		showGraph                bool
 		bisectInfo               *git_commands.BisectInfo
+		showYouAreHereLabel      bool
 		expected                 string
 		focus                    bool
 	}{
@@ -90,8 +92,8 @@ func TestGetCommitListDisplayStrings(t *testing.T) {
 		{
 			testName: "showing graph, including rebase commits",
 			commits: []*models.Commit{
-				{Name: "commit1", Sha: "sha1", Parents: []string{"sha2", "sha3"}, Action: "pick"},
-				{Name: "commit2", Sha: "sha2", Parents: []string{"sha3"}, Action: "pick"},
+				{Name: "commit1", Sha: "sha1", Parents: []string{"sha2", "sha3"}, Action: todo.Pick},
+				{Name: "commit2", Sha: "sha2", Parents: []string{"sha3"}, Action: todo.Pick},
 				{Name: "commit3", Sha: "sha3", Parents: []string{"sha4"}},
 				{Name: "commit4", Sha: "sha4", Parents: []string{"sha5"}},
 				{Name: "commit5", Sha: "sha5", Parents: []string{"sha7"}},
@@ -101,10 +103,11 @@ func TestGetCommitListDisplayStrings(t *testing.T) {
 			showGraph:                true,
 			bisectInfo:               git_commands.NewNullBisectInfo(),
 			cherryPickedCommitShaSet: set.New[string](),
+			showYouAreHereLabel:      true,
 			expected: formatExpected(`
 		sha1 pick  commit1
 		sha2 pick  commit2
-		sha3       ◯ commit3
+		sha3       ◯ <-- YOU ARE HERE --- commit3
 		sha4       ◯ commit4
 		sha5       ◯ commit5
 				`),
@@ -112,8 +115,8 @@ func TestGetCommitListDisplayStrings(t *testing.T) {
 		{
 			testName: "showing graph, including rebase commits, with offset",
 			commits: []*models.Commit{
-				{Name: "commit1", Sha: "sha1", Parents: []string{"sha2", "sha3"}, Action: "pick"},
-				{Name: "commit2", Sha: "sha2", Parents: []string{"sha3"}, Action: "pick"},
+				{Name: "commit1", Sha: "sha1", Parents: []string{"sha2", "sha3"}, Action: todo.Pick},
+				{Name: "commit2", Sha: "sha2", Parents: []string{"sha3"}, Action: todo.Pick},
 				{Name: "commit3", Sha: "sha3", Parents: []string{"sha4"}},
 				{Name: "commit4", Sha: "sha4", Parents: []string{"sha5"}},
 				{Name: "commit5", Sha: "sha5", Parents: []string{"sha7"}},
@@ -123,18 +126,19 @@ func TestGetCommitListDisplayStrings(t *testing.T) {
 			showGraph:                true,
 			bisectInfo:               git_commands.NewNullBisectInfo(),
 			cherryPickedCommitShaSet: set.New[string](),
+			showYouAreHereLabel:      true,
 			expected: formatExpected(`
 		sha2 pick  commit2
-		sha3       ◯ commit3
+		sha3       ◯ <-- YOU ARE HERE --- commit3
 		sha4       ◯ commit4
 		sha5       ◯ commit5
 				`),
 		},
 		{
-			testName: "startIdx is passed TODO commits",
+			testName: "startIdx is past TODO commits",
 			commits: []*models.Commit{
-				{Name: "commit1", Sha: "sha1", Parents: []string{"sha2", "sha3"}, Action: "pick"},
-				{Name: "commit2", Sha: "sha2", Parents: []string{"sha3"}, Action: "pick"},
+				{Name: "commit1", Sha: "sha1", Parents: []string{"sha2", "sha3"}, Action: todo.Pick},
+				{Name: "commit2", Sha: "sha2", Parents: []string{"sha3"}, Action: todo.Pick},
 				{Name: "commit3", Sha: "sha3", Parents: []string{"sha4"}},
 				{Name: "commit4", Sha: "sha4", Parents: []string{"sha5"}},
 				{Name: "commit5", Sha: "sha5", Parents: []string{"sha7"}},
@@ -144,6 +148,7 @@ func TestGetCommitListDisplayStrings(t *testing.T) {
 			showGraph:                true,
 			bisectInfo:               git_commands.NewNullBisectInfo(),
 			cherryPickedCommitShaSet: set.New[string](),
+			showYouAreHereLabel:      true,
 			expected: formatExpected(`
 		sha4 ◯ commit4
 		sha5 ◯ commit5
@@ -152,8 +157,8 @@ func TestGetCommitListDisplayStrings(t *testing.T) {
 		{
 			testName: "only showing TODO commits",
 			commits: []*models.Commit{
-				{Name: "commit1", Sha: "sha1", Parents: []string{"sha2", "sha3"}, Action: "pick"},
-				{Name: "commit2", Sha: "sha2", Parents: []string{"sha3"}, Action: "pick"},
+				{Name: "commit1", Sha: "sha1", Parents: []string{"sha2", "sha3"}, Action: todo.Pick},
+				{Name: "commit2", Sha: "sha2", Parents: []string{"sha3"}, Action: todo.Pick},
 				{Name: "commit3", Sha: "sha3", Parents: []string{"sha4"}},
 				{Name: "commit4", Sha: "sha4", Parents: []string{"sha5"}},
 				{Name: "commit5", Sha: "sha5", Parents: []string{"sha7"}},
@@ -163,6 +168,7 @@ func TestGetCommitListDisplayStrings(t *testing.T) {
 			showGraph:                true,
 			bisectInfo:               git_commands.NewNullBisectInfo(),
 			cherryPickedCommitShaSet: set.New[string](),
+			showYouAreHereLabel:      true,
 			expected: formatExpected(`
 		sha1 pick  commit1
 		sha2 pick  commit2
@@ -182,6 +188,7 @@ func TestGetCommitListDisplayStrings(t *testing.T) {
 			showGraph:                true,
 			bisectInfo:               git_commands.NewNullBisectInfo(),
 			cherryPickedCommitShaSet: set.New[string](),
+			showYouAreHereLabel:      true,
 			expected: formatExpected(`
 			sha5 ◯ commit5
 				`),
@@ -189,10 +196,10 @@ func TestGetCommitListDisplayStrings(t *testing.T) {
 		{
 			testName: "only TODO commits except last",
 			commits: []*models.Commit{
-				{Name: "commit1", Sha: "sha1", Parents: []string{"sha2", "sha3"}, Action: "pick"},
-				{Name: "commit2", Sha: "sha2", Parents: []string{"sha3"}, Action: "pick"},
-				{Name: "commit3", Sha: "sha3", Parents: []string{"sha4"}, Action: "pick"},
-				{Name: "commit4", Sha: "sha4", Parents: []string{"sha5"}, Action: "pick"},
+				{Name: "commit1", Sha: "sha1", Parents: []string{"sha2", "sha3"}, Action: todo.Pick},
+				{Name: "commit2", Sha: "sha2", Parents: []string{"sha3"}, Action: todo.Pick},
+				{Name: "commit3", Sha: "sha3", Parents: []string{"sha4"}, Action: todo.Pick},
+				{Name: "commit4", Sha: "sha4", Parents: []string{"sha5"}, Action: todo.Pick},
 				{Name: "commit5", Sha: "sha5", Parents: []string{"sha7"}},
 			},
 			startIdx:                 0,
@@ -200,9 +207,29 @@ func TestGetCommitListDisplayStrings(t *testing.T) {
 			showGraph:                true,
 			bisectInfo:               git_commands.NewNullBisectInfo(),
 			cherryPickedCommitShaSet: set.New[string](),
+			showYouAreHereLabel:      true,
 			expected: formatExpected(`
 			sha1 pick  commit1
 			sha2 pick  commit2
+				`),
+		},
+		{
+			testName: "don't show YOU ARE HERE label when not asked for (e.g. in branches panel)",
+			commits: []*models.Commit{
+				{Name: "commit1", Sha: "sha1", Parents: []string{"sha2"}, Action: todo.Pick},
+				{Name: "commit2", Sha: "sha2", Parents: []string{"sha3"}},
+				{Name: "commit3", Sha: "sha3", Parents: []string{"sha4"}},
+			},
+			startIdx:                 0,
+			length:                   5,
+			showGraph:                true,
+			bisectInfo:               git_commands.NewNullBisectInfo(),
+			cherryPickedCommitShaSet: set.New[string](),
+			showYouAreHereLabel:      false,
+			expected: formatExpected(`
+		sha1 pick  commit1
+		sha2       ◯ commit2
+		sha3       ◯ commit3
 				`),
 		},
 		{
@@ -234,11 +261,14 @@ func TestGetCommitListDisplayStrings(t *testing.T) {
 		}
 	}
 
+	common := utils.NewDummyCommon()
+
 	for _, s := range scenarios {
 		s := s
 		if !focusing || s.focus {
 			t.Run(s.testName, func(t *testing.T) {
 				result := GetCommitListDisplayStrings(
+					common,
 					s.commits,
 					s.fullDescription,
 					s.cherryPickedCommitShaSet,
@@ -250,6 +280,7 @@ func TestGetCommitListDisplayStrings(t *testing.T) {
 					s.length,
 					s.showGraph,
 					s.bisectInfo,
+					s.showYouAreHereLabel,
 				)
 
 				renderedResult := utils.RenderDisplayStrings(result)

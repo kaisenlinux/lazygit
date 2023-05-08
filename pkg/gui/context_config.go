@@ -150,15 +150,15 @@ func (gui *Gui) contextTree() *context.ContextTree {
 			func(opts types.OnFocusLostOpts) error {
 				gui.Views.PatchBuilding.Wrap = true
 
-				if gui.git.Patch.PatchManager.IsEmpty() {
-					gui.git.Patch.PatchManager.Reset()
+				if gui.git.Patch.PatchBuilder.IsEmpty() {
+					gui.git.Patch.PatchBuilder.Reset()
 				}
 
 				return nil
 			},
 			func() []int {
 				filename := gui.State.Contexts.CommitFiles.GetSelectedPath()
-				includedLineIndices, err := gui.git.Patch.PatchManager.GetFileIncLineIndices(filename)
+				includedLineIndices, err := gui.git.Patch.PatchBuilder.GetFileIncLineIndices(filename)
 				if err != nil {
 					gui.Log.Error(err)
 					return nil
@@ -217,17 +217,29 @@ func (gui *Gui) contextTree() *context.ContextTree {
 				},
 			},
 		),
-		CommitMessage: context.NewSimpleContext(
+		CommitMessage: context.NewCommitMessageContext(
+			gui.Views.CommitMessage,
+			context.ContextCallbackOpts{
+				OnFocus: OnFocusWrapper(gui.handleCommitMessageFocused),
+			},
+		),
+		CommitDescription: context.NewSimpleContext(
 			context.NewBaseContext(context.NewBaseContextOpts{
 				Kind:                  types.PERSISTENT_POPUP,
-				View:                  gui.Views.CommitMessage,
-				WindowName:            "commitMessage",
-				Key:                   context.COMMIT_MESSAGE_CONTEXT_KEY,
+				View:                  gui.Views.CommitDescription,
+				WindowName:            "commitDescription",
+				Key:                   context.COMMIT_DESCRIPTION_CONTEXT_KEY,
 				Focusable:             true,
 				HasUncontrolledBounds: true,
 			}),
 			context.ContextCallbackOpts{
-				OnFocus: OnFocusWrapper(gui.handleCommitMessageFocused),
+				OnFocus: func(opts types.OnFocusOpts) error {
+					_, err := gui.g.SetViewBeneath("commitDescription", "commitMessage", 10)
+					if err != nil {
+						return err
+					}
+					return nil
+				},
 			},
 		),
 		Search: context.NewSimpleContext(

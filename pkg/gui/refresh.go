@@ -85,6 +85,7 @@ func (gui *Gui) Refresh(options types.RefreshOptions) error {
 				types.REMOTES,
 				types.STATUS,
 				types.BISECT_INFO,
+				types.STAGING,
 			})
 		} else {
 			scopeSet = set.NewFromSlice(options.Scope)
@@ -236,6 +237,7 @@ func (gui *Gui) refreshCommitsWithLimit() error {
 		return err
 	}
 	gui.State.Model.Commits = commits
+	gui.State.Model.WorkingTreeStateAtLastCommitRefresh = gui.git.Status.WorkingTreeState()
 
 	return gui.c.PostRefreshUpdate(gui.State.Contexts.LocalCommits)
 }
@@ -264,6 +266,7 @@ func (gui *Gui) refreshRebaseCommits() error {
 		return err
 	}
 	gui.State.Model.Commits = updatedCommits
+	gui.State.Model.WorkingTreeStateAtLastCommitRefresh = gui.git.Status.WorkingTreeState()
 
 	return gui.c.PostRefreshUpdate(gui.State.Contexts.LocalCommits)
 }
@@ -561,6 +564,13 @@ func (gui *Gui) refreshStatus() {
 
 func (gui *Gui) refreshStagingPanel(focusOpts types.OnFocusOpts) error {
 	secondaryFocused := gui.secondaryStagingFocused()
+	mainFocused := gui.mainStagingFocused()
+
+	// this method could be called when the staging panel is not being used,
+	// in which case we don't want to do anything.
+	if !mainFocused && !secondaryFocused {
+		return nil
+	}
 
 	mainSelectedLineIdx := -1
 	secondarySelectedLineIdx := -1
@@ -618,6 +628,12 @@ func (gui *Gui) refreshStagingPanel(focusOpts types.OnFocusOpts) error {
 		return gui.c.PushContext(mainContext, focusOpts)
 	}
 
+	if secondaryFocused {
+		gui.State.Contexts.StagingSecondary.FocusSelection()
+	} else {
+		gui.State.Contexts.Staging.FocusSelection()
+	}
+
 	return gui.c.RenderToMainViews(types.RefreshMainOpts{
 		Pair: gui.c.MainViewPairs().Staging,
 		Main: &types.ViewUpdateOpts{
@@ -639,13 +655,17 @@ func (gui *Gui) secondaryStagingFocused() bool {
 	return gui.currentStaticContext().GetKey() == gui.State.Contexts.StagingSecondary.GetKey()
 }
 
+func (gui *Gui) mainStagingFocused() bool {
+	return gui.currentStaticContext().GetKey() == gui.State.Contexts.Staging.GetKey()
+}
+
 func (gui *Gui) refreshPatchBuildingPanel(opts types.OnFocusOpts) error {
 	selectedLineIdx := -1
 	if opts.ClickedWindowName == "main" {
 		selectedLineIdx = opts.ClickedViewLineIdx
 	}
 
-	if !gui.git.Patch.PatchManager.Active() {
+	if !gui.git.Patch.PatchBuilder.Active() {
 		return gui.helpers.PatchBuilding.Escape()
 	}
 
@@ -658,12 +678,13 @@ func (gui *Gui) refreshPatchBuildingPanel(opts types.OnFocusOpts) error {
 	ref := gui.State.Contexts.CommitFiles.CommitFileTreeViewModel.GetRef()
 	to := ref.RefName()
 	from, reverse := gui.State.Modes.Diffing.GetFromAndReverseArgsForDiff(ref.ParentRefName())
-	diff, err := gui.git.WorkingTree.ShowFileDiff(from, to, reverse, path, true)
+	diff, err := gui.git.WorkingTree.ShowFileDiff(from, to, reverse, path, true,
+		gui.IgnoreWhitespaceInDiffView)
 	if err != nil {
 		return err
 	}
 
-	secondaryDiff := gui.git.Patch.PatchManager.RenderPatchForFile(path, false, false, true)
+	secondaryDiff := gui.git.Patch.PatchBuilder.RenderPatchForFile(path, false, false)
 	if err != nil {
 		return err
 	}
@@ -677,6 +698,8 @@ func (gui *Gui) refreshPatchBuildingPanel(opts types.OnFocusOpts) error {
 	if state == nil {
 		return gui.helpers.PatchBuilding.Escape()
 	}
+
+	gui.State.Contexts.CustomPatchBuilder.FocusSelection()
 
 	mainContent := context.GetContentToRender(true)
 
@@ -710,4 +733,26 @@ func (gui *Gui) refreshMergePanel(isFocused bool) error {
 			Task: task,
 		},
 	})
+}
+
+func (gui *Gui) refreshSubCommitsWithLimit() error {
+	gui.Mutexes.SubCommitsMutex.Lock()
+	defer gui.Mutexes.SubCommitsMutex.Unlock()
+
+	context := gui.State.Contexts.SubCommits
+
+	commits, err := gui.git.Loaders.CommitLoader.GetCommits(
+		git_commands.GetCommitsOptions{
+			Limit:                context.GetLimitCommits(),
+			FilterPath:           gui.State.Modes.Filtering.GetPath(),
+			IncludeRebaseCommits: false,
+			RefName:              context.GetRef().FullRefName(),
+		},
+	)
+	if err != nil {
+		return err
+	}
+	gui.State.Model.SubCommits = commits
+
+	return gui.c.PostRefreshUpdate(gui.State.Contexts.SubCommits)
 }

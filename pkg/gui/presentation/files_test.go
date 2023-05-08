@@ -53,7 +53,7 @@ func TestRenderFileTree(t *testing.T) {
 			},
 			expected: toStringSlice(
 				`
-► dir1
+▶ dir1
 ▼ dir2
   ▼ dir2
      M file3
@@ -112,7 +112,7 @@ func TestRenderCommitFileTree(t *testing.T) {
 			},
 			expected: toStringSlice(
 				`
-► dir1
+▶ dir1
 ▼ dir2
   ▼ dir2
     D file3
@@ -134,15 +134,15 @@ M file1
 			for _, path := range s.collapsedPaths {
 				viewModel.ToggleCollapsed(path)
 			}
-			patchManager := patch.NewPatchManager(
+			patchBuilder := patch.NewPatchBuilder(
 				utils.NewDummyLog(),
 				func(patch string, flags ...string) error { return nil },
 				func(from string, to string, reverse bool, filename string, plain bool) (string, error) {
 					return "", nil
 				},
 			)
-			patchManager.Start("from", "to", false, false)
-			result := RenderCommitFileTree(viewModel, "", patchManager)
+			patchBuilder.Start("from", "to", false, false)
+			result := RenderCommitFileTree(viewModel, "", patchBuilder)
 			assert.EqualValues(t, s.expected, result)
 		})
 	}

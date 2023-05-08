@@ -1,0 +1,23 @@
+Author: Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>
+
+--- lazygit-0.36.0.orig/main.go
++++ lazygit-0.36.0/main.go
+@@ -6,15 +6,13 @@ import (
+ 
+ // These values may be set by the build script via the LDFLAGS argument
+ var (
+-	commit      string
+-	date        string
+-	version     string
+-	buildSource = "unknown"
++	date        = "2023/05/09"
++	version     = "0.38.2"
++	buildSource = "Built by the Kaisen Linux developers"
+ )
+ 
+ func main() {
+ 	ldFlagsBuildInfo := &app.BuildInfo{
+-		Commit:      commit,
+ 		Date:        date,
+ 		Version:     version,
+ 		BuildSource: buildSource,

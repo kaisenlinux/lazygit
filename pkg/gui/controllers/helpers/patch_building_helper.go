@@ -38,12 +38,12 @@ func (self *PatchBuildingHelper) ValidateNormalWorkingTreeState() (bool, error) 
 
 // takes us from the patch building panel back to the commit files panel
 func (self *PatchBuildingHelper) Escape() error {
-	return self.c.PushContext(self.contexts.CommitFiles)
+	return self.c.PopContext()
 }
 
 // kills the custom patch and returns us back to the commit files panel if needed
 func (self *PatchBuildingHelper) Reset() error {
-	self.git.Patch.PatchManager.Reset()
+	self.git.Patch.PatchBuilder.Reset()
 
 	if self.c.CurrentStaticContext().GetKind() != types.SIDE_CONTEXT {
 		if err := self.Escape(); err != nil {

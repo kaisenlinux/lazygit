@@ -11,13 +11,14 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
   <kbd>m</kbd>: view merge/rebase options
   <kbd>ctrl+p</kbd>: 커스텀 Patch 옵션 보기
   <kbd>R</kbd>: 새로고침
-  <kbd>x</kbd>: 매뉴 열기
+  <kbd>?</kbd>: 매뉴 열기
   <kbd>+</kbd>: 다음 스크린 모드 (normal/half/fullscreen)
   <kbd>_</kbd>: 이전 스크린 모드
   <kbd>ctrl+s</kbd>: view filter-by-path options
   <kbd>W</kbd>: Diff 메뉴 열기
   <kbd>ctrl+e</kbd>: Diff 메뉴 열기
   <kbd>@</kbd>: 명령어 로그 메뉴 열기
+  <kbd>ctrl+w</kbd>: 공백문자를 Diff 뷰에서 표시 여부 전환
   <kbd>}</kbd>: diff 보기의 변경 사항 주위에 표시되는 컨텍스트의 크기를 늘리기
   <kbd>{</kbd>: diff 보기의 변경 사항 주위에 표시되는 컨텍스트 크기 줄이기
   <kbd>:</kbd>: execute custom command
@@ -87,8 +88,8 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
 <pre>
   <kbd>e</kbd>: 파일 편집
   <kbd>o</kbd>: 파일 닫기
-  <kbd>◄</kbd>: 이전 충돌을 선택
-  <kbd>►</kbd>: 다음 충돌을 선택
+  <kbd>◀</kbd>: 이전 충돌을 선택
+  <kbd>▶</kbd>: 다음 충돌을 선택
   <kbd>▲</kbd>: 이전 hunk를 선택
   <kbd>▼</kbd>: 다음 hunk를 선택
   <kbd>z</kbd>: 되돌리기
@@ -108,8 +109,8 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
 ## 메인 패널 (Patch Building)
 
 <pre>
-  <kbd>◄</kbd>: 이전 hunk를 선택
-  <kbd>►</kbd>: 다음 hunk를 선택
+  <kbd>◀</kbd>: 이전 hunk를 선택
+  <kbd>▶</kbd>: 다음 hunk를 선택
   <kbd>v</kbd>: 드래그 선택 전환
   <kbd>V</kbd>: 드래그 선택 전환
   <kbd>a</kbd>: toggle select hunk
@@ -123,8 +124,8 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
 ## 메인 패널 (Staging)
 
 <pre>
-  <kbd>◄</kbd>: 이전 hunk를 선택
-  <kbd>►</kbd>: 다음 hunk를 선택
+  <kbd>◀</kbd>: 이전 hunk를 선택
+  <kbd>▶</kbd>: 다음 hunk를 선택
   <kbd>v</kbd>: 드래그 선택 전환
   <kbd>V</kbd>: 드래그 선택 전환
   <kbd>a</kbd>: toggle select hunk
@@ -157,6 +158,7 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
   <kbd>r</kbd>: 체크아웃된 브랜치를 이 브랜치에 리베이스
   <kbd>M</kbd>: 현재 브랜치에 병합
   <kbd>f</kbd>: fast-forward this branch from its upstream
+  <kbd>T</kbd>: 태그를 생성
   <kbd>g</kbd>: view reset options
   <kbd>R</kbd>: 브랜치 이름 변경
   <kbd>u</kbd>: set/unset upstream
@@ -198,6 +200,7 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
 ## 원격 브랜치
 
 <pre>
+  <kbd>ctrl+o</kbd>: 브랜치명을 클립보드에 복사
   <kbd>space</kbd>: 체크아웃
   <kbd>n</kbd>: 새 브랜치 생성
   <kbd>M</kbd>: 현재 브랜치에 병합
@@ -271,7 +274,6 @@ _This file is auto-generated. To update, make the changes in the pkg/i18n direct
 
 <pre>
   <kbd>ctrl+o</kbd>: 파일명을 클립보드에 복사
-  <kbd>ctrl+w</kbd>: 공백문자를 Diff 뷰에서 표시 여부 전환
   <kbd>d</kbd>: view 'discard changes' options
   <kbd>space</kbd>: Staged 전환
   <kbd>ctrl+b</kbd>: 파일을 필터하기 (Staged/unstaged)

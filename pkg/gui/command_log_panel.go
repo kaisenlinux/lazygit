@@ -79,7 +79,7 @@ func (gui *Gui) getRandomTip() string {
 		// keybindings and lazygit-specific advice
 		fmt.Sprintf(
 			"To force push, press '%s' and then if the push is rejected you will be asked if you want to force push",
-			formattedKey(config.Universal.PushFiles),
+			formattedKey(config.Universal.Push),
 		),
 		fmt.Sprintf(
 			"To filter commits by path, press '%s'",
@@ -191,7 +191,7 @@ func (gui *Gui) getRandomTip() string {
 		),
 	}
 
-	rand.Seed(time.Now().UnixNano())
-	randomIndex := rand.Intn(len(tips))
+	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
+	randomIndex := rnd.Intn(len(tips))
 	return tips[randomIndex]
 }

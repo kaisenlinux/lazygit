@@ -8,16 +8,20 @@ import (
 	"path/filepath"
 
 	"github.com/jesseduffield/lazycore/pkg/utils"
+	"github.com/jesseduffield/lazygit/pkg/commands/git_commands"
 	"github.com/jesseduffield/lazygit/pkg/commands/oscommands"
 )
 
-// this is the integration runner for the new and improved integration interface
-
 const (
-	TEST_NAME_ENV_VAR = "TEST_NAME"
-	SANDBOX_ENV_VAR   = "SANDBOX"
+	TEST_NAME_ENV_VAR         = "TEST_NAME"
+	SANDBOX_ENV_VAR           = "SANDBOX"
+	GIT_CONFIG_GLOBAL_ENV_VAR = "GIT_CONFIG_GLOBAL"
 )
 
+// This function lets you run tests either from within `go test` or from a regular binary.
+// The reason for having two separate ways of testing is that `go test` isn't great at
+// showing what's actually happening during the test, but it's still good at running
+// tests in telling you about their results.
 func RunTests(
 	tests []*IntegrationTest,
 	logf func(format string, formatArgs ...interface{}),
@@ -33,9 +37,14 @@ func RunTests(
 		return err
 	}
 
-	testDir := filepath.Join(projectRootDir, "test", "integration_new")
+	testDir := filepath.Join(projectRootDir, "test", "results")
 
 	if err := buildLazygit(); err != nil {
+		return err
+	}
+
+	gitVersion, err := getGitVersion()
+	if err != nil {
 		return err
 	}
 
@@ -48,7 +57,7 @@ func RunTests(
 			)
 
 			for i := 0; i < maxAttempts; i++ {
-				err := runTest(test, paths, projectRootDir, logf, runCmd, sandbox, keyPressDelay)
+				err := runTest(test, paths, projectRootDir, logf, runCmd, sandbox, keyPressDelay, gitVersion)
 				if err != nil {
 					if i == maxAttempts-1 {
 						return err
@@ -74,15 +83,21 @@ func runTest(
 	runCmd func(cmd *exec.Cmd) error,
 	sandbox bool,
 	keyPressDelay int,
+	gitVersion *git_commands.GitVersion,
 ) error {
 	if test.Skip() {
 		logf("Skipping test %s", test.Name())
 		return nil
 	}
 
+	if !test.ShouldRunForGitVersion(gitVersion) {
+		logf("Skipping test %s for git version %d.%d.%d", test.Name(), gitVersion.Major, gitVersion.Minor, gitVersion.Patch)
+		return nil
+	}
+
 	logf("path: %s", paths.Root())
 
-	if err := prepareTestDir(test, paths); err != nil {
+	if err := prepareTestDir(test, paths, projectRootDir); err != nil {
 		return err
 	}
 
@@ -102,6 +117,7 @@ func runTest(
 func prepareTestDir(
 	test *IntegrationTest,
 	paths Paths,
+	rootDir string,
 ) error {
 	findOrCreateDir(paths.Root())
 	deleteAndRecreateEmptyDir(paths.Actual())
@@ -111,7 +127,7 @@ func prepareTestDir(
 		return err
 	}
 
-	return createFixture(test, paths)
+	return createFixture(test, paths, rootDir)
 }
 
 func buildLazygit() error {
@@ -125,28 +141,40 @@ func buildLazygit() error {
 	)).Run()
 }
 
-func createFixture(test *IntegrationTest, paths Paths) error {
+func createFixture(test *IntegrationTest, paths Paths, rootDir string) error {
 	shell := NewShell(paths.ActualRepo(), func(errorMsg string) { panic(errorMsg) })
 	shell.RunCommand("git init -b master")
-	shell.RunCommand(`git config user.email "CI@example.com"`)
-	shell.RunCommand(`git config user.name "CI"`)
-	shell.RunCommand(`git config commit.gpgSign false`)
-	shell.RunCommand(`git config protocol.file.allow always`)
+
+	os.Setenv(GIT_CONFIG_GLOBAL_ENV_VAR, globalGitConfigPath(rootDir))
 
 	test.SetupRepo(shell)
 
 	return nil
 }
 
+func globalGitConfigPath(rootDir string) string {
+	return filepath.Join(rootDir, "test", "global_git_config")
+}
+
+func getGitVersion() (*git_commands.GitVersion, error) {
+	osCommand := oscommands.NewDummyOSCommand()
+	cmdObj := osCommand.Cmd.New("git --version")
+	versionStr, err := cmdObj.RunWithOutput()
+	if err != nil {
+		return nil, err
+	}
+	return git_commands.ParseGitVersion(versionStr)
+}
+
 func getLazygitCommand(test *IntegrationTest, paths Paths, rootDir string, sandbox bool, keyPressDelay int) (*exec.Cmd, error) {
 	osCommand := oscommands.NewDummyOSCommand()
-
-	templateConfigDir := filepath.Join(rootDir, "test", "default_test_config")
 
 	err := os.RemoveAll(paths.Config())
 	if err != nil {
 		return nil, err
 	}
+
+	templateConfigDir := filepath.Join(rootDir, "test", "default_test_config")
 	err = oscommands.CopyDir(templateConfigDir, paths.Config())
 	if err != nil {
 		return nil, err
@@ -164,6 +192,8 @@ func getLazygitCommand(test *IntegrationTest, paths Paths, rootDir string, sandb
 	if keyPressDelay > 0 {
 		cmdObj.AddEnvVars(fmt.Sprintf("KEY_PRESS_DELAY=%d", keyPressDelay))
 	}
+
+	cmdObj.AddEnvVars(fmt.Sprintf("%s=%s", GIT_CONFIG_GLOBAL_ENV_VAR, globalGitConfigPath(rootDir)))
 
 	return cmdObj.GetCmd(), nil
 }

@@ -4,6 +4,7 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/commands/git_commands"
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
 	"github.com/jesseduffield/lazygit/pkg/commands/oscommands"
+	"github.com/jesseduffield/lazygit/pkg/commands/types/enums"
 	"github.com/jesseduffield/lazygit/pkg/common"
 	"github.com/jesseduffield/lazygit/pkg/config"
 	"github.com/sasha-s/go-deadlock"
@@ -41,9 +42,14 @@ type IGuiCommon interface {
 
 	PushContext(context Context, opts ...OnFocusOpts) error
 	PopContext() error
+	// Removes all given contexts from the stack. If a given context is not in the stack, it is ignored.
+	// This is for when you have a group of contexts that are bundled together e.g. with the commit message panel.
+	// If you want to remove a single context, you should probably use PopContext instead.
+	RemoveContexts([]Context) error
 	CurrentContext() Context
 	CurrentStaticContext() Context
 	IsCurrentContext(Context) bool
+	ActivateContext(context Context) error
 	// enters search mode for the current view
 	OpenSearch()
 
@@ -154,9 +160,10 @@ type Model struct {
 	// one and the same
 	ReflogCommits []*models.Commit
 
-	BisectInfo     *git_commands.BisectInfo
-	RemoteBranches []*models.RemoteBranch
-	Tags           []*models.Tag
+	BisectInfo                          *git_commands.BisectInfo
+	WorkingTreeStateAtLastCommitRefresh enums.RebaseMode
+	RemoteBranches                      []*models.RemoteBranch
+	Tags                                []*models.Tag
 
 	// for displaying suggestions while typing in a file name
 	FilesTrie *patricia.Trie
@@ -169,6 +176,7 @@ type Mutexes struct {
 	RefreshingStatusMutex *deadlock.Mutex
 	SyncMutex             *deadlock.Mutex
 	LocalCommitsMutex     *deadlock.Mutex
+	SubCommitsMutex       *deadlock.Mutex
 	SubprocessMutex       *deadlock.Mutex
 	PopupMutex            *deadlock.Mutex
 	PtyMutex              *deadlock.Mutex

@@ -42,7 +42,20 @@ func TestGetCommits(t *testing.T) {
 			opts:              GetCommitsOptions{RefName: "HEAD", IncludeRebaseCommits: false},
 			runner: oscommands.NewFakeRunner(t).
 				Expect(`git merge-base "HEAD" "HEAD"@{u}`, "b21997d6b4cbdf84b149d8e6a2c4d06a8e9ec164", nil).
-				Expect(`git -c log.showSignature=false log "HEAD" --topo-order --oneline --pretty=format:"%H%x00%at%x00%aN%x00%ae%x00%d%x00%p%x00%s" --abbrev=40`, "", nil),
+				Expect(`git log "HEAD" --topo-order --oneline --pretty=format:"%H%x00%at%x00%aN%x00%ae%x00%d%x00%p%x00%s" --abbrev=40 --no-show-signature --`, "", nil),
+
+			expectedCommits: []*models.Commit{},
+			expectedError:   nil,
+		},
+		{
+			testName:          "should use proper upstream name for branch",
+			logOrder:          "topo-order",
+			rebaseMode:        enums.REBASE_MODE_NONE,
+			currentBranchName: "mybranch",
+			opts:              GetCommitsOptions{RefName: "refs/heads/mybranch", IncludeRebaseCommits: false},
+			runner: oscommands.NewFakeRunner(t).
+				Expect(`git merge-base "refs/heads/mybranch" "mybranch"@{u}`, "b21997d6b4cbdf84b149d8e6a2c4d06a8e9ec164", nil).
+				Expect(`git log "refs/heads/mybranch" --topo-order --oneline --pretty=format:"%H%x00%at%x00%aN%x00%ae%x00%d%x00%p%x00%s" --abbrev=40 --no-show-signature --`, "", nil),
 
 			expectedCommits: []*models.Commit{},
 			expectedError:   nil,
@@ -57,7 +70,7 @@ func TestGetCommits(t *testing.T) {
 				// here it's seeing which commits are yet to be pushed
 				Expect(`git merge-base "HEAD" "HEAD"@{u}`, "b21997d6b4cbdf84b149d8e6a2c4d06a8e9ec164", nil).
 				// here it's actually getting all the commits in a formatted form, one per line
-				Expect(`git -c log.showSignature=false log "HEAD" --topo-order --oneline --pretty=format:"%H%x00%at%x00%aN%x00%ae%x00%d%x00%p%x00%s" --abbrev=40`, commitsOutput, nil).
+				Expect(`git log "HEAD" --topo-order --oneline --pretty=format:"%H%x00%at%x00%aN%x00%ae%x00%d%x00%p%x00%s" --abbrev=40 --no-show-signature --`, commitsOutput, nil).
 				// here it's seeing where our branch diverged from the master branch so that we can mark that commit and parent commits as 'merged'
 				Expect(`git merge-base "HEAD" "master"`, "26c07b1ab33860a1a7591a0638f9925ccf497ffa", nil),
 
@@ -65,8 +78,8 @@ func TestGetCommits(t *testing.T) {
 				{
 					Sha:           "0eea75e8c631fba6b58135697835d58ba4c18dbc",
 					Name:          "better typing for rebase mode",
-					Status:        "unpushed",
-					Action:        "",
+					Status:        models.StatusUnpushed,
+					Action:        models.ActionNone,
 					Tags:          []string{},
 					ExtraInfo:     "(HEAD -> better-tests)",
 					AuthorName:    "Jesse Duffield",
@@ -79,8 +92,8 @@ func TestGetCommits(t *testing.T) {
 				{
 					Sha:           "b21997d6b4cbdf84b149d8e6a2c4d06a8e9ec164",
 					Name:          "fix logging",
-					Status:        "pushed",
-					Action:        "",
+					Status:        models.StatusPushed,
+					Action:        models.ActionNone,
 					Tags:          []string{},
 					ExtraInfo:     "(origin/better-tests)",
 					AuthorName:    "Jesse Duffield",
@@ -93,8 +106,8 @@ func TestGetCommits(t *testing.T) {
 				{
 					Sha:           "e94e8fc5b6fab4cb755f29f1bdb3ee5e001df35c",
 					Name:          "refactor",
-					Status:        "pushed",
-					Action:        "",
+					Status:        models.StatusPushed,
+					Action:        models.ActionNone,
 					Tags:          []string{},
 					ExtraInfo:     "",
 					AuthorName:    "Jesse Duffield",
@@ -107,8 +120,8 @@ func TestGetCommits(t *testing.T) {
 				{
 					Sha:           "d8084cd558925eb7c9c38afeed5725c21653ab90",
 					Name:          "WIP",
-					Status:        "pushed",
-					Action:        "",
+					Status:        models.StatusPushed,
+					Action:        models.ActionNone,
 					Tags:          []string{},
 					ExtraInfo:     "",
 					AuthorName:    "Jesse Duffield",
@@ -121,8 +134,8 @@ func TestGetCommits(t *testing.T) {
 				{
 					Sha:           "65f910ebd85283b5cce9bf67d03d3f1a9ea3813a",
 					Name:          "WIP",
-					Status:        "pushed",
-					Action:        "",
+					Status:        models.StatusPushed,
+					Action:        models.ActionNone,
 					Tags:          []string{},
 					ExtraInfo:     "",
 					AuthorName:    "Jesse Duffield",
@@ -135,8 +148,8 @@ func TestGetCommits(t *testing.T) {
 				{
 					Sha:           "26c07b1ab33860a1a7591a0638f9925ccf497ffa",
 					Name:          "WIP",
-					Status:        "merged",
-					Action:        "",
+					Status:        models.StatusMerged,
+					Action:        models.ActionNone,
 					Tags:          []string{},
 					ExtraInfo:     "",
 					AuthorName:    "Jesse Duffield",
@@ -149,8 +162,8 @@ func TestGetCommits(t *testing.T) {
 				{
 					Sha:           "3d4470a6c072208722e5ae9a54bcb9634959a1c5",
 					Name:          "WIP",
-					Status:        "merged",
-					Action:        "",
+					Status:        models.StatusMerged,
+					Action:        models.ActionNone,
 					Tags:          []string{},
 					ExtraInfo:     "",
 					AuthorName:    "Jesse Duffield",
@@ -163,8 +176,8 @@ func TestGetCommits(t *testing.T) {
 				{
 					Sha:           "053a66a7be3da43aacdc7aa78e1fe757b82c4dd2",
 					Name:          "refactoring the config struct",
-					Status:        "merged",
-					Action:        "",
+					Status:        models.StatusMerged,
+					Action:        models.ActionNone,
 					Tags:          []string{},
 					ExtraInfo:     "",
 					AuthorName:    "Jesse Duffield",
@@ -185,7 +198,20 @@ func TestGetCommits(t *testing.T) {
 			opts:              GetCommitsOptions{RefName: "HEAD", IncludeRebaseCommits: false},
 			runner: oscommands.NewFakeRunner(t).
 				Expect(`git merge-base "HEAD" "HEAD"@{u}`, "b21997d6b4cbdf84b149d8e6a2c4d06a8e9ec164", nil).
-				Expect(`git -c log.showSignature=false log "HEAD" --oneline --pretty=format:"%H%x00%at%x00%aN%x00%ae%x00%d%x00%p%x00%s" --abbrev=40`, "", nil),
+				Expect(`git log "HEAD" --oneline --pretty=format:"%H%x00%at%x00%aN%x00%ae%x00%d%x00%p%x00%s" --abbrev=40 --no-show-signature --`, "", nil),
+
+			expectedCommits: []*models.Commit{},
+			expectedError:   nil,
+		},
+		{
+			testName:          "should set filter path",
+			logOrder:          "default",
+			rebaseMode:        enums.REBASE_MODE_NONE,
+			currentBranchName: "master",
+			opts:              GetCommitsOptions{RefName: "HEAD", FilterPath: "src"},
+			runner: oscommands.NewFakeRunner(t).
+				Expect(`git merge-base "HEAD" "HEAD"@{u}`, "b21997d6b4cbdf84b149d8e6a2c4d06a8e9ec164", nil).
+				Expect(`git log "HEAD" --oneline --pretty=format:"%H%x00%at%x00%aN%x00%ae%x00%d%x00%p%x00%s" --abbrev=40 --follow --no-show-signature -- "src"`, "", nil),
 
 			expectedCommits: []*models.Commit{},
 			expectedError:   nil,

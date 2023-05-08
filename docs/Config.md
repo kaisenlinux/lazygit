@@ -9,7 +9,7 @@ Default path for the config file:
 For old installations (slightly embarrassing: I didn't realise at the time that you didn't need to supply a vendor name to the path so I just used my name):
 
 - Linux: `~/.config/jesseduffield/lazygit/config.yml`
-- MacOS: `~/Library/Application Support/jesseduffield/lazygit/config.yml`
+- MacOS: `~/Library/Application\ Support/jesseduffield/lazygit/config.yml`
 - Windows: `%APPDATA%\jesseduffield\lazygit\config.yml`
 
 If you want to change the config directory:
@@ -57,12 +57,14 @@ gui:
   showFileTree: true # for rendering changes files in a tree format
   showListFooter: true # for seeing the '5 of 20' message in list panels
   showRandomTip: true
+  experimentalShowBranchHeads: false # visualize branch heads with (*) in commits list
   showBottomLine: true # for hiding the bottom information line (unless it has important information to tell you)
   showCommandLog: true
   showIcons: false
   commandLogSize: 8
   splitDiff: 'auto' # one of 'auto' | 'always'
   skipRewordInEditorWarning: false # for skipping the confirmation before launching the reword editor
+  border: 'single' # one of 'single' | 'double' | 'rounded' | 'hidden'
 git:
   paging:
     colorArg: always
@@ -95,9 +97,12 @@ git:
   parseEmoji: false
   diffContextSize: 3 # how many lines of context are shown around a change in diffs
 os:
-  editCommand: '' # see 'Configuring File Editing' section
-  editCommandTemplate: ''
-  openCommand: ''
+  editPreset: '' # see 'Configuring File Editing' section
+  edit: ''
+  editAtLine: ''
+  editAtLineAndWait: ''
+  open: ''
+  openLink: ''
 refresher:
   refreshInterval: 10 # File/submodule refresh interval in seconds. Auto-refresh can be disabled via option 'git.autoRefresh'.
   fetchInterval: 60 # Re-fetch interval in seconds. Auto-fetch can be disabled via option 'git.autoFetch'.
@@ -115,8 +120,6 @@ keybinding:
     quit: 'q'
     quit-alt1: '<c-c>' # alternative/alias of quit
     return: '<esc>' # return to previous menu, will quit if there's nowhere to return
-    # When set to a printable character, this will work for returning from non-prompt panels
-    return-alt1: null
     quitWithoutChangingDirectory: 'Q'
     togglePanel: '<tab>' # goto the next panel
     prevItem: '<up>' # go one line up
@@ -136,13 +139,12 @@ keybinding:
     jumpToBlock: ['1', '2', '3', '4', '5'] # goto the Nth block / panel
     nextMatch: 'n'
     prevMatch: 'N'
-    optionMenu: 'x' # show help menu
+    optionMenu: null # show help menu
     optionMenu-alt1: '?' # show help menu
     select: '<space>'
     goInto: '<enter>'
     openRecentRepos: '<c-r>'
     confirm: '<enter>'
-    confirm-alt1: 'y'
     remove: 'd'
     new: 'n'
     edit: 'e'
@@ -170,7 +172,6 @@ keybinding:
     diffingMenu-alt: '<c-e>' # deprecated
     copyToClipboard: '<c-o>'
     submitEditorText: '<enter>'
-    appendNewline: '<a-enter>'
     extrasMenu: '@'
     toggleWhitespaceInDiffView: '<c-w>'
     increaseContextInDiffView: '}'
@@ -203,6 +204,7 @@ keybinding:
     mergeIntoCurrentBranch: 'M'
     viewGitFlowOptions: 'i'
     fastForward: 'f' # fast-forward this branch from its upstream
+    createTag: 'T'
     pushTag: 'P'
     setUpstream: 'u' # set as upstream of checked-out branch
     fetchRemote: 'f'
@@ -250,59 +252,60 @@ keybinding:
 
 ```yaml
 os:
-  openCommand: 'start "" {{filename}}'
+  open: 'start "" {{filename}}'
 ```
 
 ### Linux
 
 ```yaml
 os:
-  openCommand: 'xdg-open {{filename}} >/dev/null'
+  open: 'xdg-open {{filename}} >/dev/null'
 ```
 
 ### OSX
 
 ```yaml
 os:
-  openCommand: 'open {{filename}}'
+  open: 'open {{filename}}'
 ```
 
 ### Configuring File Editing
 
-Lazygit will edit a file with the first set editor in the following:
+There are two commands for opening files, `o` for "open" and `e` for "edit". `o`
+acts as if the file was double-clicked in the Finder/Explorer, so it also works
+for non-text files, whereas `e` opens the file in an editor. `e` can also jump
+to the right line in the file if you invoke it from the staging panel, for
+example.
 
-1. config.yaml
-
-```yaml
-os:
-  editCommand: 'vim' # as an example
-```
-
-2. \$(git config core.editor)
-3. \$GIT_EDITOR
-4. \$VISUAL
-5. \$EDITOR
-6. \$(which vi)
-
-Lazygit will log an error if none of these options are set.
-
-You can specify the current line number when you're in the patch explorer.
+To tell lazygit which editor to use for the `e` command, the easiest way to do
+that is to provide an editPreset config, e.g.
 
 ```yaml
 os:
-  editCommand: 'vim'
-  editCommandTemplate: '{{editor}} +{{line}} -- {{filename}}'
+  editPreset: 'vscode'
 ```
 
-or
+Supported presets are `vim`, `emacs`, `nano`, `vscode`, `sublime`, `bbedit`, and
+`xcode`. In many cases lazygit will be able to guess the right preset from your
+$(git config core.editor), or an environment variable such as $VISUAL or $EDITOR.
+
+If for some reason you are not happy with the default commands from a preset, or
+there simply is no preset for your editor, you can customize the commands by
+setting the `edit`, `editAtLine`, and `editAtLineAndWait` options, e.g.:
 
 ```yaml
 os:
-  editCommand: 'code'
-  editCommandTemplate: '{{editor}} --goto -- {{filename}}:{{line}}'
+  edit: 'myeditor {{filename}}'
+  editAtLine: 'myeditor --line={{line}} {{filename}}'
+  editAtLineAndWait: 'myeditor --block --line={{line}} {{filename}}'
+  editInTerminal: true
 ```
 
-`{{editor}}` in `editCommandTemplate` is replaced with the value of `editCommand`.
+The `editInTerminal` option is used to decide whether lazygit needs to suspend
+itself to the background before calling the editor.
+
+Contributions of new editor presets are welcome; see the `getPreset` function in
+[`editor_presets.go`](https://github.com/jesseduffield/lazygit/blob/master/pkg/config/editor_presets.go).
 
 ### Overriding default config file location
 
@@ -316,15 +319,6 @@ If you want to merge a specific config file into a more general config file, per
 lazygit --use-config-file="$HOME/.base_lg_conf,$HOME/.light_theme_lg_conf"
 or
 LG_CONFIG_FILE="$HOME/.base_lg_conf,$HOME/.light_theme_lg_conf" lazygit
-```
-
-### Recommended Config Values
-
-for users of VSCode
-
-```yaml
-os:
-  openCommand: 'code -rg {{filename}}'
 ```
 
 ## Color Attributes
@@ -480,7 +474,7 @@ services:
 Where:
 
 - `gitDomain` stands for the domain used by git itself (i.e. the one present on clone URLs), e.g. `git.work.com`
-- `provider` is one of `github`, `bitbucket`, `bitbucketServer`, `azuredevops` or `gitlab`
+- `provider` is one of `github`, `bitbucket`, `bitbucketServer`, `azuredevops`, `gitlab` or `gitea`
 - `webDomain` is the URL where your git service exposes a web interface and APIs, e.g. `gitservice.work.com`
 
 ## Predefined commit message prefix

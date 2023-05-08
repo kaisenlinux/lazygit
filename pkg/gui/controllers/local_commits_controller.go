@@ -3,10 +3,14 @@ package controllers
 import (
 	"fmt"
 
+	"github.com/fsmiamoto/git-todo-parser/todo"
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
+	"github.com/jesseduffield/lazygit/pkg/commands/types/enums"
 	"github.com/jesseduffield/lazygit/pkg/gui/context"
+	"github.com/jesseduffield/lazygit/pkg/gui/controllers/helpers"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
 	"github.com/jesseduffield/lazygit/pkg/utils"
+	"github.com/samber/lo"
 )
 
 type (
@@ -16,7 +20,6 @@ type (
 type LocalCommitsController struct {
 	baseController
 	*controllerCommon
-
 	pullFiles PullFilesFn
 }
 
@@ -132,7 +135,7 @@ func (self *LocalCommitsController) GetKeybindings(opts types.KeybindingsOpts) [
 			Description: self.c.Tr.LcRevertCommit,
 		},
 		{
-			Key:         opts.GetKey(opts.Config.Commits.TagCommit),
+			Key:         opts.GetKey(opts.Config.Commits.CreateTag),
 			Handler:     self.checkSelected(self.createTag),
 			Description: self.c.Tr.LcTagCommit,
 		},
@@ -148,11 +151,11 @@ func (self *LocalCommitsController) GetKeybindings(opts types.KeybindingsOpts) [
 }
 
 func (self *LocalCommitsController) squashDown(commit *models.Commit) error {
-	if len(self.model.Commits) <= 1 {
-		return self.c.ErrorMsg(self.c.Tr.YouNoCommitsToSquash)
+	if self.context().GetSelectedLineIdx() >= len(self.model.Commits)-1 {
+		return self.c.ErrorMsg(self.c.Tr.CannotSquashOrFixupFirstCommit)
 	}
 
-	applied, err := self.handleMidRebaseCommand("squash", commit)
+	applied, err := self.handleMidRebaseCommand(todo.Squash, commit)
 	if err != nil {
 		return err
 	}
@@ -166,18 +169,18 @@ func (self *LocalCommitsController) squashDown(commit *models.Commit) error {
 		HandleConfirm: func() error {
 			return self.c.WithWaitingStatus(self.c.Tr.SquashingStatus, func() error {
 				self.c.LogAction(self.c.Tr.Actions.SquashCommitDown)
-				return self.interactiveRebase("squash")
+				return self.interactiveRebase(todo.Squash)
 			})
 		},
 	})
 }
 
 func (self *LocalCommitsController) fixup(commit *models.Commit) error {
-	if len(self.model.Commits) <= 1 {
-		return self.c.ErrorMsg(self.c.Tr.YouNoCommitsToSquash)
+	if self.context().GetSelectedLineIdx() >= len(self.model.Commits)-1 {
+		return self.c.ErrorMsg(self.c.Tr.CannotSquashOrFixupFirstCommit)
 	}
 
-	applied, err := self.handleMidRebaseCommand("fixup", commit)
+	applied, err := self.handleMidRebaseCommand(todo.Fixup, commit)
 	if err != nil {
 		return err
 	}
@@ -191,14 +194,14 @@ func (self *LocalCommitsController) fixup(commit *models.Commit) error {
 		HandleConfirm: func() error {
 			return self.c.WithWaitingStatus(self.c.Tr.FixingStatus, func() error {
 				self.c.LogAction(self.c.Tr.Actions.FixupCommit)
-				return self.interactiveRebase("fixup")
+				return self.interactiveRebase(todo.Fixup)
 			})
 		},
 	})
 }
 
 func (self *LocalCommitsController) reword(commit *models.Commit) error {
-	applied, err := self.handleMidRebaseCommand("reword", commit)
+	applied, err := self.handleMidRebaseCommand(todo.Reword, commit)
 	if err != nil {
 		return err
 	}
@@ -206,30 +209,36 @@ func (self *LocalCommitsController) reword(commit *models.Commit) error {
 		return nil
 	}
 
-	message, err := self.git.Commit.GetCommitMessage(commit.Sha)
+	commitMessage, err := self.git.Commit.GetCommitMessage(commit.Sha)
 	if err != nil {
 		return self.c.Error(err)
 	}
 
-	// TODO: use the commit message panel here
-	return self.c.Prompt(types.PromptOpts{
-		Title:          self.c.Tr.LcRewordCommit,
-		InitialContent: message,
-		HandleConfirm: func(response string) error {
-			self.c.LogAction(self.c.Tr.Actions.RewordCommit)
-			if err := self.git.Rebase.RewordCommit(self.model.Commits, self.context().GetSelectedLineIdx(), response); err != nil {
-				return self.c.Error(err)
-			}
-
-			return self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC})
+	return self.helpers.Commits.OpenCommitMessagePanel(
+		&helpers.OpenCommitMessagePanelOpts{
+			CommitIndex:     self.context().GetSelectedLineIdx(),
+			InitialMessage:  commitMessage,
+			Title:           self.c.Tr.Actions.RewordCommit,
+			PreserveMessage: false,
+			OnConfirm:       self.handleReword,
 		},
-	})
+	)
+}
+
+func (self *LocalCommitsController) handleReword(message string) error {
+	err := self.git.Rebase.RewordCommit(self.model.Commits, self.contexts.LocalCommits.GetSelectedLineIdx(), message)
+	if err != nil {
+		return self.c.Error(err)
+	}
+	self.helpers.Commits.OnCommitSuccess()
+	_ = self.helpers.Commits.PopCommitMessageContexts()
+	return self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC})
 }
 
 func (self *LocalCommitsController) doRewordEditor() error {
 	self.c.LogAction(self.c.Tr.Actions.RewordCommit)
 
-	if self.context().GetSelectedLineIdx() == 0 {
+	if self.isHeadCommit() {
 		return self.c.RunSubprocessAndRefresh(self.os.Cmd.New("git commit --allow-empty --amend --only"))
 	}
 
@@ -247,7 +256,7 @@ func (self *LocalCommitsController) doRewordEditor() error {
 }
 
 func (self *LocalCommitsController) rewordEditor(commit *models.Commit) error {
-	midRebase, err := self.handleMidRebaseCommand("reword", commit)
+	midRebase, err := self.handleMidRebaseCommand(todo.Reword, commit)
 	if err != nil {
 		return err
 	}
@@ -267,7 +276,7 @@ func (self *LocalCommitsController) rewordEditor(commit *models.Commit) error {
 }
 
 func (self *LocalCommitsController) drop(commit *models.Commit) error {
-	applied, err := self.handleMidRebaseCommand("drop", commit)
+	applied, err := self.handleMidRebaseCommand(todo.Drop, commit)
 	if err != nil {
 		return err
 	}
@@ -281,14 +290,14 @@ func (self *LocalCommitsController) drop(commit *models.Commit) error {
 		HandleConfirm: func() error {
 			return self.c.WithWaitingStatus(self.c.Tr.DeletingStatus, func() error {
 				self.c.LogAction(self.c.Tr.Actions.DropCommit)
-				return self.interactiveRebase("drop")
+				return self.interactiveRebase(todo.Drop)
 			})
 		},
 	})
 }
 
 func (self *LocalCommitsController) edit(commit *models.Commit) error {
-	applied, err := self.handleMidRebaseCommand("edit", commit)
+	applied, err := self.handleMidRebaseCommand(todo.Edit, commit)
 	if err != nil {
 		return err
 	}
@@ -298,12 +307,13 @@ func (self *LocalCommitsController) edit(commit *models.Commit) error {
 
 	return self.c.WithWaitingStatus(self.c.Tr.RebasingStatus, func() error {
 		self.c.LogAction(self.c.Tr.Actions.EditCommit)
-		return self.interactiveRebase("edit")
+		err := self.git.Rebase.EditRebase(commit.Sha)
+		return self.helpers.MergeAndRebase.CheckMergeOrRebase(err)
 	})
 }
 
 func (self *LocalCommitsController) pick(commit *models.Commit) error {
-	applied, err := self.handleMidRebaseCommand("pick", commit)
+	applied, err := self.handleMidRebaseCommand(todo.Pick, commit)
 	if err != nil {
 		return err
 	}
@@ -316,7 +326,7 @@ func (self *LocalCommitsController) pick(commit *models.Commit) error {
 	return self.pullFiles()
 }
 
-func (self *LocalCommitsController) interactiveRebase(action string) error {
+func (self *LocalCommitsController) interactiveRebase(action todo.TodoCommand) error {
 	err := self.git.Rebase.InteractiveRebase(self.model.Commits, self.context().GetSelectedLineIdx(), action)
 	return self.helpers.MergeAndRebase.CheckMergeOrRebase(err)
 }
@@ -324,8 +334,16 @@ func (self *LocalCommitsController) interactiveRebase(action string) error {
 // handleMidRebaseCommand sees if the selected commit is in fact a rebasing
 // commit meaning you are trying to edit the todo file rather than actually
 // begin a rebase. It then updates the todo file with that action
-func (self *LocalCommitsController) handleMidRebaseCommand(action string, commit *models.Commit) (bool, error) {
-	if commit.Status != "rebasing" {
+func (self *LocalCommitsController) handleMidRebaseCommand(action todo.TodoCommand, commit *models.Commit) (bool, error) {
+	if !commit.IsTODO() {
+		if self.git.Status.WorkingTreeState() != enums.REBASE_MODE_NONE {
+			// If we are in a rebase, the only action that is allowed for
+			// non-todo commits is rewording the current head commit
+			if !(action == todo.Reword && self.isHeadCommit()) {
+				return true, self.c.ErrorMsg(self.c.Tr.AlreadyRebasing)
+			}
+		}
+
 		return false, nil
 	}
 
@@ -333,19 +351,21 @@ func (self *LocalCommitsController) handleMidRebaseCommand(action string, commit
 	// and that means we either unconditionally wait around for the subprocess to ask for
 	// our input or we set a lazygit client as the EDITOR env variable and have it
 	// request us to edit the commit message when prompted.
-	if action == "reword" {
+	if action == todo.Reword {
 		return true, self.c.ErrorMsg(self.c.Tr.LcRewordNotSupported)
+	}
+
+	if allowed := isChangeOfRebaseTodoAllowed(action); !allowed {
+		return true, self.c.ErrorMsg(self.c.Tr.LcChangingThisActionIsNotAllowed)
 	}
 
 	self.c.LogAction("Update rebase TODO")
 	self.c.LogCommand(
-		fmt.Sprintf("Updating rebase action of commit %s to '%s'", commit.ShortSha(), action),
+		fmt.Sprintf("Updating rebase action of commit %s to '%s'", commit.ShortSha(), action.String()),
 		false,
 	)
 
-	if err := self.git.Rebase.EditRebaseTodo(
-		self.context().GetSelectedLineIdx(), action,
-	); err != nil {
+	if err := self.git.Rebase.EditRebaseTodo(commit, action); err != nil {
 		return false, self.c.Error(err)
 	}
 
@@ -357,8 +377,14 @@ func (self *LocalCommitsController) handleMidRebaseCommand(action string, commit
 func (self *LocalCommitsController) moveDown(commit *models.Commit) error {
 	index := self.context().GetSelectedLineIdx()
 	commits := self.model.Commits
-	if commit.Status == "rebasing" {
-		if commits[index+1].Status != "rebasing" {
+
+	// can't move past the initial commit
+	if index >= len(commits)-1 {
+		return nil
+	}
+
+	if commit.IsTODO() {
+		if !commits[index+1].IsTODO() {
 			return nil
 		}
 
@@ -367,13 +393,17 @@ func (self *LocalCommitsController) moveDown(commit *models.Commit) error {
 		self.c.LogAction(self.c.Tr.Actions.MoveCommitDown)
 		self.c.LogCommand(fmt.Sprintf("Moving commit %s down", commit.ShortSha()), false)
 
-		if err := self.git.Rebase.MoveTodoDown(index); err != nil {
+		if err := self.git.Rebase.MoveTodoDown(commit); err != nil {
 			return self.c.Error(err)
 		}
 		self.context().MoveSelectedLine(1)
 		return self.c.Refresh(types.RefreshOptions{
 			Mode: types.SYNC, Scope: []types.RefreshableView{types.REBASE_COMMITS},
 		})
+	}
+
+	if self.git.Status.WorkingTreeState() != enums.REBASE_MODE_NONE {
+		return self.c.ErrorMsg(self.c.Tr.AlreadyRebasing)
 	}
 
 	return self.c.WithWaitingStatus(self.c.Tr.MovingStatus, func() error {
@@ -392,7 +422,7 @@ func (self *LocalCommitsController) moveUp(commit *models.Commit) error {
 		return nil
 	}
 
-	if commit.Status == "rebasing" {
+	if commit.IsTODO() {
 		// logging directly here because MoveTodoDown doesn't have enough information
 		// to provide a useful log
 		self.c.LogAction(self.c.Tr.Actions.MoveCommitUp)
@@ -401,7 +431,7 @@ func (self *LocalCommitsController) moveUp(commit *models.Commit) error {
 			false,
 		)
 
-		if err := self.git.Rebase.MoveTodoDown(index - 1); err != nil {
+		if err := self.git.Rebase.MoveTodoUp(self.model.Commits[index]); err != nil {
 			return self.c.Error(err)
 		}
 		self.context().MoveSelectedLine(-1)
@@ -410,9 +440,13 @@ func (self *LocalCommitsController) moveUp(commit *models.Commit) error {
 		})
 	}
 
+	if self.git.Status.WorkingTreeState() != enums.REBASE_MODE_NONE {
+		return self.c.ErrorMsg(self.c.Tr.AlreadyRebasing)
+	}
+
 	return self.c.WithWaitingStatus(self.c.Tr.MovingStatus, func() error {
 		self.c.LogAction(self.c.Tr.Actions.MoveCommitUp)
-		err := self.git.Rebase.MoveCommitDown(self.model.Commits, index-1)
+		err := self.git.Rebase.MoveCommitUp(self.model.Commits, index)
 		if err == nil {
 			self.context().MoveSelectedLine(-1)
 		}
@@ -421,13 +455,24 @@ func (self *LocalCommitsController) moveUp(commit *models.Commit) error {
 }
 
 func (self *LocalCommitsController) amendTo(commit *models.Commit) error {
+	if self.isHeadCommit() {
+		if err := self.helpers.AmendHelper.AmendHead(); err != nil {
+			return err
+		}
+		return self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC})
+	}
+
+	if self.git.Status.WorkingTreeState() != enums.REBASE_MODE_NONE {
+		return self.c.ErrorMsg(self.c.Tr.AlreadyRebasing)
+	}
+
 	return self.c.Confirm(types.ConfirmOpts{
 		Title:  self.c.Tr.AmendCommitTitle,
 		Prompt: self.c.Tr.AmendCommitPrompt,
 		HandleConfirm: func() error {
 			return self.c.WithWaitingStatus(self.c.Tr.AmendingStatus, func() error {
 				self.c.LogAction(self.c.Tr.Actions.AmendCommit)
-				err := self.git.Rebase.AmendTo(commit.Sha)
+				err := self.git.Rebase.AmendTo(self.model.Commits, self.context().GetView().SelectedLineIdx())
 				return self.helpers.MergeAndRebase.CheckMergeOrRebase(err)
 			})
 		},
@@ -435,6 +480,10 @@ func (self *LocalCommitsController) amendTo(commit *models.Commit) error {
 }
 
 func (self *LocalCommitsController) amendAttribute(commit *models.Commit) error {
+	if self.git.Status.WorkingTreeState() != enums.REBASE_MODE_NONE && !self.isHeadCommit() {
+		return self.c.ErrorMsg(self.c.Tr.AlreadyRebasing)
+	}
+
 	return self.c.Menu(types.CreateMenuOptions{
 		Title: "Amend commit attribute",
 		Items: []*types.MenuItem{
@@ -570,7 +619,7 @@ func (self *LocalCommitsController) squashAllAboveFixupCommits(commit *models.Co
 		HandleConfirm: func() error {
 			return self.c.WithWaitingStatus(self.c.Tr.SquashingStatus, func() error {
 				self.c.LogAction(self.c.Tr.Actions.SquashAllAboveFixupCommits)
-				err := self.git.Rebase.SquashAllAboveFixupCommits(commit.Sha)
+				err := self.git.Rebase.SquashAllAboveFixupCommits(commit)
 				return self.helpers.MergeAndRebase.CheckMergeOrRebase(err)
 			})
 		},
@@ -720,4 +769,21 @@ func (self *LocalCommitsController) context() *context.LocalCommitsContext {
 
 func (self *LocalCommitsController) paste() error {
 	return self.helpers.CherryPick.Paste()
+}
+
+func (self *LocalCommitsController) isHeadCommit() bool {
+	return models.IsHeadCommit(self.model.Commits, self.context().GetSelectedLineIdx())
+}
+
+func isChangeOfRebaseTodoAllowed(action todo.TodoCommand) bool {
+	allowedActions := []todo.TodoCommand{
+		todo.Pick,
+		todo.Drop,
+		todo.Edit,
+		todo.Fixup,
+		todo.Squash,
+		todo.Reword,
+	}
+
+	return lo.Contains(allowedActions, action)
 }

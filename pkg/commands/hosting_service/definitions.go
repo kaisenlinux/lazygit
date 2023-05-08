@@ -4,7 +4,7 @@ package hosting_service
 // at regoio.herokuapp.com
 var defaultUrlRegexStrings = []string{
 	`^(?:https?|ssh)://[^/]+/(?P<owner>.*)/(?P<repo>.*?)(?:\.git)?$`,
-	`^git@.*:(?P<owner>.*)/(?P<repo>.*?)(?:\.git)?$`,
+	`^.*?@.*:(?P<owner>.*)/(?P<repo>.*?)(?:\.git)?$`,
 }
 var defaultRepoURLTemplate = "https://{{.webDomain}}/{{.owner}}/{{.repo}}"
 
@@ -64,12 +64,22 @@ var bitbucketServerServiceDef = ServiceDefinition{
 	repoURLTemplate: "https://{{.webDomain}}/projects/{{.project}}/repos/{{.repo}}",
 }
 
+var giteaServiceDef = ServiceDefinition{
+	provider:                        "gitea",
+	pullRequestURLIntoDefaultBranch: "/compare/{{.From}}",
+	pullRequestURLIntoTargetBranch:  "/compare/{{.To}}...{{.From}}",
+	commitURL:                       "/commit/{{.CommitSha}}",
+	regexStrings:                    defaultUrlRegexStrings,
+	repoURLTemplate:                 defaultRepoURLTemplate,
+}
+
 var serviceDefinitions = []ServiceDefinition{
 	githubServiceDef,
 	bitbucketServiceDef,
 	gitLabServiceDef,
 	azdoServiceDef,
 	bitbucketServerServiceDef,
+	giteaServiceDef,
 }
 
 var defaultServiceDomains = []ServiceDomain{
@@ -92,5 +102,10 @@ var defaultServiceDomains = []ServiceDomain{
 		serviceDefinition: azdoServiceDef,
 		gitDomain:         "dev.azure.com",
 		webDomain:         "dev.azure.com",
+	},
+	{
+		serviceDefinition: giteaServiceDef,
+		gitDomain:         "try.gitea.io",
+		webDomain:         "try.gitea.io",
 	},
 }

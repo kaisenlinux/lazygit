@@ -5,8 +5,6 @@
 package gocui
 
 import (
-	"time"
-
 	"github.com/gdamore/tcell/v2"
 	"github.com/mattn/go-runewidth"
 )
@@ -31,6 +29,12 @@ var runeReplacements = map[rune]string{
 	'╰': "+",
 	'╯': "+",
 	'─': "-",
+	'═': "-",
+	'║': "|",
+	'╔': "+",
+	'╗': "+",
+	'╚': "+",
+	'╝': "+",
 
 	// using a hyphen here actually looks weird.
 	// We see these characters when in portrait mode
@@ -146,10 +150,11 @@ func setTcellFontEffectStyle(st tcell.Style, attr Attribute) tcell.Style {
 type gocuiEventType uint8
 
 // GocuiEvent represents events like a keys, mouse actions, or window resize.
-//  The 'Mod', 'Key' and 'Ch' fields are valid if 'Type' is 'eventKey'.
-//  The 'MouseX' and 'MouseY' fields are valid if 'Type' is 'eventMouse'.
-//  The 'Width' and 'Height' fields are valid if 'Type' is 'eventResize'.
-//  The 'Err' field is valid if 'Type' is 'eventError'.
+//
+//	The 'Mod', 'Key' and 'Ch' fields are valid if 'Type' is 'eventKey'.
+//	The 'MouseX' and 'MouseY' fields are valid if 'Type' is 'eventMouse'.
+//	The 'Width' and 'Height' fields are valid if 'Type' is 'eventResize'.
+//	The 'Err' field is valid if 'Type' is 'eventError'.
 type GocuiEvent struct {
 	Type   gocuiEventType
 	Mod    Modifier
@@ -229,14 +234,10 @@ func (wrapper TcellResizeEventWrapper) toTcellEvent() tcell.Event {
 	return tcell.NewEventResize(wrapper.Width, wrapper.Height)
 }
 
-func (g *Gui) timeSinceStart() int64 {
-	return time.Since(g.StartTime).Nanoseconds() / 1e6
-}
-
 // pollEvent get tcell.Event and transform it into gocuiEvent
 func (g *Gui) pollEvent() GocuiEvent {
 	var tev tcell.Event
-	if g.PlayMode == REPLAYING || g.PlayMode == REPLAYING_NEW {
+	if g.playRecording {
 		select {
 		case ev := <-g.ReplayedEvents.Keys:
 			tev = (ev).toTcellEvent()
@@ -251,21 +252,9 @@ func (g *Gui) pollEvent() GocuiEvent {
 	case *tcell.EventInterrupt:
 		return GocuiEvent{Type: eventInterrupt}
 	case *tcell.EventResize:
-		if g.PlayMode == RECORDING {
-			g.Recording.ResizeEvents = append(
-				g.Recording.ResizeEvents, NewTcellResizeEventWrapper(tev, g.timeSinceStart()),
-			)
-		}
-
 		w, h := tev.Size()
 		return GocuiEvent{Type: eventResize, Width: w, Height: h}
 	case *tcell.EventKey:
-		if g.PlayMode == RECORDING {
-			g.Recording.KeyEvents = append(
-				g.Recording.KeyEvents, NewTcellKeyEventWrapper(tev, g.timeSinceStart()),
-			)
-		}
-
 		k := tev.Key()
 		ch := rune(0)
 		if k == tcell.KeyRune {

@@ -15,7 +15,6 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/commands/oscommands"
 	"github.com/jesseduffield/lazygit/pkg/commands/types/enums"
 	"github.com/jesseduffield/lazygit/pkg/common"
-	"github.com/jesseduffield/lazygit/pkg/gui/style"
 )
 
 // context:
@@ -68,10 +67,6 @@ type GetCommitsOptions struct {
 func (self *CommitLoader) GetCommits(opts GetCommitsOptions) ([]*models.Commit, error) {
 	commits := []*models.Commit{}
 	var rebasingCommits []*models.Commit
-	rebaseMode, err := self.getRebaseMode()
-	if err != nil {
-		return nil, err
-	}
 
 	if opts.IncludeRebaseCommits && opts.FilterPath == "" {
 		var err error
@@ -94,7 +89,7 @@ func (self *CommitLoader) GetCommits(opts GetCommitsOptions) ([]*models.Commit, 
 		if commit.Sha == firstPushedCommit {
 			passedFirstPushedCommit = true
 		}
-		commit.Status = map[bool]string{true: "unpushed", false: "pushed"}[!passedFirstPushedCommit]
+		commit.Status = map[bool]models.CommitStatus{true: models.StatusUnpushed, false: models.StatusPushed}[!passedFirstPushedCommit]
 		commits = append(commits, commit)
 		return false, nil
 	})
@@ -104,12 +99,6 @@ func (self *CommitLoader) GetCommits(opts GetCommitsOptions) ([]*models.Commit, 
 
 	if len(commits) == 0 {
 		return commits, nil
-	}
-
-	if rebaseMode != enums.REBASE_MODE_NONE {
-		currentCommit := commits[len(rebasingCommits)]
-		youAreHere := style.FgYellow.Sprintf("<-- %s ---", self.Tr.YouAreHere)
-		currentCommit.Name = fmt.Sprintf("%s %s", youAreHere, currentCommit.Name)
 	}
 
 	commits, err = self.setCommitMergedStatuses(opts.RefName, commits)
@@ -124,7 +113,7 @@ func (self *CommitLoader) MergeRebasingCommits(commits []*models.Commit) ([]*mod
 	// chances are we have as many commits as last time so we'll set the capacity to be the old length
 	result := make([]*models.Commit, 0, len(commits))
 	for i, commit := range commits {
-		if commit.Status != "rebasing" { // removing the existing rebase commits so we can add the refreshed ones
+		if !commit.IsTODO() { // removing the existing rebase commits so we can add the refreshed ones
 			result = append(result, commits[i:]...)
 			break
 		}
@@ -205,8 +194,8 @@ func (self *CommitLoader) getHydratedRebasingCommits(rebaseMode enums.RebaseMode
 		return nil, nil
 	}
 
-	commitShas := slices.Map(commits, func(commit *models.Commit) string {
-		return commit.Sha
+	commitShas := slices.FilterMap(commits, func(commit *models.Commit) (string, bool) {
+		return commit.Sha, commit.Sha != ""
 	})
 
 	// note that we're not filtering these as we do non-rebasing commits just because
@@ -220,19 +209,25 @@ func (self *CommitLoader) getHydratedRebasingCommits(rebaseMode enums.RebaseMode
 		),
 	).DontLog()
 
-	hydratedCommits := make([]*models.Commit, 0, len(commits))
-	i := 0
+	fullCommits := map[string]*models.Commit{}
 	err = cmdObj.RunAndProcessLines(func(line string) (bool, error) {
 		commit := self.extractCommitFromLine(line)
-		matchingCommit := commits[i]
-		commit.Action = matchingCommit.Action
-		commit.Status = matchingCommit.Status
-		hydratedCommits = append(hydratedCommits, commit)
-		i++
+		fullCommits[commit.Sha] = commit
 		return false, nil
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	hydratedCommits := make([]*models.Commit, 0, len(commits))
+	for _, rebasingCommit := range commits {
+		if rebasingCommit.Sha == "" {
+			hydratedCommits = append(hydratedCommits, rebasingCommit)
+		} else if commit := fullCommits[rebasingCommit.Sha]; commit != nil {
+			commit.Action = rebasingCommit.Action
+			commit.Status = rebasingCommit.Status
+			hydratedCommits = append(hydratedCommits, commit)
+		}
 	}
 	return hydratedCommits, nil
 }
@@ -316,15 +311,17 @@ func (self *CommitLoader) getInteractiveRebasingCommits() ([]*models.Commit, err
 	}
 
 	for _, t := range todos {
-		if t.Commit == "" {
+		if t.Command == todo.UpdateRef {
+			t.Msg = strings.TrimPrefix(t.Ref, "refs/heads/")
+		} else if t.Commit == "" {
 			// Command does not have a commit associated, skip
 			continue
 		}
 		commits = slices.Prepend(commits, &models.Commit{
 			Sha:    t.Commit,
 			Name:   t.Msg,
-			Status: "rebasing",
-			Action: t.Command.String(),
+			Status: models.StatusRebasing,
+			Action: t.Command,
 		})
 	}
 
@@ -343,7 +340,7 @@ func (self *CommitLoader) commitFromPatch(content string) *models.Commit {
 	return &models.Commit{
 		Sha:    sha,
 		Name:   name,
-		Status: "rebasing",
+		Status: models.StatusRebasing,
 	}
 }
 
@@ -360,11 +357,11 @@ func (self *CommitLoader) setCommitMergedStatuses(refName string, commits []*mod
 		if strings.HasPrefix(ancestor, commit.Sha) {
 			passedAncestor = true
 		}
-		if commit.Status != "pushed" {
+		if commit.Status != models.StatusPushed {
 			continue
 		}
 		if passedAncestor {
-			commits[i].Status = "merged"
+			commits[i].Status = models.StatusMerged
 		}
 	}
 	return commits, nil
@@ -401,7 +398,9 @@ func ignoringWarnings(commandOutput string) string {
 func (self *CommitLoader) getFirstPushedCommit(refName string) (string, error) {
 	output, err := self.cmd.
 		New(
-			fmt.Sprintf("git merge-base %s %s@{u}", self.cmd.Quote(refName), self.cmd.Quote(refName)),
+			fmt.Sprintf("git merge-base %s %s@{u}",
+				self.cmd.Quote(refName),
+				self.cmd.Quote(strings.TrimPrefix(refName, "refs/heads/"))),
 		).
 		DontLog().
 		RunWithOutput()
@@ -419,9 +418,11 @@ func (self *CommitLoader) getLogCmd(opts GetCommitsOptions) oscommands.ICmdObj {
 		limitFlag = " -300"
 	}
 
+	followFlag := ""
 	filterFlag := ""
 	if opts.FilterPath != "" {
-		filterFlag = fmt.Sprintf(" --follow -- %s", self.cmd.Quote(opts.FilterPath))
+		followFlag = " --follow"
+		filterFlag = fmt.Sprintf(" %s", self.cmd.Quote(opts.FilterPath))
 	}
 
 	config := self.UserConfig.Git.Log
@@ -437,13 +438,14 @@ func (self *CommitLoader) getLogCmd(opts GetCommitsOptions) oscommands.ICmdObj {
 
 	return self.cmd.New(
 		fmt.Sprintf(
-			"git -c log.showSignature=false log %s%s%s --oneline %s%s --abbrev=%d%s",
+			"git log %s%s%s --oneline %s%s --abbrev=%d%s --no-show-signature --%s",
 			self.cmd.Quote(opts.RefName),
 			orderFlag,
 			allFlag,
 			prettyFormat,
 			limitFlag,
 			40,
+			followFlag,
 			filterFlag,
 		),
 	).DontLog()

@@ -69,8 +69,7 @@ func (self *PatchBuildingController) OpenFile() error {
 		return nil
 	}
 
-	lineNumber := self.context().GetState().CurrentLineNumber()
-	return self.helpers.Files.OpenFileAtLine(path, lineNumber)
+	return self.helpers.Files.OpenFile(path)
 }
 
 func (self *PatchBuildingController) EditFile() error {
@@ -101,7 +100,7 @@ func (self *PatchBuildingController) toggleSelection() error {
 	self.context().GetMutex().Lock()
 	defer self.context().GetMutex().Unlock()
 
-	toggleFunc := self.git.Patch.PatchManager.AddFileLineRange
+	toggleFunc := self.git.Patch.PatchBuilder.AddFileLineRange
 	filename := self.contexts.CommitFiles.GetSelectedPath()
 	if filename == "" {
 		return nil
@@ -109,13 +108,13 @@ func (self *PatchBuildingController) toggleSelection() error {
 
 	state := self.context().GetState()
 
-	includedLineIndices, err := self.git.Patch.PatchManager.GetFileIncLineIndices(filename)
+	includedLineIndices, err := self.git.Patch.PatchBuilder.GetFileIncLineIndices(filename)
 	if err != nil {
 		return err
 	}
 	currentLineIsStaged := lo.Contains(includedLineIndices, state.GetSelectedLineIdx())
 	if currentLineIsStaged {
-		toggleFunc = self.git.Patch.PatchManager.RemoveFileLineRange
+		toggleFunc = self.git.Patch.PatchBuilder.RemoveFileLineRange
 	}
 
 	// add range of lines to those set for the file

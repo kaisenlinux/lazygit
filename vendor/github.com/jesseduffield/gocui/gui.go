@@ -7,7 +7,6 @@ package gocui
 import (
 	"context"
 	standardErrors "errors"
-	"log"
 	"runtime"
 	"strings"
 	"sync"
@@ -103,21 +102,6 @@ type GuiMutexes struct {
 	ViewsMutex sync.Mutex
 }
 
-type PlayMode int
-
-const (
-	NORMAL PlayMode = iota
-	RECORDING
-	REPLAYING
-	// for the new form of integration tests
-	REPLAYING_NEW
-)
-
-type Recording struct {
-	KeyEvents    []*TcellKeyEventWrapper
-	ResizeEvents []*TcellResizeEventWrapper
-}
-
 type replayedEvents struct {
 	Keys    chan *TcellKeyEventWrapper
 	Resizes chan *TcellResizeEventWrapper
@@ -132,11 +116,9 @@ type RecordingConfig struct {
 // and keybindings.
 type Gui struct {
 	RecordingConfig
-	Recording *Recording
 	// ReplayedEvents is for passing pre-recorded input events, for the purposes of testing
 	ReplayedEvents replayedEvents
-	PlayMode       PlayMode
-	StartTime      time.Time
+	playRecording  bool
 
 	tabClickBindings  []*tabClickBinding
 	viewMouseBindings []*ViewMouseBinding
@@ -194,7 +176,7 @@ type Gui struct {
 }
 
 // NewGui returns a new Gui object with a given output mode.
-func NewGui(mode OutputMode, supportOverlaps bool, playMode PlayMode, headless bool, runeReplacements map[rune]string) (*Gui, error) {
+func NewGui(mode OutputMode, supportOverlaps bool, playRecording bool, headless bool, runeReplacements map[rune]string) (*Gui, error) {
 	g := &Gui{}
 
 	var err error
@@ -224,12 +206,7 @@ func NewGui(mode OutputMode, supportOverlaps bool, playMode PlayMode, headless b
 	g.gEvents = make(chan GocuiEvent, 20)
 	g.userEvents = make(chan userEvent, 20)
 
-	if playMode == RECORDING {
-		g.Recording = &Recording{
-			KeyEvents:    []*TcellKeyEventWrapper{},
-			ResizeEvents: []*TcellResizeEventWrapper{},
-		}
-	} else if playMode == REPLAYING || playMode == REPLAYING_NEW {
+	if playRecording {
 		g.ReplayedEvents = replayedEvents{
 			Keys:    make(chan *TcellKeyEventWrapper),
 			Resizes: make(chan *TcellResizeEventWrapper),
@@ -248,7 +225,7 @@ func NewGui(mode OutputMode, supportOverlaps bool, playMode PlayMode, headless b
 	g.NextSearchMatchKey = 'n'
 	g.PrevSearchMatchKey = 'N'
 
-	g.PlayMode = playMode
+	g.playRecording = playRecording
 
 	return g, nil
 }
@@ -407,14 +384,7 @@ func (g *Gui) CopyContent(fromView *View, toView *View) {
 	g.Mutexes.ViewsMutex.Lock()
 	defer g.Mutexes.ViewsMutex.Unlock()
 
-	toView.clear()
-
-	toView.lines = fromView.lines
-	toView.viewLines = fromView.viewLines
-	toView.ox = fromView.ox
-	toView.oy = fromView.oy
-	toView.cx = fromView.cx
-	toView.cy = fromView.cy
+	toView.CopyContent(fromView)
 }
 
 // Views returns all the views in the GUI.
@@ -680,11 +650,6 @@ func (g *Gui) SetManagerFunc(manager func(*Gui) error) {
 // MainLoop runs the main loop until an error is returned. A successful
 // finish should return ErrQuit.
 func (g *Gui) MainLoop() error {
-	g.StartTime = time.Now()
-	if g.PlayMode == REPLAYING {
-		go g.replayRecording()
-	}
-
 	go func() {
 		for {
 			select {
@@ -1021,7 +986,7 @@ func (g *Gui) drawSubtitle(v *View, fgColor, bgColor Attribute) error {
 		return nil
 	}
 
-	start := v.x1 - 5 - len(v.Subtitle)
+	start := v.x1 - 5 - runewidth.StringWidth(v.Subtitle)
 	if start < v.x0 {
 		return nil
 	}
@@ -1050,7 +1015,7 @@ func (g *Gui) drawListFooter(v *View, fgColor, bgColor Attribute) error {
 		return nil
 	}
 
-	start := v.x1 - 1 - len(message)
+	start := v.x1 - 1 - runewidth.StringWidth(message)
 	if start < v.x0 {
 		return nil
 	}
@@ -1226,8 +1191,10 @@ func (g *Gui) onKey(ev *GocuiEvent) error {
 				newCx = lastCharForLine
 			}
 		}
-		if err := v.SetCursor(newCx, newCy); err != nil {
-			return err
+		if !IsMouseScrollKey(ev.Key) {
+			if err := v.SetCursor(newCx, newCy); err != nil {
+				return err
+			}
 		}
 
 		if IsMouseKey(ev.Key) {
@@ -1279,6 +1246,19 @@ func IsMouseKey(key interface{}) bool {
 		MouseRight,
 		MouseMiddle,
 		MouseRelease,
+		MouseWheelUp,
+		MouseWheelDown,
+		MouseWheelLeft,
+		MouseWheelRight:
+		return true
+	default:
+		return false
+	}
+}
+
+func IsMouseScrollKey(key interface{}) bool {
+	switch key {
+	case
 		MouseWheelUp,
 		MouseWheelDown,
 		MouseWheelLeft,
@@ -1409,97 +1389,6 @@ func IsQuit(err error) bool {
 	return err != nil && err.Error() == ErrQuit.Error()
 }
 
-func (g *Gui) replayRecording() {
-	waitGroup := sync.WaitGroup{}
-
-	waitGroup.Add(2)
-
-	// lots of duplication here due to lack of generics. Also we don't support mouse
-	// events because it would be awkward to replicate but it would be trivial to add
-	// support
-	go func() {
-		ticker := time.NewTicker(time.Millisecond)
-		defer ticker.Stop()
-
-		// The playback could be paused at any time because integration tests run concurrently.
-		// Therefore we can't just check for a given event whether we've passed its timestamp,
-		// or else we'll have an explosion of keypresses after the test is resumed.
-		// We need to check if we've waited long enough since the last event was replayed.
-		for i, event := range g.Recording.KeyEvents {
-			var prevEventTimestamp int64 = 0
-			if i > 0 {
-				prevEventTimestamp = g.Recording.KeyEvents[i-1].Timestamp
-			}
-			timeToWait := float64(event.Timestamp-prevEventTimestamp) / g.RecordingConfig.Speed
-			if i == 0 {
-				timeToWait += float64(g.RecordingConfig.Leeway)
-			}
-			var timeWaited float64 = 0
-		middle:
-			for {
-				select {
-				case <-ticker.C:
-					timeWaited += 1
-					if timeWaited >= timeToWait {
-						g.ReplayedEvents.Keys <- event
-						break middle
-					}
-				case <-g.stop:
-					return
-				}
-			}
-		}
-
-		waitGroup.Done()
-	}()
-
-	go func() {
-		ticker := time.NewTicker(time.Millisecond)
-		defer ticker.Stop()
-
-		// duplicating until Go gets generics
-		for i, event := range g.Recording.ResizeEvents {
-			var prevEventTimestamp int64 = 0
-			if i > 0 {
-				prevEventTimestamp = g.Recording.ResizeEvents[i-1].Timestamp
-			}
-			timeToWait := float64(event.Timestamp-prevEventTimestamp) / g.RecordingConfig.Speed
-			if i == 0 {
-				timeToWait += float64(g.RecordingConfig.Leeway)
-			}
-			var timeWaited float64 = 0
-		middle2:
-			for {
-				select {
-				case <-ticker.C:
-					timeWaited += 1
-					if timeWaited >= timeToWait {
-						g.ReplayedEvents.Resizes <- event
-						break middle2
-					}
-				case <-g.stop:
-					return
-				}
-			}
-		}
-
-		waitGroup.Done()
-	}()
-
-	waitGroup.Wait()
-
-	// leaving some time for any handlers to execute before quitting
-	time.Sleep(time.Second * 1)
-
-	g.Update(func(*Gui) error {
-		return ErrQuit
-	})
-
-	time.Sleep(time.Second * 1)
-
-	log.Fatal("gocui should have already exited")
-}
-
 func (g *Gui) Suspend() error {
 	g.suspendedMutex.Lock()
 	defer g.suspendedMutex.Unlock()
@@ -1539,4 +1428,31 @@ func (g *Gui) matchView(v *View, kb *keybinding) bool {
 		return false
 	}
 	return true
+}
+
+// returns a string representation of the current state of the gui, character-for-character
+func (g *Gui) Snapshot() string {
+	if g.screen == nil {
+		return "<no screen rendered>"
+	}
+
+	width, height := g.screen.Size()
+
+	builder := &strings.Builder{}
+
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			char, _, _, charWidth := g.screen.GetContent(x, y)
+			if charWidth == 0 {
+				continue
+			}
+			builder.WriteRune(char)
+			if charWidth > 1 {
+				x += charWidth - 1
+			}
+		}
+		builder.WriteRune('\n')
+	}
+
+	return builder.String()
 }

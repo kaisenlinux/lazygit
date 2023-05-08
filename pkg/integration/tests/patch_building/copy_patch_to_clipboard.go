@@ -5,10 +5,10 @@ import (
 	. "github.com/jesseduffield/lazygit/pkg/integration/components"
 )
 
-var BuildPatchAndCopyToClipboard = NewIntegrationTest(NewIntegrationTestArgs{
+var CopyPatchToClipboard = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Create a patch from the commits and copy the patch to clipbaord.",
 	ExtraCmdArgs: "",
-	Skip:         true,
+	Skip:         true, // skipping because CI doesn't have clipboard functionality
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
 		shell.NewBranch("branch-a")
@@ -40,11 +40,7 @@ var BuildPatchAndCopyToClipboard = NewIntegrationTest(NewIntegrationTestArgs{
 
 		t.Views().Information().Content(Contains("building patch"))
 
-		t.Views().
-			CommitFiles().
-			Press(keys.Universal.CreatePatchOptionsMenu)
-
-		t.ExpectPopup().Menu().Title(Equals("Patch Options")).Select(Contains("copy patch to clipboard")).Confirm()
+		t.Common().SelectPatchOption(Contains("copy patch to clipboard"))
 
 		t.ExpectToast(Contains("Patch copied to clipboard"))
 

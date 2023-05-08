@@ -85,7 +85,7 @@ func (gui *Gui) layout(g *gocui.Gui) error {
 		}
 
 		_, err := setViewFromDimensions(context.GetViewName(), context.GetWindowName())
-		if err != nil && err.Error() != UNKNOWN_VIEW_ERROR_MSG {
+		if err != nil && !gocui.IsUnknownView(err) {
 			return err
 		}
 	}
@@ -98,7 +98,7 @@ func (gui *Gui) layout(g *gocui.Gui) error {
 
 	for _, context := range gui.TransientContexts() {
 		view, err := gui.g.View(context.GetViewName())
-		if err != nil && err.Error() != UNKNOWN_VIEW_ERROR_MSG {
+		if err != nil && !gocui.IsUnknownView(err) {
 			return err
 		}
 		view.Visible = gui.getViewNameForWindow(context.GetWindowName()) == context.GetViewName()
@@ -182,7 +182,7 @@ func (gui *Gui) onInitialViewsCreationForRepo() error {
 	}
 
 	initialContext := gui.currentSideContext()
-	if err := gui.c.PushContext(initialContext); err != nil {
+	if err := gui.c.ActivateContext(initialContext); err != nil {
 		return err
 	}
 

@@ -9,6 +9,7 @@ import (
 	"github.com/jesseduffield/gocui"
 	"github.com/jesseduffield/lazygit/pkg/gui/context"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
+	"github.com/samber/lo"
 )
 
 // This file is for the management of contexts. There is a context stack such that
@@ -52,7 +53,7 @@ func (gui *Gui) pushContext(c types.Context, opts types.OnFocusOpts) error {
 		return nil
 	}
 
-	contextsToDeactivate := gui.pushToContextStack(c)
+	contextsToDeactivate, contextToActivate := gui.pushToContextStack(c)
 
 	for _, contextToDeactivate := range contextsToDeactivate {
 		if err := gui.deactivateContext(contextToDeactivate, types.OnFocusLostOpts{NewContextKey: c.GetKey()}); err != nil {
@@ -60,15 +61,27 @@ func (gui *Gui) pushContext(c types.Context, opts types.OnFocusOpts) error {
 		}
 	}
 
-	return gui.activateContext(c, opts)
+	if contextToActivate == nil {
+		return nil
+	}
+
+	return gui.activateContext(contextToActivate, opts)
 }
 
-// Adjusts the context stack based on the context that's being pushed and returns contexts to deactivate
-func (gui *Gui) pushToContextStack(c types.Context) []types.Context {
+// Adjusts the context stack based on the context that's being pushed and
+// returns (contexts to deactivate, context to activate)
+func (gui *Gui) pushToContextStack(c types.Context) ([]types.Context, types.Context) {
 	contextsToDeactivate := []types.Context{}
 
 	gui.State.ContextManager.Lock()
 	defer gui.State.ContextManager.Unlock()
+
+	if len(gui.State.ContextManager.ContextStack) > 0 &&
+		c == gui.State.ContextManager.ContextStack[len(gui.State.ContextManager.ContextStack)-1] {
+		// Context being pushed is already on top of the stack: nothing to
+		// deactivate or activate
+		return contextsToDeactivate, nil
+	}
 
 	if len(gui.State.ContextManager.ContextStack) == 0 {
 		gui.State.ContextManager.ContextStack = append(gui.State.ContextManager.ContextStack, c)
@@ -78,12 +91,15 @@ func (gui *Gui) pushToContextStack(c types.Context) []types.Context {
 		gui.State.ContextManager.ContextStack = []types.Context{c}
 	} else if c.GetKind() == types.MAIN_CONTEXT {
 		// if we're switching to a main context, remove all other main contexts in the stack
+		contextsToKeep := []types.Context{}
 		for _, stackContext := range gui.State.ContextManager.ContextStack {
 			if stackContext.GetKind() == types.MAIN_CONTEXT {
 				contextsToDeactivate = append(contextsToDeactivate, stackContext)
+			} else {
+				contextsToKeep = append(contextsToKeep, stackContext)
 			}
 		}
-		gui.State.ContextManager.ContextStack = []types.Context{c}
+		gui.State.ContextManager.ContextStack = append(contextsToKeep, c)
 	} else {
 		topContext := gui.currentContextWithoutLock()
 
@@ -105,7 +121,7 @@ func (gui *Gui) pushToContextStack(c types.Context) []types.Context {
 		}
 	}
 
-	return contextsToDeactivate
+	return contextsToDeactivate, c
 }
 
 func (gui *Gui) popContext() error {
@@ -129,6 +145,36 @@ func (gui *Gui) popContext() error {
 	}
 
 	return gui.activateContext(newContext, types.OnFocusOpts{})
+}
+
+func (gui *Gui) removeContexts(contextsToRemove []types.Context) error {
+	gui.State.ContextManager.Lock()
+
+	if len(gui.State.ContextManager.ContextStack) == 1 {
+		gui.State.ContextManager.Unlock()
+		return nil
+	}
+
+	rest := lo.Filter(gui.State.ContextManager.ContextStack, func(context types.Context, _ int) bool {
+		for _, contextToRemove := range contextsToRemove {
+			if context.GetKey() == contextToRemove.GetKey() {
+				return false
+			}
+		}
+		return true
+	})
+	gui.State.ContextManager.ContextStack = rest
+	contextToActivate := rest[len(rest)-1]
+	gui.State.ContextManager.Unlock()
+
+	for _, context := range contextsToRemove {
+		if err := gui.deactivateContext(context, types.OnFocusLostOpts{NewContextKey: contextToActivate.GetKey()}); err != nil {
+			return err
+		}
+	}
+
+	// activate the item at the top of the stack
+	return gui.activateContext(contextToActivate, types.OnFocusOpts{})
 }
 
 func (gui *Gui) deactivateContext(c types.Context, opts types.OnFocusLostOpts) error {
