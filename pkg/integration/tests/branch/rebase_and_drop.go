@@ -8,7 +8,7 @@ import (
 
 var RebaseAndDrop = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Rebase onto another branch, deal with the conflicts. Also mark a commit to be dropped before continuing.",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -38,10 +38,10 @@ var RebaseAndDrop = NewIntegrationTest(NewIntegrationTestArgs{
 
 		t.ExpectPopup().Menu().
 			Title(Equals("Rebase 'first-change-branch' onto 'second-change-branch'")).
-			Select(Contains("simple rebase")).
+			Select(Contains("Simple rebase")).
 			Confirm()
 
-		t.Views().Information().Content(Contains("rebasing"))
+		t.Views().Information().Content(Contains("Rebasing"))
 
 		t.Common().AcknowledgeConflicts()
 
@@ -53,7 +53,8 @@ var RebaseAndDrop = NewIntegrationTest(NewIntegrationTestArgs{
 			TopLines(
 				MatchesRegexp(`pick.*to keep`).IsSelected(),
 				MatchesRegexp(`pick.*to remove`),
-				MatchesRegexp("YOU ARE HERE.*second-change-branch unrelated change"),
+				MatchesRegexp(`conflict.*YOU ARE HERE.*first change`),
+				MatchesRegexp("second-change-branch unrelated change"),
 				MatchesRegexp("second change"),
 				MatchesRegexp("original"),
 			).
@@ -62,7 +63,8 @@ var RebaseAndDrop = NewIntegrationTest(NewIntegrationTestArgs{
 			TopLines(
 				MatchesRegexp(`pick.*to keep`),
 				MatchesRegexp(`drop.*to remove`).IsSelected(),
-				MatchesRegexp("YOU ARE HERE.*second-change-branch unrelated change"),
+				MatchesRegexp(`conflict.*YOU ARE HERE.*first change`),
+				MatchesRegexp("second-change-branch unrelated change"),
 				MatchesRegexp("second change"),
 				MatchesRegexp("original"),
 			)
@@ -77,7 +79,7 @@ var RebaseAndDrop = NewIntegrationTest(NewIntegrationTestArgs{
 
 		t.Common().ContinueOnConflictsResolved()
 
-		t.Views().Information().Content(DoesNotContain("rebasing"))
+		t.Views().Information().Content(DoesNotContain("Rebasing"))
 
 		t.Views().Commits().TopLines(
 			Contains("to keep"),

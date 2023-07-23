@@ -7,7 +7,7 @@ import (
 
 var PullRebaseInteractiveConflictDrop = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Pull with an interactive rebase strategy, where a conflict occurs. Also drop a commit while rebasing",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -15,7 +15,8 @@ var PullRebaseInteractiveConflictDrop = NewIntegrationTest(NewIntegrationTestArg
 		shell.Commit("one")
 		shell.UpdateFileAndAdd("file", "content2")
 		shell.Commit("two")
-		shell.EmptyCommit("three")
+		shell.CreateFileAndAdd("file3", "content3")
+		shell.Commit("three")
 
 		shell.CloneIntoRemote("origin")
 
@@ -24,7 +25,8 @@ var PullRebaseInteractiveConflictDrop = NewIntegrationTest(NewIntegrationTestArg
 		shell.HardReset("HEAD^^")
 		shell.UpdateFileAndAdd("file", "content4")
 		shell.Commit("four")
-		shell.EmptyCommit("five")
+		shell.CreateFileAndAdd("fil5", "content5")
+		shell.Commit("five")
 
 		shell.SetConfig("pull.rebase", "interactive")
 	},
@@ -48,14 +50,16 @@ var PullRebaseInteractiveConflictDrop = NewIntegrationTest(NewIntegrationTestArg
 			Focus().
 			Lines(
 				Contains("pick").Contains("five").IsSelected(),
-				Contains("YOU ARE HERE").Contains("three"),
+				Contains("conflict").Contains("YOU ARE HERE").Contains("four"),
+				Contains("three"),
 				Contains("two"),
 				Contains("one"),
 			).
 			Press(keys.Universal.Remove).
 			Lines(
 				Contains("drop").Contains("five").IsSelected(),
-				Contains("YOU ARE HERE").Contains("three"),
+				Contains("conflict").Contains("YOU ARE HERE").Contains("four"),
+				Contains("three"),
 				Contains("two"),
 				Contains("one"),
 			)

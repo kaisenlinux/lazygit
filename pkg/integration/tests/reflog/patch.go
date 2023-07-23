@@ -7,7 +7,7 @@ import (
 
 var Patch = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Build a patch from a reflog commit and apply it",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -28,6 +28,12 @@ var Patch = NewIntegrationTest(NewIntegrationTestArgs{
 				Contains("commit (initial): one"),
 			).
 			SelectNextItem().
+			Lines(
+				Contains("reset: moving to HEAD^^"),
+				Contains("commit: three").IsSelected(),
+				Contains("commit: two"),
+				Contains("commit (initial): one"),
+			).
 			PressEnter()
 
 		t.Views().SubCommits().
@@ -47,15 +53,15 @@ var Patch = NewIntegrationTest(NewIntegrationTestArgs{
 			).
 			PressPrimaryAction()
 
-		t.Views().Information().Content(Contains("building patch"))
+		t.Views().Information().Content(Contains("Building patch"))
 
 		t.Views().
 			CommitFiles().
 			Press(keys.Universal.CreatePatchOptionsMenu)
 
 		t.ExpectPopup().Menu().
-			Title(Equals("Patch Options")).
-			Select(MatchesRegexp(`apply patch$`)).Confirm()
+			Title(Equals("Patch options")).
+			Select(MatchesRegexp(`Apply patch$`)).Confirm()
 
 		t.Views().Files().Lines(
 			Contains("file1"),

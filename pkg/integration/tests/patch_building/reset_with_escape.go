@@ -7,7 +7,7 @@ import (
 
 var ResetWithEscape = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Reset a custom patch with the escape keybinding",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -29,7 +29,7 @@ var ResetWithEscape = NewIntegrationTest(NewIntegrationTestArgs{
 			).
 			PressPrimaryAction().
 			Tap(func() {
-				t.Views().Information().Content(Contains("building patch"))
+				t.Views().Information().Content(Contains("Building patch"))
 			}).
 			PressEscape()
 
@@ -38,6 +38,6 @@ var ResetWithEscape = NewIntegrationTest(NewIntegrationTestArgs{
 			IsFocused().
 			PressEscape()
 
-		t.Views().Information().Content(DoesNotContain("building patch"))
+		t.Views().Information().Content(DoesNotContain("Building patch"))
 	},
 })

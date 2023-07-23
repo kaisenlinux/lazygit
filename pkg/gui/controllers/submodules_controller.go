@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/jesseduffield/gocui"
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
 	"github.com/jesseduffield/lazygit/pkg/gui/context"
 	"github.com/jesseduffield/lazygit/pkg/gui/style"
@@ -13,21 +14,17 @@ import (
 
 type SubmodulesController struct {
 	baseController
-	*controllerCommon
-
-	enterSubmodule func(submodule *models.SubmoduleConfig) error
+	c *ControllerCommon
 }
 
 var _ types.IController = &SubmodulesController{}
 
 func NewSubmodulesController(
-	controllerCommon *controllerCommon,
-	enterSubmodule func(submodule *models.SubmoduleConfig) error,
+	controllerCommon *ControllerCommon,
 ) *SubmodulesController {
 	return &SubmodulesController{
-		baseController:   baseController{},
-		controllerCommon: controllerCommon,
-		enterSubmodule:   enterSubmodule,
+		baseController: baseController{},
+		c:              controllerCommon,
 	}
 }
 
@@ -36,37 +33,37 @@ func (self *SubmodulesController) GetKeybindings(opts types.KeybindingsOpts) []*
 		{
 			Key:         opts.GetKey(opts.Config.Universal.GoInto),
 			Handler:     self.checkSelected(self.enter),
-			Description: self.c.Tr.LcEnterSubmodule,
+			Description: self.c.Tr.EnterSubmodule,
 		},
 		{
 			Key:         opts.GetKey(opts.Config.Universal.Remove),
 			Handler:     self.checkSelected(self.remove),
-			Description: self.c.Tr.LcRemoveSubmodule,
+			Description: self.c.Tr.RemoveSubmodule,
 		},
 		{
 			Key:         opts.GetKey(opts.Config.Submodules.Update),
 			Handler:     self.checkSelected(self.update),
-			Description: self.c.Tr.LcSubmoduleUpdate,
+			Description: self.c.Tr.SubmoduleUpdate,
 		},
 		{
 			Key:         opts.GetKey(opts.Config.Universal.New),
 			Handler:     self.add,
-			Description: self.c.Tr.LcAddSubmodule,
+			Description: self.c.Tr.AddSubmodule,
 		},
 		{
 			Key:         opts.GetKey(opts.Config.Universal.Edit),
 			Handler:     self.checkSelected(self.editURL),
-			Description: self.c.Tr.LcEditSubmoduleUrl,
+			Description: self.c.Tr.EditSubmoduleUrl,
 		},
 		{
 			Key:         opts.GetKey(opts.Config.Submodules.Init),
 			Handler:     self.checkSelected(self.init),
-			Description: self.c.Tr.LcInitSubmodule,
+			Description: self.c.Tr.InitSubmodule,
 		},
 		{
 			Key:         opts.GetKey(opts.Config.Submodules.BulkMenu),
 			Handler:     self.openBulkActionsMenu,
-			Description: self.c.Tr.LcViewBulkSubmoduleOptions,
+			Description: self.c.Tr.ViewBulkSubmoduleOptions,
 			OpensMenu:   true,
 		},
 		{
@@ -81,27 +78,62 @@ func (self *SubmodulesController) GetOnClick() func() error {
 	return self.checkSelected(self.enter)
 }
 
+func (self *SubmodulesController) GetOnRenderToMain() func() error {
+	return func() error {
+		return self.c.Helpers().Diff.WithDiffModeCheck(func() error {
+			var task types.UpdateTask
+			submodule := self.context().GetSelected()
+			if submodule == nil {
+				task = types.NewRenderStringTask("No submodules")
+			} else {
+				prefix := fmt.Sprintf(
+					"Name: %s\nPath: %s\nUrl:  %s\n\n",
+					style.FgGreen.Sprint(submodule.Name),
+					style.FgYellow.Sprint(submodule.Path),
+					style.FgCyan.Sprint(submodule.Url),
+				)
+
+				file := self.c.Helpers().WorkingTree.FileForSubmodule(submodule)
+				if file == nil {
+					task = types.NewRenderStringTask(prefix)
+				} else {
+					cmdObj := self.c.Git().WorkingTree.WorktreeFileDiffCmdObj(file, false, !file.HasUnstagedChanges && file.HasStagedChanges, self.c.State().GetIgnoreWhitespaceInDiffView())
+					task = types.NewRunCommandTaskWithPrefix(cmdObj.GetCmd(), prefix)
+				}
+			}
+
+			return self.c.RenderToMainViews(types.RefreshMainOpts{
+				Pair: self.c.MainViewPairs().Normal,
+				Main: &types.ViewUpdateOpts{
+					Title: "Submodule",
+					Task:  task,
+				},
+			})
+		})
+	}
+}
+
 func (self *SubmodulesController) enter(submodule *models.SubmoduleConfig) error {
-	return self.enterSubmodule(submodule)
+	return self.c.Helpers().Repos.EnterSubmodule(submodule)
 }
 
 func (self *SubmodulesController) add() error {
 	return self.c.Prompt(types.PromptOpts{
-		Title: self.c.Tr.LcNewSubmoduleUrl,
+		Title: self.c.Tr.NewSubmoduleUrl,
 		HandleConfirm: func(submoduleUrl string) error {
 			nameSuggestion := filepath.Base(strings.TrimSuffix(submoduleUrl, filepath.Ext(submoduleUrl)))
 
 			return self.c.Prompt(types.PromptOpts{
-				Title:          self.c.Tr.LcNewSubmoduleName,
+				Title:          self.c.Tr.NewSubmoduleName,
 				InitialContent: nameSuggestion,
 				HandleConfirm: func(submoduleName string) error {
 					return self.c.Prompt(types.PromptOpts{
-						Title:          self.c.Tr.LcNewSubmodulePath,
+						Title:          self.c.Tr.NewSubmodulePath,
 						InitialContent: submoduleName,
 						HandleConfirm: func(submodulePath string) error {
-							return self.c.WithWaitingStatus(self.c.Tr.LcAddingSubmoduleStatus, func() error {
+							return self.c.WithWaitingStatus(self.c.Tr.AddingSubmoduleStatus, func(gocui.Task) error {
 								self.c.LogAction(self.c.Tr.Actions.AddSubmodule)
-								err := self.git.Submodule.Add(submoduleName, submodulePath, submoduleUrl)
+								err := self.c.Git().Submodule.Add(submoduleName, submodulePath, submoduleUrl)
 								if err != nil {
 									_ = self.c.Error(err)
 								}
@@ -118,12 +150,12 @@ func (self *SubmodulesController) add() error {
 
 func (self *SubmodulesController) editURL(submodule *models.SubmoduleConfig) error {
 	return self.c.Prompt(types.PromptOpts{
-		Title:          fmt.Sprintf(self.c.Tr.LcUpdateSubmoduleUrl, submodule.Name),
+		Title:          fmt.Sprintf(self.c.Tr.UpdateSubmoduleUrl, submodule.Name),
 		InitialContent: submodule.Url,
 		HandleConfirm: func(newUrl string) error {
-			return self.c.WithWaitingStatus(self.c.Tr.LcUpdatingSubmoduleUrlStatus, func() error {
+			return self.c.WithWaitingStatus(self.c.Tr.UpdatingSubmoduleUrlStatus, func(gocui.Task) error {
 				self.c.LogAction(self.c.Tr.Actions.UpdateSubmoduleUrl)
-				err := self.git.Submodule.UpdateUrl(submodule.Name, submodule.Path, newUrl)
+				err := self.c.Git().Submodule.UpdateUrl(submodule.Name, submodule.Path, newUrl)
 				if err != nil {
 					_ = self.c.Error(err)
 				}
@@ -135,9 +167,9 @@ func (self *SubmodulesController) editURL(submodule *models.SubmoduleConfig) err
 }
 
 func (self *SubmodulesController) init(submodule *models.SubmoduleConfig) error {
-	return self.c.WithWaitingStatus(self.c.Tr.LcInitializingSubmoduleStatus, func() error {
+	return self.c.WithWaitingStatus(self.c.Tr.InitializingSubmoduleStatus, func(gocui.Task) error {
 		self.c.LogAction(self.c.Tr.Actions.InitialiseSubmodule)
-		err := self.git.Submodule.Init(submodule.Path)
+		err := self.c.Git().Submodule.Init(submodule.Path)
 		if err != nil {
 			_ = self.c.Error(err)
 		}
@@ -148,14 +180,14 @@ func (self *SubmodulesController) init(submodule *models.SubmoduleConfig) error 
 
 func (self *SubmodulesController) openBulkActionsMenu() error {
 	return self.c.Menu(types.CreateMenuOptions{
-		Title: self.c.Tr.LcBulkSubmoduleOptions,
+		Title: self.c.Tr.BulkSubmoduleOptions,
 		Items: []*types.MenuItem{
 			{
-				LabelColumns: []string{self.c.Tr.LcBulkInitSubmodules, style.FgGreen.Sprint(self.git.Submodule.BulkInitCmdObj().ToString())},
+				LabelColumns: []string{self.c.Tr.BulkInitSubmodules, style.FgGreen.Sprint(self.c.Git().Submodule.BulkInitCmdObj().ToString())},
 				OnPress: func() error {
-					return self.c.WithWaitingStatus(self.c.Tr.LcRunningCommand, func() error {
+					return self.c.WithWaitingStatus(self.c.Tr.RunningCommand, func(gocui.Task) error {
 						self.c.LogAction(self.c.Tr.Actions.BulkInitialiseSubmodules)
-						err := self.git.Submodule.BulkInitCmdObj().Run()
+						err := self.c.Git().Submodule.BulkInitCmdObj().Run()
 						if err != nil {
 							return self.c.Error(err)
 						}
@@ -166,11 +198,11 @@ func (self *SubmodulesController) openBulkActionsMenu() error {
 				Key: 'i',
 			},
 			{
-				LabelColumns: []string{self.c.Tr.LcBulkUpdateSubmodules, style.FgYellow.Sprint(self.git.Submodule.BulkUpdateCmdObj().ToString())},
+				LabelColumns: []string{self.c.Tr.BulkUpdateSubmodules, style.FgYellow.Sprint(self.c.Git().Submodule.BulkUpdateCmdObj().ToString())},
 				OnPress: func() error {
-					return self.c.WithWaitingStatus(self.c.Tr.LcRunningCommand, func() error {
+					return self.c.WithWaitingStatus(self.c.Tr.RunningCommand, func(gocui.Task) error {
 						self.c.LogAction(self.c.Tr.Actions.BulkUpdateSubmodules)
-						if err := self.git.Submodule.BulkUpdateCmdObj().Run(); err != nil {
+						if err := self.c.Git().Submodule.BulkUpdateCmdObj().Run(); err != nil {
 							return self.c.Error(err)
 						}
 
@@ -180,11 +212,11 @@ func (self *SubmodulesController) openBulkActionsMenu() error {
 				Key: 'u',
 			},
 			{
-				LabelColumns: []string{self.c.Tr.LcBulkDeinitSubmodules, style.FgRed.Sprint(self.git.Submodule.BulkDeinitCmdObj().ToString())},
+				LabelColumns: []string{self.c.Tr.BulkDeinitSubmodules, style.FgRed.Sprint(self.c.Git().Submodule.BulkDeinitCmdObj().ToString())},
 				OnPress: func() error {
-					return self.c.WithWaitingStatus(self.c.Tr.LcRunningCommand, func() error {
+					return self.c.WithWaitingStatus(self.c.Tr.RunningCommand, func(gocui.Task) error {
 						self.c.LogAction(self.c.Tr.Actions.BulkDeinitialiseSubmodules)
-						if err := self.git.Submodule.BulkDeinitCmdObj().Run(); err != nil {
+						if err := self.c.Git().Submodule.BulkDeinitCmdObj().Run(); err != nil {
 							return self.c.Error(err)
 						}
 
@@ -198,9 +230,9 @@ func (self *SubmodulesController) openBulkActionsMenu() error {
 }
 
 func (self *SubmodulesController) update(submodule *models.SubmoduleConfig) error {
-	return self.c.WithWaitingStatus(self.c.Tr.LcUpdatingSubmoduleStatus, func() error {
+	return self.c.WithWaitingStatus(self.c.Tr.UpdatingSubmoduleStatus, func(gocui.Task) error {
 		self.c.LogAction(self.c.Tr.Actions.UpdateSubmodule)
-		err := self.git.Submodule.Update(submodule.Path)
+		err := self.c.Git().Submodule.Update(submodule.Path)
 		if err != nil {
 			_ = self.c.Error(err)
 		}
@@ -215,7 +247,7 @@ func (self *SubmodulesController) remove(submodule *models.SubmoduleConfig) erro
 		Prompt: fmt.Sprintf(self.c.Tr.RemoveSubmodulePrompt, submodule.Name),
 		HandleConfirm: func() error {
 			self.c.LogAction(self.c.Tr.Actions.RemoveSubmodule)
-			if err := self.git.Submodule.Delete(submodule); err != nil {
+			if err := self.c.Git().Submodule.Delete(submodule); err != nil {
 				return self.c.Error(err)
 			}
 
@@ -225,7 +257,7 @@ func (self *SubmodulesController) remove(submodule *models.SubmoduleConfig) erro
 }
 
 func (self *SubmodulesController) easterEgg() error {
-	return self.c.PushContext(self.contexts.Snake)
+	return self.c.PushContext(self.c.Contexts().Snake)
 }
 
 func (self *SubmodulesController) checkSelected(callback func(*models.SubmoduleConfig) error) func() error {
@@ -244,5 +276,5 @@ func (self *SubmodulesController) Context() types.Context {
 }
 
 func (self *SubmodulesController) context() *context.SubmodulesContext {
-	return self.contexts.Submodules
+	return self.c.Contexts().Submodules
 }

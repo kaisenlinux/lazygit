@@ -7,7 +7,7 @@ import (
 
 var AmendFixupCommit = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Amends a staged file to a fixup commit, and checks that other unrelated fixup commits are not auto-squashed.",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -32,7 +32,7 @@ var AmendFixupCommit = NewIntegrationTest(NewIntegrationTestArgs{
 			Press(keys.Commits.AmendToCommit).
 			Tap(func() {
 				t.ExpectPopup().Confirmation().
-					Title(Equals("Amend Commit")).
+					Title(Equals("Amend commit")).
 					Content(Contains("Are you sure you want to amend this commit with your staged files?")).
 					Confirm()
 			}).

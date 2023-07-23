@@ -7,7 +7,7 @@ import (
 
 var MoveToEarlierCommit = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Move a patch from a commit to an earlier commit",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	GitVersion:   AtLeast("2.26.0"),
 	SetupConfig:  func(config *config.AppConfig) {},
@@ -46,13 +46,13 @@ var MoveToEarlierCommit = NewIntegrationTest(NewIntegrationTestArgs{
 			PressPrimaryAction().
 			PressEscape()
 
-		t.Views().Information().Content(Contains("building patch"))
+		t.Views().Information().Content(Contains("Building patch"))
 
 		t.Views().Commits().
 			IsFocused().
 			SelectNextItem()
 
-		t.Common().SelectPatchOption(Contains("move patch to selected commit"))
+		t.Common().SelectPatchOption(Contains("Move patch to selected commit"))
 
 		t.Views().Commits().
 			IsFocused().

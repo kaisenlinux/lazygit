@@ -1,52 +1,87 @@
 package context
 
 import (
-	"github.com/jesseduffield/gocui"
+	"log"
+	"time"
+
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
+	"github.com/jesseduffield/lazygit/pkg/commands/types/enums"
+	"github.com/jesseduffield/lazygit/pkg/gui/presentation"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
 )
 
 type LocalCommitsContext struct {
 	*LocalCommitsViewModel
-	*ViewportListContextTrait
+	*ListContextTrait
+	*SearchTrait
 }
 
-var _ types.IListContext = (*LocalCommitsContext)(nil)
+var (
+	_ types.IListContext    = (*LocalCommitsContext)(nil)
+	_ types.DiffableContext = (*LocalCommitsContext)(nil)
+)
 
-func NewLocalCommitsContext(
-	getModel func() []*models.Commit,
-	view *gocui.View,
-	getDisplayStrings func(startIdx int, length int) [][]string,
+func NewLocalCommitsContext(c *ContextCommon) *LocalCommitsContext {
+	viewModel := NewLocalCommitsViewModel(
+		func() []*models.Commit { return c.Model().Commits },
+		c,
+	)
 
-	onFocus func(types.OnFocusOpts) error,
-	onRenderToMain func() error,
-	onFocusLost func(opts types.OnFocusLostOpts) error,
+	getDisplayStrings := func(startIdx int, length int) [][]string {
+		selectedCommitSha := ""
 
-	c *types.HelperCommon,
-) *LocalCommitsContext {
-	viewModel := NewLocalCommitsViewModel(getModel, c)
+		if c.CurrentContext().GetKey() == LOCAL_COMMITS_CONTEXT_KEY {
+			selectedCommit := viewModel.GetSelected()
+			if selectedCommit != nil {
+				selectedCommitSha = selectedCommit.Sha
+			}
+		}
 
-	return &LocalCommitsContext{
+		showYouAreHereLabel := c.Model().WorkingTreeStateAtLastCommitRefresh == enums.REBASE_MODE_REBASING
+
+		return presentation.GetCommitListDisplayStrings(
+			c.Common,
+			c.Model().Commits,
+			c.State().GetRepoState().GetScreenMode() != types.SCREEN_NORMAL,
+			c.Modes().CherryPicking.SelectedShaSet(),
+			c.Modes().Diffing.Ref,
+			c.UserConfig.Gui.TimeFormat,
+			c.UserConfig.Gui.ShortTimeFormat,
+			time.Now(),
+			c.UserConfig.Git.ParseEmoji,
+			selectedCommitSha,
+			startIdx,
+			length,
+			shouldShowGraph(c),
+			c.Model().BisectInfo,
+			showYouAreHereLabel,
+		)
+	}
+
+	ctx := &LocalCommitsContext{
 		LocalCommitsViewModel: viewModel,
-		ViewportListContextTrait: &ViewportListContextTrait{
-			ListContextTrait: &ListContextTrait{
-				Context: NewSimpleContext(NewBaseContext(NewBaseContextOpts{
-					View:       view,
-					WindowName: "commits",
-					Key:        LOCAL_COMMITS_CONTEXT_KEY,
-					Kind:       types.SIDE_CONTEXT,
-					Focusable:  true,
-				}), ContextCallbackOpts{
-					OnFocus:        onFocus,
-					OnFocusLost:    onFocusLost,
-					OnRenderToMain: onRenderToMain,
-				}),
-				list:              viewModel,
-				getDisplayStrings: getDisplayStrings,
-				c:                 c,
-			},
+		SearchTrait:           NewSearchTrait(c),
+		ListContextTrait: &ListContextTrait{
+			Context: NewSimpleContext(NewBaseContext(NewBaseContextOpts{
+				View:       c.Views().Commits,
+				WindowName: "commits",
+				Key:        LOCAL_COMMITS_CONTEXT_KEY,
+				Kind:       types.SIDE_CONTEXT,
+				Focusable:  true,
+			})),
+			list:                    viewModel,
+			getDisplayStrings:       getDisplayStrings,
+			c:                       c,
+			refreshViewportOnChange: true,
 		},
 	}
+
+	ctx.GetView().SetOnSelectItem(ctx.SearchTrait.onSelectItemWrapper(func(selectedLineIdx int) error {
+		ctx.GetList().SetSelectedLineIdx(selectedLineIdx)
+		return ctx.HandleFocus(types.OnFocusOpts{})
+	}))
+
+	return ctx
 }
 
 func (self *LocalCommitsContext) GetSelectedItemId() string {
@@ -59,7 +94,7 @@ func (self *LocalCommitsContext) GetSelectedItemId() string {
 }
 
 type LocalCommitsViewModel struct {
-	*BasicViewModel[*models.Commit]
+	*ListViewModel[*models.Commit]
 
 	// If this is true we limit the amount of commits we load, for the sake of keeping things fast.
 	// If the user attempts to scroll past the end of the list, we will load more commits.
@@ -69,9 +104,9 @@ type LocalCommitsViewModel struct {
 	showWholeGitGraph bool
 }
 
-func NewLocalCommitsViewModel(getModel func() []*models.Commit, c *types.HelperCommon) *LocalCommitsViewModel {
+func NewLocalCommitsViewModel(getModel func() []*models.Commit, c *ContextCommon) *LocalCommitsViewModel {
 	self := &LocalCommitsViewModel{
-		BasicViewModel:    NewBasicViewModel(getModel),
+		ListViewModel:     NewListViewModel(getModel),
 		limitCommits:      true,
 		showWholeGitGraph: c.UserConfig.Git.Log.ShowWholeGraph,
 	}
@@ -89,6 +124,12 @@ func (self *LocalCommitsContext) GetSelectedRef() types.Ref {
 		return nil
 	}
 	return commit
+}
+
+func (self *LocalCommitsContext) GetDiffTerminals() []string {
+	itemId := self.GetSelectedItemId()
+
+	return []string{itemId}
 }
 
 func (self *LocalCommitsViewModel) SetLimitCommits(value bool) {
@@ -109,4 +150,23 @@ func (self *LocalCommitsViewModel) GetShowWholeGitGraph() bool {
 
 func (self *LocalCommitsViewModel) GetCommits() []*models.Commit {
 	return self.getModel()
+}
+
+func shouldShowGraph(c *ContextCommon) bool {
+	if c.Modes().Filtering.Active() {
+		return false
+	}
+
+	value := c.UserConfig.Git.Log.ShowGraph
+	switch value {
+	case "always":
+		return true
+	case "never":
+		return false
+	case "when-maximised":
+		return c.State().GetRepoState().GetScreenMode() != types.SCREEN_NORMAL
+	}
+
+	log.Fatalf("Unknown value for git.log.showGraph: %s. Expected one of: 'always', 'never', 'when-maximised'", value)
+	return false
 }

@@ -37,10 +37,10 @@ func TestStashPop(t *testing.T) {
 
 func TestStashSave(t *testing.T) {
 	runner := oscommands.NewFakeRunner(t).
-		ExpectGitArgs([]string{"stash", "save", "A stash message"}, "", nil)
+		ExpectGitArgs([]string{"stash", "push", "-m", "A stash message"}, "", nil)
 	instance := buildStashCommands(commonDeps{runner: runner})
 
-	assert.NoError(t, instance.Save("A stash message"))
+	assert.NoError(t, instance.Push("A stash message"))
 	runner.CheckForMissingCalls()
 }
 
@@ -57,7 +57,7 @@ func TestStashStore(t *testing.T) {
 			testName: "Non-empty message",
 			sha:      "0123456789abcdef",
 			message:  "New stash name",
-			expected: []string{"stash", "store", "0123456789abcdef", "-m", "New stash name"},
+			expected: []string{"stash", "store", "-m", "New stash name", "0123456789abcdef"},
 		},
 		{
 			testName: "Empty message",
@@ -99,24 +99,34 @@ func TestStashSha(t *testing.T) {
 
 func TestStashStashEntryCmdObj(t *testing.T) {
 	type scenario struct {
-		testName    string
-		index       int
-		contextSize int
-		expected    string
+		testName         string
+		index            int
+		contextSize      int
+		ignoreWhitespace bool
+		expected         []string
 	}
 
 	scenarios := []scenario{
 		{
-			testName:    "Default case",
-			index:       5,
-			contextSize: 3,
-			expected:    "git stash show -p --stat --color=always --unified=3 stash@{5}",
+			testName:         "Default case",
+			index:            5,
+			contextSize:      3,
+			ignoreWhitespace: false,
+			expected:         []string{"git", "stash", "show", "-p", "--stat", "--color=always", "--unified=3", "stash@{5}"},
 		},
 		{
-			testName:    "Show diff with custom context size",
-			index:       5,
-			contextSize: 77,
-			expected:    "git stash show -p --stat --color=always --unified=77 stash@{5}",
+			testName:         "Show diff with custom context size",
+			index:            5,
+			contextSize:      77,
+			ignoreWhitespace: false,
+			expected:         []string{"git", "stash", "show", "-p", "--stat", "--color=always", "--unified=77", "stash@{5}"},
+		},
+		{
+			testName:         "Default case",
+			index:            5,
+			contextSize:      3,
+			ignoreWhitespace: true,
+			expected:         []string{"git", "stash", "show", "-p", "--stat", "--color=always", "--unified=3", "--ignore-all-space", "stash@{5}"},
 		},
 	}
 
@@ -127,7 +137,7 @@ func TestStashStashEntryCmdObj(t *testing.T) {
 			userConfig.Git.DiffContextSize = s.contextSize
 			instance := buildStashCommands(commonDeps{userConfig: userConfig})
 
-			cmdStr := instance.ShowStashEntryCmdObj(s.index).ToString()
+			cmdStr := instance.ShowStashEntryCmdObj(s.index, s.ignoreWhitespace).Args()
 			assert.Equal(t, s.expected, cmdStr)
 		})
 	}
@@ -152,7 +162,7 @@ func TestStashRename(t *testing.T) {
 			expectedShaCmd:   []string{"rev-parse", "refs/stash@{3}"},
 			shaResult:        "f0d0f20f2f61ffd6d6bfe0752deffa38845a3edd\n",
 			expectedDropCmd:  []string{"stash", "drop", "stash@{3}"},
-			expectedStoreCmd: []string{"stash", "store", "f0d0f20f2f61ffd6d6bfe0752deffa38845a3edd", "-m", "New message"},
+			expectedStoreCmd: []string{"stash", "store", "-m", "New message", "f0d0f20f2f61ffd6d6bfe0752deffa38845a3edd"},
 		},
 		{
 			testName:         "Empty message",

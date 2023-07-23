@@ -7,7 +7,7 @@ import (
 
 var CrudAnnotated = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Create and delete an annotated tag in the tags panel",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -21,7 +21,7 @@ var CrudAnnotated = NewIntegrationTest(NewIntegrationTestArgs{
 			Tap(func() {
 				t.ExpectPopup().Menu().
 					Title(Equals("Create tag")).
-					Select(Contains("annotated")).
+					Select(Contains("Annotated")).
 					Confirm()
 
 				t.ExpectPopup().Prompt().

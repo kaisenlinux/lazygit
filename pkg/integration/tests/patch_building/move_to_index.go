@@ -7,7 +7,7 @@ import (
 
 var MoveToIndex = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Move a patch from a commit to the index",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -31,11 +31,11 @@ var MoveToIndex = NewIntegrationTest(NewIntegrationTestArgs{
 			).
 			PressPrimaryAction()
 
-		t.Views().Information().Content(Contains("building patch"))
+		t.Views().Information().Content(Contains("Building patch"))
 
 		t.Views().PatchBuildingSecondary().Content(Contains("+file1 content"))
 
-		t.Common().SelectPatchOption(Contains("move patch out into index"))
+		t.Common().SelectPatchOption(Contains("Move patch out into index"))
 
 		t.Views().Files().
 			Lines(

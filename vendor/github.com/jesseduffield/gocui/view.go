@@ -13,6 +13,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/go-errors/errors"
 	"github.com/mattn/go-runewidth"
 )
@@ -206,6 +207,10 @@ func (v *View) gotoPreviousMatch() error {
 	return v.SelectSearchResult(v.searcher.currentSearchIndex)
 }
 
+func (v *View) SelectCurrentSearchResult() error {
+	return v.SelectSearchResult(v.searcher.currentSearchIndex)
+}
+
 func (v *View) SelectSearchResult(index int) error {
 	itemCount := len(v.searcher.searchPositions)
 	if itemCount == 0 {
@@ -264,7 +269,7 @@ func (v *View) FocusPoint(cx int, cy int) {
 	_, height := v.Size()
 
 	ly := height - 1
-	if ly == -1 {
+	if ly < 0 {
 		ly = 0
 	}
 
@@ -1460,4 +1465,39 @@ func (v *View) scrollMargin() int {
 	} else {
 		return 0
 	}
+}
+
+// Returns true if the view contains a line containing the given text with the given
+// foreground color
+func (v *View) ContainsColoredText(fgColor string, text string) bool {
+	for _, line := range v.lines {
+		if containsColoredTextInLine(fgColor, text, line) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func containsColoredTextInLine(fgColorStr string, text string, line []cell) bool {
+	fgColor := tcell.GetColor(fgColorStr)
+
+	currentMatch := ""
+	for i := 0; i < len(line); i++ {
+		cell := line[i]
+
+		// stripping attributes by converting to and from hex
+		cellColor := tcell.NewHexColor(cell.fgColor.Hex())
+
+		if cellColor == fgColor {
+			currentMatch += string(cell.chr)
+		} else if currentMatch != "" {
+			if strings.Contains(currentMatch, text) {
+				return true
+			}
+			currentMatch = ""
+		}
+	}
+
+	return strings.Contains(currentMatch, text)
 }

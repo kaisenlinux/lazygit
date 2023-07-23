@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"github.com/jesseduffield/gocui"
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
 	"github.com/jesseduffield/lazygit/pkg/gui/context"
 	"github.com/jesseduffield/lazygit/pkg/gui/filetree"
@@ -12,17 +13,17 @@ import (
 
 type FilesRemoveController struct {
 	baseController
-	*controllerCommon
+	c *ControllerCommon
 }
 
 var _ types.IController = &FilesRemoveController{}
 
 func NewFilesRemoveController(
-	common *controllerCommon,
+	common *ControllerCommon,
 ) *FilesRemoveController {
 	return &FilesRemoveController{
-		baseController:   baseController{},
-		controllerCommon: common,
+		baseController: baseController{},
+		c:              common,
 	}
 }
 
@@ -31,7 +32,7 @@ func (self *FilesRemoveController) GetKeybindings(opts types.KeybindingsOpts) []
 		{
 			Key:         opts.GetKey(opts.Config.Universal.Remove),
 			Handler:     self.checkSelectedFileNode(self.remove),
-			Description: self.c.Tr.LcViewDiscardOptions,
+			Description: self.c.Tr.ViewDiscardOptions,
 			OpensMenu:   true,
 		},
 	}
@@ -44,10 +45,10 @@ func (self *FilesRemoveController) remove(node *filetree.FileNode) error {
 	if node.File == nil {
 		menuItems = []*types.MenuItem{
 			{
-				Label: self.c.Tr.LcDiscardAllChanges,
+				Label: self.c.Tr.DiscardAllChanges,
 				OnPress: func() error {
 					self.c.LogAction(self.c.Tr.Actions.DiscardAllChangesInDirectory)
-					if err := self.git.WorkingTree.DiscardAllDirChanges(node); err != nil {
+					if err := self.c.Git().WorkingTree.DiscardAllDirChanges(node); err != nil {
 						return self.c.Error(err)
 					}
 					return self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC, Scope: []types.RefreshableView{types.FILES}})
@@ -64,10 +65,10 @@ func (self *FilesRemoveController) remove(node *filetree.FileNode) error {
 
 		if node.GetHasStagedChanges() && node.GetHasUnstagedChanges() {
 			menuItems = append(menuItems, &types.MenuItem{
-				Label: self.c.Tr.LcDiscardUnstagedChanges,
+				Label: self.c.Tr.DiscardUnstagedChanges,
 				OnPress: func() error {
 					self.c.LogAction(self.c.Tr.Actions.DiscardUnstagedChangesInDirectory)
-					if err := self.git.WorkingTree.DiscardUnstagedDirChanges(node); err != nil {
+					if err := self.c.Git().WorkingTree.DiscardUnstagedDirChanges(node); err != nil {
 						return self.c.Error(err)
 					}
 
@@ -85,13 +86,13 @@ func (self *FilesRemoveController) remove(node *filetree.FileNode) error {
 	} else {
 		file := node.File
 
-		submodules := self.model.Submodules
+		submodules := self.c.Model().Submodules
 		if file.IsSubmodule(submodules) {
 			submodule := file.SubmoduleConfig(submodules)
 
 			menuItems = []*types.MenuItem{
 				{
-					Label: self.c.Tr.LcSubmoduleStashAndReset,
+					Label: self.c.Tr.SubmoduleStashAndReset,
 					OnPress: func() error {
 						return self.ResetSubmodule(submodule)
 					},
@@ -100,10 +101,10 @@ func (self *FilesRemoveController) remove(node *filetree.FileNode) error {
 		} else {
 			menuItems = []*types.MenuItem{
 				{
-					Label: self.c.Tr.LcDiscardAllChanges,
+					Label: self.c.Tr.DiscardAllChanges,
 					OnPress: func() error {
 						self.c.LogAction(self.c.Tr.Actions.DiscardAllChangesInFile)
-						if err := self.git.WorkingTree.DiscardAllFileChanges(file); err != nil {
+						if err := self.c.Git().WorkingTree.DiscardAllFileChanges(file); err != nil {
 							return self.c.Error(err)
 						}
 						return self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC, Scope: []types.RefreshableView{types.FILES}})
@@ -120,10 +121,10 @@ func (self *FilesRemoveController) remove(node *filetree.FileNode) error {
 
 			if file.HasStagedChanges && file.HasUnstagedChanges {
 				menuItems = append(menuItems, &types.MenuItem{
-					Label: self.c.Tr.LcDiscardUnstagedChanges,
+					Label: self.c.Tr.DiscardUnstagedChanges,
 					OnPress: func() error {
 						self.c.LogAction(self.c.Tr.Actions.DiscardAllUnstagedChangesInFile)
-						if err := self.git.WorkingTree.DiscardUnstagedFileChanges(file); err != nil {
+						if err := self.c.Git().WorkingTree.DiscardUnstagedFileChanges(file); err != nil {
 							return self.c.Error(err)
 						}
 
@@ -145,20 +146,20 @@ func (self *FilesRemoveController) remove(node *filetree.FileNode) error {
 }
 
 func (self *FilesRemoveController) ResetSubmodule(submodule *models.SubmoduleConfig) error {
-	return self.c.WithWaitingStatus(self.c.Tr.LcResettingSubmoduleStatus, func() error {
+	return self.c.WithWaitingStatus(self.c.Tr.ResettingSubmoduleStatus, func(gocui.Task) error {
 		self.c.LogAction(self.c.Tr.Actions.ResetSubmodule)
 
-		file := self.helpers.WorkingTree.FileForSubmodule(submodule)
+		file := self.c.Helpers().WorkingTree.FileForSubmodule(submodule)
 		if file != nil {
-			if err := self.git.WorkingTree.UnStageFile(file.Names(), file.Tracked); err != nil {
+			if err := self.c.Git().WorkingTree.UnStageFile(file.Names(), file.Tracked); err != nil {
 				return self.c.Error(err)
 			}
 		}
 
-		if err := self.git.Submodule.Stash(submodule); err != nil {
+		if err := self.c.Git().Submodule.Stash(submodule); err != nil {
 			return self.c.Error(err)
 		}
-		if err := self.git.Submodule.Reset(submodule); err != nil {
+		if err := self.c.Git().Submodule.Reset(submodule); err != nil {
 			return self.c.Error(err)
 		}
 
@@ -182,5 +183,5 @@ func (self *FilesRemoveController) Context() types.Context {
 }
 
 func (self *FilesRemoveController) context() *context.WorkingTreeContext {
-	return self.contexts.Files
+	return self.c.Contexts().Files
 }

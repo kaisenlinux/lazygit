@@ -7,7 +7,7 @@ import (
 
 var Reset = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Enter a submodule, create a commit and stage some changes, then reset the submodule from back in the parent repo. This test captures functionality around getting a dirty submodule out of your files panel.",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig: func(cfg *config.AppConfig) {
 		cfg.UserConfig.CustomCommands = []config.CustomCommand{
@@ -71,7 +71,7 @@ var Reset = NewIntegrationTest(NewIntegrationTestArgs{
 			).
 			Press(keys.Universal.Remove).
 			Tap(func() {
-				t.ExpectPopup().Menu().Title(Equals("my_submodule")).Select(Contains("stash uncommitted submodule changes and update")).Confirm()
+				t.ExpectPopup().Menu().Title(Equals("my_submodule")).Select(Contains("Stash uncommitted submodule changes and update")).Confirm()
 			}).
 			IsEmpty()
 

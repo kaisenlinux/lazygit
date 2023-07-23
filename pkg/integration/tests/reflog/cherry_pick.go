@@ -7,7 +7,7 @@ import (
 
 var CherryPick = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Cherry pick a reflog commit",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -38,7 +38,7 @@ var CherryPick = NewIntegrationTest(NewIntegrationTestArgs{
 			Press(keys.Commits.PasteCommits).
 			Tap(func() {
 				t.ExpectPopup().Alert().
-					Title(Equals("Cherry-Pick")).
+					Title(Equals("Cherry-pick")).
 					Content(Contains("Are you sure you want to cherry-pick the copied commits onto this branch?")).
 					Confirm()
 			}).

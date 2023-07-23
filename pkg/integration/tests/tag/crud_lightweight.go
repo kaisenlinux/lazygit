@@ -7,7 +7,7 @@ import (
 
 var CrudLightweight = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Create and delete a lightweight tag in the tags panel",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -21,7 +21,7 @@ var CrudLightweight = NewIntegrationTest(NewIntegrationTestArgs{
 			Tap(func() {
 				t.ExpectPopup().Menu().
 					Title(Equals("Create tag")).
-					Select(Contains("lightweight")).
+					Select(Contains("Lightweight")).
 					Confirm()
 
 				t.ExpectPopup().Prompt().

@@ -7,7 +7,7 @@ import (
 
 var RemoteNamedStar = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Having a config remote.*",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupRepo: func(shell *Shell) {
 		shell.
@@ -19,8 +19,8 @@ var RemoteNamedStar = NewIntegrationTest(NewIntegrationTestArgs{
 		// here we're just asserting that we haven't panicked upon starting lazygit
 		t.Views().Commits().
 			Lines(
-				Anything(),
-				Anything(),
+				AnyString(),
+				AnyString(),
 			)
 	},
 })

@@ -7,7 +7,7 @@ import (
 
 var DiscardStagedChanges = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Discarding staged changes",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig: func(config *config.AppConfig) {
 	},
@@ -37,7 +37,7 @@ var DiscardStagedChanges = NewIntegrationTest(NewIntegrationTestArgs{
 			).
 			Press(keys.Files.ViewResetOptions)
 
-		t.ExpectPopup().Menu().Title(Equals("")).Select(Contains("discard staged changes")).Confirm()
+		t.ExpectPopup().Menu().Title(Equals("")).Select(Contains("Discard staged changes")).Confirm()
 
 		// staged file has been removed
 		t.Views().Files().

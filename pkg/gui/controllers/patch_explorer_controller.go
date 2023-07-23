@@ -6,26 +6,26 @@ import (
 )
 
 type PatchExplorerControllerFactory struct {
-	*controllerCommon
+	c *ControllerCommon
 }
 
-func NewPatchExplorerControllerFactory(c *controllerCommon) *PatchExplorerControllerFactory {
+func NewPatchExplorerControllerFactory(c *ControllerCommon) *PatchExplorerControllerFactory {
 	return &PatchExplorerControllerFactory{
-		controllerCommon: c,
+		c: c,
 	}
 }
 
 func (self *PatchExplorerControllerFactory) Create(context types.IPatchExplorerContext) *PatchExplorerController {
 	return &PatchExplorerController{
-		baseController:   baseController{},
-		controllerCommon: self.controllerCommon,
-		context:          context,
+		baseController: baseController{},
+		c:              self.c,
+		context:        context,
 	}
 }
 
 type PatchExplorerController struct {
 	baseController
-	*controllerCommon
+	c *ControllerCommon
 
 	context types.IPatchExplorerContext
 }
@@ -93,24 +93,24 @@ func (self *PatchExplorerController) GetKeybindings(opts types.KeybindingsOpts) 
 			Tag:         "navigation",
 			Key:         opts.GetKey(opts.Config.Universal.PrevPage),
 			Handler:     self.withRenderAndFocus(self.HandlePrevPage),
-			Description: self.c.Tr.LcPrevPage,
+			Description: self.c.Tr.PrevPage,
 		},
 		{
 			Tag:         "navigation",
 			Key:         opts.GetKey(opts.Config.Universal.NextPage),
 			Handler:     self.withRenderAndFocus(self.HandleNextPage),
-			Description: self.c.Tr.LcNextPage,
+			Description: self.c.Tr.NextPage,
 		},
 		{
 			Tag:         "navigation",
 			Key:         opts.GetKey(opts.Config.Universal.GotoTop),
 			Handler:     self.withRenderAndFocus(self.HandleGotoTop),
-			Description: self.c.Tr.LcGotoTop,
+			Description: self.c.Tr.GotoTop,
 		},
 		{
 			Tag:         "navigation",
 			Key:         opts.GetKey(opts.Config.Universal.GotoBottom),
-			Description: self.c.Tr.LcGotoBottom,
+			Description: self.c.Tr.GotoBottom,
 			Handler:     self.withRenderAndFocus(self.HandleGotoBottom),
 		},
 		{
@@ -124,15 +124,9 @@ func (self *PatchExplorerController) GetKeybindings(opts types.KeybindingsOpts) 
 			Handler: self.withRenderAndFocus(self.HandleScrollRight),
 		},
 		{
-			Tag:         "navigation",
-			Key:         opts.GetKey(opts.Config.Universal.StartSearch),
-			Handler:     func() error { self.c.OpenSearch(); return nil },
-			Description: self.c.Tr.LcStartSearch,
-		},
-		{
 			Key:         opts.GetKey(opts.Config.Universal.CopyToClipboard),
 			Handler:     self.withLock(self.CopySelectedToClipboard),
-			Description: self.c.Tr.LcCopySelectedTexToClipboard,
+			Description: self.c.Tr.CopySelectedTexToClipboard,
 		},
 	}
 }
@@ -254,7 +248,7 @@ func (self *PatchExplorerController) CopySelectedToClipboard() error {
 	selected := self.context.GetState().PlainRenderSelected()
 
 	self.c.LogAction(self.c.Tr.Actions.CopySelectedTextToClipboard)
-	if err := self.os.CopyToClipboard(selected); err != nil {
+	if err := self.c.OS().CopyToClipboard(selected); err != nil {
 		return self.c.Error(err)
 	}
 

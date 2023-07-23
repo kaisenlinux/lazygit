@@ -1,9 +1,8 @@
 package git_commands
 
 import (
-	"fmt"
-
 	"github.com/go-errors/errors"
+	"github.com/jesseduffield/gocui"
 	"github.com/jesseduffield/lazygit/pkg/commands/oscommands"
 )
 
@@ -25,34 +24,24 @@ type PushOpts struct {
 	SetUpstream    bool
 }
 
-func (self *SyncCommands) PushCmdObj(opts PushOpts) (oscommands.ICmdObj, error) {
-	cmdStr := "git push"
-
-	if opts.Force {
-		cmdStr += " --force-with-lease"
+func (self *SyncCommands) PushCmdObj(task gocui.Task, opts PushOpts) (oscommands.ICmdObj, error) {
+	if opts.UpstreamBranch != "" && opts.UpstreamRemote == "" {
+		return nil, errors.New(self.Tr.MustSpecifyOriginError)
 	}
 
-	if opts.SetUpstream {
-		cmdStr += " --set-upstream"
-	}
+	cmdArgs := NewGitCmd("push").
+		ArgIf(opts.Force, "--force-with-lease").
+		ArgIf(opts.SetUpstream, "--set-upstream").
+		ArgIf(opts.UpstreamRemote != "", opts.UpstreamRemote).
+		ArgIf(opts.UpstreamBranch != "", opts.UpstreamBranch).
+		ToArgv()
 
-	if opts.UpstreamRemote != "" {
-		cmdStr += " " + self.cmd.Quote(opts.UpstreamRemote)
-	}
-
-	if opts.UpstreamBranch != "" {
-		if opts.UpstreamRemote == "" {
-			return nil, errors.New(self.Tr.MustSpecifyOriginError)
-		}
-		cmdStr += " " + self.cmd.Quote(opts.UpstreamBranch)
-	}
-
-	cmdObj := self.cmd.New(cmdStr).PromptOnCredentialRequest().WithMutex(self.syncMutex)
+	cmdObj := self.cmd.New(cmdArgs).PromptOnCredentialRequest(task).WithMutex(self.syncMutex)
 	return cmdObj, nil
 }
 
-func (self *SyncCommands) Push(opts PushOpts) error {
-	cmdObj, err := self.PushCmdObj(opts)
+func (self *SyncCommands) Push(task gocui.Task, opts PushOpts) error {
+	cmdObj, err := self.PushCmdObj(task, opts)
 	if err != nil {
 		return err
 	}
@@ -60,30 +49,33 @@ func (self *SyncCommands) Push(opts PushOpts) error {
 	return cmdObj.Run()
 }
 
-type FetchOptions struct {
-	Background bool
-	RemoteName string
-	BranchName string
+func (self *SyncCommands) FetchCmdObj(task gocui.Task) oscommands.ICmdObj {
+	cmdArgs := NewGitCmd("fetch").
+		ArgIf(self.UserConfig.Git.FetchAll, "--all").
+		ToArgv()
+
+	cmdObj := self.cmd.New(cmdArgs)
+	cmdObj.PromptOnCredentialRequest(task)
+	return cmdObj
 }
 
-// Fetch fetch git repo
-func (self *SyncCommands) Fetch(opts FetchOptions) error {
-	cmdStr := "git fetch"
+func (self *SyncCommands) Fetch(task gocui.Task) error {
+	return self.FetchCmdObj(task).Run()
+}
 
-	if opts.RemoteName != "" {
-		cmdStr = fmt.Sprintf("%s %s", cmdStr, self.cmd.Quote(opts.RemoteName))
-	}
-	if opts.BranchName != "" {
-		cmdStr = fmt.Sprintf("%s %s", cmdStr, self.cmd.Quote(opts.BranchName))
-	}
+func (self *SyncCommands) FetchBackgroundCmdObj() oscommands.ICmdObj {
+	cmdArgs := NewGitCmd("fetch").
+		ArgIf(self.UserConfig.Git.FetchAll, "--all").
+		ToArgv()
 
-	cmdObj := self.cmd.New(cmdStr)
-	if opts.Background {
-		cmdObj.DontLog().FailOnCredentialRequest()
-	} else {
-		cmdObj.PromptOnCredentialRequest()
-	}
-	return cmdObj.WithMutex(self.syncMutex).Run()
+	cmdObj := self.cmd.New(cmdArgs)
+	cmdObj.DontLog().FailOnCredentialRequest()
+	cmdObj.WithMutex(self.syncMutex)
+	return cmdObj
+}
+
+func (self *SyncCommands) FetchBackground() error {
+	return self.FetchBackgroundCmdObj().Run()
 }
 
 type PullOptions struct {
@@ -92,31 +84,32 @@ type PullOptions struct {
 	FastForwardOnly bool
 }
 
-func (self *SyncCommands) Pull(opts PullOptions) error {
-	cmdStr := "git pull --no-edit"
-
-	if opts.FastForwardOnly {
-		cmdStr += " --ff-only"
-	}
-
-	if opts.RemoteName != "" {
-		cmdStr = fmt.Sprintf("%s %s", cmdStr, self.cmd.Quote(opts.RemoteName))
-	}
-	if opts.BranchName != "" {
-		cmdStr = fmt.Sprintf("%s %s", cmdStr, self.cmd.Quote(opts.BranchName))
-	}
+func (self *SyncCommands) Pull(task gocui.Task, opts PullOptions) error {
+	cmdArgs := NewGitCmd("pull").
+		Arg("--no-edit").
+		ArgIf(opts.FastForwardOnly, "--ff-only").
+		ArgIf(opts.RemoteName != "", opts.RemoteName).
+		ArgIf(opts.BranchName != "", opts.BranchName).
+		ToArgv()
 
 	// setting GIT_SEQUENCE_EDITOR to ':' as a way of skipping it, in case the user
 	// has 'pull.rebase = interactive' configured.
-	return self.cmd.New(cmdStr).AddEnvVars("GIT_SEQUENCE_EDITOR=:").PromptOnCredentialRequest().WithMutex(self.syncMutex).Run()
+	return self.cmd.New(cmdArgs).AddEnvVars("GIT_SEQUENCE_EDITOR=:").PromptOnCredentialRequest(task).WithMutex(self.syncMutex).Run()
 }
 
-func (self *SyncCommands) FastForward(branchName string, remoteName string, remoteBranchName string) error {
-	cmdStr := fmt.Sprintf("git fetch %s %s:%s", self.cmd.Quote(remoteName), self.cmd.Quote(remoteBranchName), self.cmd.Quote(branchName))
-	return self.cmd.New(cmdStr).PromptOnCredentialRequest().WithMutex(self.syncMutex).Run()
+func (self *SyncCommands) FastForward(task gocui.Task, branchName string, remoteName string, remoteBranchName string) error {
+	cmdArgs := NewGitCmd("fetch").
+		Arg(remoteName).
+		Arg(remoteBranchName + ":" + branchName).
+		ToArgv()
+
+	return self.cmd.New(cmdArgs).PromptOnCredentialRequest(task).WithMutex(self.syncMutex).Run()
 }
 
-func (self *SyncCommands) FetchRemote(remoteName string) error {
-	cmdStr := fmt.Sprintf("git fetch %s", self.cmd.Quote(remoteName))
-	return self.cmd.New(cmdStr).PromptOnCredentialRequest().WithMutex(self.syncMutex).Run()
+func (self *SyncCommands) FetchRemote(task gocui.Task, remoteName string) error {
+	cmdArgs := NewGitCmd("fetch").
+		Arg(remoteName).
+		ToArgv()
+
+	return self.cmd.New(cmdArgs).PromptOnCredentialRequest(task).WithMutex(self.syncMutex).Run()
 }

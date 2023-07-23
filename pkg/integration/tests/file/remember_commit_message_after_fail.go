@@ -14,13 +14,13 @@ fi
 
 var RememberCommitMessageAfterFail = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Verify that the commit message is remembered after a failed attempt at committing",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig: func(config *config.AppConfig) {
 	},
 	SetupRepo: func(shell *Shell) {
 		shell.CreateFile(".git/hooks/pre-commit", preCommitHook)
-		shell.RunCommand("chmod +x .git/hooks/pre-commit")
+		shell.MakeExecutable(".git/hooks/pre-commit")
 
 		shell.CreateFileAndAdd("one", "one")
 
@@ -42,7 +42,7 @@ var RememberCommitMessageAfterFail = NewIntegrationTest(NewIntegrationTestArgs{
 			}).
 			Press(keys.Universal.Remove). // remove file that triggers pre-commit hook to fail
 			Tap(func() {
-				t.ExpectPopup().Menu().Title(Equals("bad")).Select(Contains("discard all changes")).Confirm()
+				t.ExpectPopup().Menu().Title(Equals("bad")).Select(Contains("Discard all changes")).Confirm()
 			}).
 			Lines(
 				Contains("one"),

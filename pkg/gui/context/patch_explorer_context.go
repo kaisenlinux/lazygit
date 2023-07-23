@@ -9,11 +9,12 @@ import (
 
 type PatchExplorerContext struct {
 	*SimpleContext
+	*SearchTrait
 
 	state                  *patch_exploring.State
 	viewTrait              *ViewTrait
 	getIncludedLineIndices func() []int
-	c                      *types.HelperCommon
+	c                      *ContextCommon
 	mutex                  *deadlock.Mutex
 }
 
@@ -24,13 +25,11 @@ func NewPatchExplorerContext(
 	windowName string,
 	key types.ContextKey,
 
-	onFocus func(types.OnFocusOpts) error,
-	onFocusLost func(opts types.OnFocusLostOpts) error,
 	getIncludedLineIndices func() []int,
 
-	c *types.HelperCommon,
+	c *ContextCommon,
 ) *PatchExplorerContext {
-	return &PatchExplorerContext{
+	ctx := &PatchExplorerContext{
 		state:                  nil,
 		viewTrait:              NewViewTrait(view),
 		c:                      c,
@@ -43,12 +42,22 @@ func NewPatchExplorerContext(
 			Kind:             types.MAIN_CONTEXT,
 			Focusable:        true,
 			HighlightOnFocus: true,
-		}), ContextCallbackOpts{
-			OnFocus:     onFocus,
-			OnFocusLost: onFocusLost,
-		}),
+		})),
+		SearchTrait: NewSearchTrait(c),
 	}
+
+	ctx.GetView().SetOnSelectItem(ctx.SearchTrait.onSelectItemWrapper(
+		func(selectedLineIdx int) error {
+			ctx.GetMutex().Lock()
+			defer ctx.GetMutex().Unlock()
+			return ctx.NavigateTo(ctx.c.IsCurrentContext(ctx), selectedLineIdx)
+		}),
+	)
+
+	return ctx
 }
+
+func (self *PatchExplorerContext) IsPatchExplorerContext() {}
 
 func (self *PatchExplorerContext) GetState() *patch_exploring.State {
 	return self.state

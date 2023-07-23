@@ -7,7 +7,7 @@ import (
 
 var SquashFixupsAboveFirstCommit = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Squashes all fixups above the first (initial) commit.",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -30,7 +30,7 @@ var SquashFixupsAboveFirstCommit = NewIntegrationTest(NewIntegrationTestArgs{
 					Content(Contains("Are you sure you want to create a fixup! commit for commit")).
 					Confirm()
 			}).
-			NavigateToLine(Contains("commit 01")).
+			NavigateToLine(Contains("commit 01").DoesNotContain("fixup!")).
 			Press(keys.Commits.SquashAboveCommits).
 			Tap(func() {
 				t.ExpectPopup().Confirmation().

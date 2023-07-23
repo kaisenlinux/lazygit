@@ -11,17 +11,17 @@ import (
 
 type CommitFilesController struct {
 	baseController
-	*controllerCommon
+	c *ControllerCommon
 }
 
 var _ types.IController = &CommitFilesController{}
 
 func NewCommitFilesController(
-	common *controllerCommon,
+	common *ControllerCommon,
 ) *CommitFilesController {
 	return &CommitFilesController{
-		baseController:   baseController{},
-		controllerCommon: common,
+		baseController: baseController{},
+		c:              common,
 	}
 }
 
@@ -30,42 +30,42 @@ func (self *CommitFilesController) GetKeybindings(opts types.KeybindingsOpts) []
 		{
 			Key:         opts.GetKey(opts.Config.CommitFiles.CheckoutCommitFile),
 			Handler:     self.checkSelected(self.checkout),
-			Description: self.c.Tr.LcCheckoutCommitFile,
+			Description: self.c.Tr.CheckoutCommitFile,
 		},
 		{
 			Key:         opts.GetKey(opts.Config.Universal.Remove),
 			Handler:     self.checkSelected(self.discard),
-			Description: self.c.Tr.LcDiscardOldFileChange,
+			Description: self.c.Tr.DiscardOldFileChange,
 		},
 		{
 			Key:         opts.GetKey(opts.Config.Universal.OpenFile),
 			Handler:     self.checkSelected(self.open),
-			Description: self.c.Tr.LcOpenFile,
+			Description: self.c.Tr.OpenFile,
 		},
 		{
 			Key:         opts.GetKey(opts.Config.Universal.Edit),
 			Handler:     self.checkSelected(self.edit),
-			Description: self.c.Tr.LcEditFile,
+			Description: self.c.Tr.EditFile,
 		},
 		{
 			Key:         opts.GetKey(opts.Config.Universal.Select),
 			Handler:     self.checkSelected(self.toggleForPatch),
-			Description: self.c.Tr.LcToggleAddToPatch,
+			Description: self.c.Tr.ToggleAddToPatch,
 		},
 		{
 			Key:         opts.GetKey(opts.Config.Files.ToggleStagedAll),
 			Handler:     self.checkSelected(self.toggleAllForPatch),
-			Description: self.c.Tr.LcToggleAllInPatch,
+			Description: self.c.Tr.ToggleAllInPatch,
 		},
 		{
 			Key:         opts.GetKey(opts.Config.Universal.GoInto),
 			Handler:     self.checkSelected(self.enter),
-			Description: self.c.Tr.LcEnterFile,
+			Description: self.c.Tr.EnterFile,
 		},
 		{
 			Key:         opts.GetKey(opts.Config.Files.ToggleTreeView),
 			Handler:     self.toggleTreeView,
-			Description: self.c.Tr.LcToggleTreeView,
+			Description: self.c.Tr.ToggleTreeView,
 		},
 	}
 
@@ -99,7 +99,40 @@ func (self *CommitFilesController) Context() types.Context {
 }
 
 func (self *CommitFilesController) context() *context.CommitFilesContext {
-	return self.contexts.CommitFiles
+	return self.c.Contexts().CommitFiles
+}
+
+func (self *CommitFilesController) GetOnRenderToMain() func() error {
+	return func() error {
+		node := self.context().GetSelected()
+		if node == nil {
+			return nil
+		}
+
+		ref := self.context().GetRef()
+		to := ref.RefName()
+		from, reverse := self.c.Modes().Diffing.GetFromAndReverseArgsForDiff(ref.ParentRefName())
+
+		cmdObj := self.c.Git().WorkingTree.ShowFileDiffCmdObj(
+			from, to, reverse, node.GetPath(), false, self.c.State().GetIgnoreWhitespaceInDiffView(),
+		)
+		task := types.NewRunPtyTask(cmdObj.GetCmd())
+
+		pair := self.c.MainViewPairs().Normal
+		if node.File != nil {
+			pair = self.c.MainViewPairs().PatchBuilding
+		}
+
+		return self.c.RenderToMainViews(types.RefreshMainOpts{
+			Pair: pair,
+			Main: &types.ViewUpdateOpts{
+				Title:    self.c.Tr.Patch,
+				SubTitle: self.c.Helpers().Diff.IgnoringWhitespaceSubTitle(),
+				Task:     task,
+			},
+			Secondary: secondaryPatchPanelUpdateOpts(self.c),
+		})
+	}
 }
 
 func (self *CommitFilesController) onClickMain(opts gocui.ViewMouseBindingOpts) error {
@@ -112,7 +145,7 @@ func (self *CommitFilesController) onClickMain(opts gocui.ViewMouseBindingOpts) 
 
 func (self *CommitFilesController) checkout(node *filetree.CommitFileNode) error {
 	self.c.LogAction(self.c.Tr.Actions.CheckoutFile)
-	if err := self.git.WorkingTree.CheckoutFile(self.context().GetRef().RefName(), node.GetPath()); err != nil {
+	if err := self.c.Git().WorkingTree.CheckoutFile(self.context().GetRef().RefName(), node.GetPath()); err != nil {
 		return self.c.Error(err)
 	}
 
@@ -120,18 +153,34 @@ func (self *CommitFilesController) checkout(node *filetree.CommitFileNode) error
 }
 
 func (self *CommitFilesController) discard(node *filetree.CommitFileNode) error {
-	if ok, err := self.helpers.PatchBuilding.ValidateNormalWorkingTreeState(); !ok {
+	parentContext, ok := self.c.CurrentContext().GetParentContext()
+	if !ok || parentContext.GetKey() != context.LOCAL_COMMITS_CONTEXT_KEY {
+		return self.c.ErrorMsg(self.c.Tr.CanOnlyDiscardFromLocalCommits)
+	}
+
+	if node.File == nil {
+		return self.c.ErrorMsg(self.c.Tr.DiscardNotSupportedForDirectory)
+	}
+
+	if ok, err := self.c.Helpers().PatchBuilding.ValidateNormalWorkingTreeState(); !ok {
 		return err
+	}
+
+	prompt := self.c.Tr.DiscardFileChangesPrompt
+	if node.File.Added() {
+		prompt = self.c.Tr.DiscardAddedFileChangesPrompt
+	} else if node.File.Deleted() {
+		prompt = self.c.Tr.DiscardDeletedFileChangesPrompt
 	}
 
 	return self.c.Confirm(types.ConfirmOpts{
 		Title:  self.c.Tr.DiscardFileChangesTitle,
-		Prompt: self.c.Tr.DiscardFileChangesPrompt,
+		Prompt: prompt,
 		HandleConfirm: func() error {
-			return self.c.WithWaitingStatus(self.c.Tr.RebasingStatus, func() error {
+			return self.c.WithWaitingStatus(self.c.Tr.RebasingStatus, func(gocui.Task) error {
 				self.c.LogAction(self.c.Tr.Actions.DiscardOldFileChange)
-				if err := self.git.Rebase.DiscardOldFileChanges(self.model.Commits, self.contexts.LocalCommits.GetSelectedLineIdx(), node.GetPath()); err != nil {
-					if err := self.helpers.MergeAndRebase.CheckMergeOrRebase(err); err != nil {
+				if err := self.c.Git().Rebase.DiscardOldFileChanges(self.c.Model().Commits, self.c.Contexts().LocalCommits.GetSelectedLineIdx(), node.GetPath()); err != nil {
+					if err := self.c.Helpers().MergeAndRebase.CheckMergeOrRebase(err); err != nil {
 						return err
 					}
 				}
@@ -143,7 +192,7 @@ func (self *CommitFilesController) discard(node *filetree.CommitFileNode) error 
 }
 
 func (self *CommitFilesController) open(node *filetree.CommitFileNode) error {
-	return self.helpers.Files.OpenFile(node.GetPath())
+	return self.c.Helpers().Files.OpenFile(node.GetPath())
 }
 
 func (self *CommitFilesController) edit(node *filetree.CommitFileNode) error {
@@ -151,13 +200,13 @@ func (self *CommitFilesController) edit(node *filetree.CommitFileNode) error {
 		return self.c.ErrorMsg(self.c.Tr.ErrCannotEditDirectory)
 	}
 
-	return self.helpers.Files.EditFile(node.GetPath())
+	return self.c.Helpers().Files.EditFile(node.GetPath())
 }
 
 func (self *CommitFilesController) toggleForPatch(node *filetree.CommitFileNode) error {
 	toggle := func() error {
-		return self.c.WithWaitingStatus(self.c.Tr.LcUpdatingPatch, func() error {
-			if !self.git.Patch.PatchBuilder.Active() {
+		return self.c.WithWaitingStatus(self.c.Tr.UpdatingPatch, func(gocui.Task) error {
+			if !self.c.Git().Patch.PatchBuilder.Active() {
 				if err := self.startPatchBuilder(); err != nil {
 					return err
 				}
@@ -166,34 +215,34 @@ func (self *CommitFilesController) toggleForPatch(node *filetree.CommitFileNode)
 			// if there is any file that hasn't been fully added we'll fully add everything,
 			// otherwise we'll remove everything
 			adding := node.SomeFile(func(file *models.CommitFile) bool {
-				return self.git.Patch.PatchBuilder.GetFileStatus(file.Name, self.context().GetRef().RefName()) != patch.WHOLE
+				return self.c.Git().Patch.PatchBuilder.GetFileStatus(file.Name, self.context().GetRef().RefName()) != patch.WHOLE
 			})
 
 			err := node.ForEachFile(func(file *models.CommitFile) error {
 				if adding {
-					return self.git.Patch.PatchBuilder.AddFileWhole(file.Name)
+					return self.c.Git().Patch.PatchBuilder.AddFileWhole(file.Name)
 				} else {
-					return self.git.Patch.PatchBuilder.RemoveFile(file.Name)
+					return self.c.Git().Patch.PatchBuilder.RemoveFile(file.Name)
 				}
 			})
 			if err != nil {
 				return self.c.Error(err)
 			}
 
-			if self.git.Patch.PatchBuilder.IsEmpty() {
-				self.git.Patch.PatchBuilder.Reset()
+			if self.c.Git().Patch.PatchBuilder.IsEmpty() {
+				self.c.Git().Patch.PatchBuilder.Reset()
 			}
 
 			return self.c.PostRefreshUpdate(self.context())
 		})
 	}
 
-	if self.git.Patch.PatchBuilder.Active() && self.git.Patch.PatchBuilder.To != self.context().GetRef().RefName() {
+	if self.c.Git().Patch.PatchBuilder.Active() && self.c.Git().Patch.PatchBuilder.To != self.context().GetRef().RefName() {
 		return self.c.Confirm(types.ConfirmOpts{
 			Title:  self.c.Tr.DiscardPatch,
 			Prompt: self.c.Tr.DiscardPatchConfirm,
 			HandleConfirm: func() error {
-				self.git.Patch.PatchBuilder.Reset()
+				self.c.Git().Patch.PatchBuilder.Reset()
 				return toggle()
 			},
 		})
@@ -213,9 +262,9 @@ func (self *CommitFilesController) startPatchBuilder() error {
 	canRebase := commitFilesContext.GetCanRebase()
 	ref := commitFilesContext.GetRef()
 	to := ref.RefName()
-	from, reverse := self.modes.Diffing.GetFromAndReverseArgsForDiff(ref.ParentRefName())
+	from, reverse := self.c.Modes().Diffing.GetFromAndReverseArgsForDiff(ref.ParentRefName())
 
-	self.git.Patch.PatchBuilder.Start(from, to, reverse, canRebase)
+	self.c.Git().Patch.PatchBuilder.Start(from, to, reverse, canRebase)
 	return nil
 }
 
@@ -229,21 +278,21 @@ func (self *CommitFilesController) enterCommitFile(node *filetree.CommitFileNode
 	}
 
 	enterTheFile := func() error {
-		if !self.git.Patch.PatchBuilder.Active() {
+		if !self.c.Git().Patch.PatchBuilder.Active() {
 			if err := self.startPatchBuilder(); err != nil {
 				return err
 			}
 		}
 
-		return self.c.PushContext(self.contexts.CustomPatchBuilder, opts)
+		return self.c.PushContext(self.c.Contexts().CustomPatchBuilder, opts)
 	}
 
-	if self.git.Patch.PatchBuilder.Active() && self.git.Patch.PatchBuilder.To != self.context().GetRef().RefName() {
+	if self.c.Git().Patch.PatchBuilder.Active() && self.c.Git().Patch.PatchBuilder.To != self.context().GetRef().RefName() {
 		return self.c.Confirm(types.ConfirmOpts{
 			Title:  self.c.Tr.DiscardPatch,
 			Prompt: self.c.Tr.DiscardPatchConfirm,
 			HandleConfirm: func() error {
-				self.git.Patch.PatchBuilder.Reset()
+				self.c.Git().Patch.PatchBuilder.Reset()
 				return enterTheFile()
 			},
 		})

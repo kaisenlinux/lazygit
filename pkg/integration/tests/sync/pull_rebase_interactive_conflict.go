@@ -7,7 +7,7 @@ import (
 
 var PullRebaseInteractiveConflict = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Pull with an interactive rebase strategy, where a conflict occurs",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -15,7 +15,8 @@ var PullRebaseInteractiveConflict = NewIntegrationTest(NewIntegrationTestArgs{
 		shell.Commit("one")
 		shell.UpdateFileAndAdd("file", "content2")
 		shell.Commit("two")
-		shell.EmptyCommit("three")
+		shell.CreateFileAndAdd("file3", "content3")
+		shell.Commit("three")
 
 		shell.CloneIntoRemote("origin")
 
@@ -24,7 +25,8 @@ var PullRebaseInteractiveConflict = NewIntegrationTest(NewIntegrationTestArgs{
 		shell.HardReset("HEAD^^")
 		shell.UpdateFileAndAdd("file", "content4")
 		shell.Commit("four")
-		shell.EmptyCommit("five")
+		shell.CreateFileAndAdd("file5", "content5")
+		shell.Commit("five")
 
 		shell.SetConfig("pull.rebase", "interactive")
 	},
@@ -47,7 +49,8 @@ var PullRebaseInteractiveConflict = NewIntegrationTest(NewIntegrationTestArgs{
 		t.Views().Commits().
 			Lines(
 				Contains("pick").Contains("five"),
-				Contains("YOU ARE HERE").Contains("three"),
+				Contains("conflict").Contains("YOU ARE HERE").Contains("four"),
+				Contains("three"),
 				Contains("two"),
 				Contains("one"),
 			)

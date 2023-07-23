@@ -1,7 +1,6 @@
 package git_commands
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,13 +97,15 @@ func (self *BisectCommands) GetInfo() *BisectInfo {
 }
 
 func (self *BisectCommands) Reset() error {
-	return self.cmd.New("git bisect reset").StreamOutput().Run()
+	cmdArgs := NewGitCmd("bisect").Arg("reset").ToArgv()
+
+	return self.cmd.New(cmdArgs).StreamOutput().Run()
 }
 
 func (self *BisectCommands) Mark(ref string, term string) error {
-	return self.cmd.New(
-		fmt.Sprintf("git bisect %s %s", term, ref),
-	).
+	cmdArgs := NewGitCmd("bisect").Arg(term, ref).ToArgv()
+
+	return self.cmd.New(cmdArgs).
 		IgnoreEmptyError().
 		StreamOutput().
 		Run()
@@ -115,7 +116,9 @@ func (self *BisectCommands) Skip(ref string) error {
 }
 
 func (self *BisectCommands) Start() error {
-	return self.cmd.New("git bisect start").StreamOutput().Run()
+	cmdArgs := NewGitCmd("bisect").Arg("start").ToArgv()
+
+	return self.cmd.New(cmdArgs).StreamOutput().Run()
 }
 
 // tells us whether we've found our problem commit(s). We return a string slice of
@@ -137,7 +140,8 @@ func (self *BisectCommands) IsDone() (bool, []string, error) {
 	done := false
 	candidates := []string{}
 
-	err := self.cmd.New(fmt.Sprintf("git rev-list %s", newSha)).RunAndProcessLines(func(line string) (bool, error) {
+	cmdArgs := NewGitCmd("rev-list").Arg(newSha).ToArgv()
+	err := self.cmd.New(cmdArgs).RunAndProcessLines(func(line string) (bool, error) {
 		sha := strings.TrimSpace(line)
 
 		if status, ok := info.statusMap[sha]; ok {
@@ -167,9 +171,11 @@ func (self *BisectCommands) IsDone() (bool, []string, error) {
 // bisecting is actually a descendant of our current bisect commit. If it's not, we need to
 // render the commits from the bad commit.
 func (self *BisectCommands) ReachableFromStart(bisectInfo *BisectInfo) bool {
-	err := self.cmd.New(
-		fmt.Sprintf("git merge-base --is-ancestor %s %s", bisectInfo.GetNewSha(), bisectInfo.GetStartSha()),
-	).DontLog().Run()
+	cmdArgs := NewGitCmd("merge-base").
+		Arg("--is-ancestor", bisectInfo.GetNewSha(), bisectInfo.GetStartSha()).
+		ToArgv()
+
+	err := self.cmd.New(cmdArgs).DontLog().Run()
 
 	return err == nil
 }

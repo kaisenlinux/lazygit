@@ -32,13 +32,14 @@ type GuiConfig struct {
 	ScrollHeight                int                `yaml:"scrollHeight"`
 	ScrollPastBottom            bool               `yaml:"scrollPastBottom"`
 	MouseEvents                 bool               `yaml:"mouseEvents"`
-	SkipUnstageLineWarning      bool               `yaml:"skipUnstageLineWarning"`
+	SkipDiscardChangeWarning    bool               `yaml:"skipDiscardChangeWarning"`
 	SkipStashWarning            bool               `yaml:"skipStashWarning"`
 	SidePanelWidth              float64            `yaml:"sidePanelWidth"`
 	ExpandFocusedSidePanel      bool               `yaml:"expandFocusedSidePanel"`
 	MainPanelSplitMode          string             `yaml:"mainPanelSplitMode"`
 	Language                    string             `yaml:"language"`
 	TimeFormat                  string             `yaml:"timeFormat"`
+	ShortTimeFormat             string             `yaml:"shortTimeFormat"`
 	Theme                       ThemeConfig        `yaml:"theme"`
 	CommitLength                CommitLengthConfig `yaml:"commitLength"`
 	SkipNoStagedFilesWarning    bool               `yaml:"skipNoStagedFilesWarning"`
@@ -48,6 +49,8 @@ type GuiConfig struct {
 	ShowCommandLog              bool               `yaml:"showCommandLog"`
 	ShowBottomLine              bool               `yaml:"showBottomLine"`
 	ShowIcons                   bool               `yaml:"showIcons"`
+	NerdFontsVersion            string             `yaml:"nerdFontsVersion"`
+	ShowBranchCommitHash        bool               `yaml:"showBranchCommitHash"`
 	ExperimentalShowBranchHeads bool               `yaml:"experimentalShowBranchHeads"`
 	CommandLogSize              int                `yaml:"commandLogSize"`
 	SplitDiff                   string             `yaml:"splitDiff"`
@@ -57,15 +60,16 @@ type GuiConfig struct {
 }
 
 type ThemeConfig struct {
-	ActiveBorderColor         []string `yaml:"activeBorderColor"`
-	InactiveBorderColor       []string `yaml:"inactiveBorderColor"`
-	OptionsTextColor          []string `yaml:"optionsTextColor"`
-	SelectedLineBgColor       []string `yaml:"selectedLineBgColor"`
-	SelectedRangeBgColor      []string `yaml:"selectedRangeBgColor"`
-	CherryPickedCommitBgColor []string `yaml:"cherryPickedCommitBgColor"`
-	CherryPickedCommitFgColor []string `yaml:"cherryPickedCommitFgColor"`
-	UnstagedChangesColor      []string `yaml:"unstagedChangesColor"`
-	DefaultFgColor            []string `yaml:"defaultFgColor"`
+	ActiveBorderColor          []string `yaml:"activeBorderColor"`
+	InactiveBorderColor        []string `yaml:"inactiveBorderColor"`
+	SearchingActiveBorderColor []string `yaml:"searchingActiveBorderColor"`
+	OptionsTextColor           []string `yaml:"optionsTextColor"`
+	SelectedLineBgColor        []string `yaml:"selectedLineBgColor"`
+	SelectedRangeBgColor       []string `yaml:"selectedRangeBgColor"`
+	CherryPickedCommitBgColor  []string `yaml:"cherryPickedCommitBgColor"`
+	CherryPickedCommitFgColor  []string `yaml:"cherryPickedCommitFgColor"`
+	UnstagedChangesColor       []string `yaml:"unstagedChangesColor"`
+	DefaultFgColor             []string `yaml:"defaultFgColor"`
 }
 
 type CommitLengthConfig struct {
@@ -76,9 +80,11 @@ type GitConfig struct {
 	Paging              PagingConfig                  `yaml:"paging"`
 	Commit              CommitConfig                  `yaml:"commit"`
 	Merging             MergingConfig                 `yaml:"merging"`
+	MainBranches        []string                      `yaml:"mainBranches"`
 	SkipHookPrefix      string                        `yaml:"skipHookPrefix"`
 	AutoFetch           bool                          `yaml:"autoFetch"`
 	AutoRefresh         bool                          `yaml:"autoRefresh"`
+	FetchAll            bool                          `yaml:"fetchAll"`
 	BranchLogCmd        string                        `yaml:"branchLogCmd"`
 	AllBranchesLogCmd   string                        `yaml:"allBranchesLogCmd"`
 	OverrideGpg         bool                          `yaml:"overrideGpg"`
@@ -97,8 +103,7 @@ type PagingConfig struct {
 }
 
 type CommitConfig struct {
-	SignOff bool   `yaml:"signOff"`
-	Verbose string `yaml:"verbose"`
+	SignOff bool `yaml:"signOff"`
 }
 
 type MergingConfig struct {
@@ -343,28 +348,32 @@ type OSConfig struct {
 	OpenLinkCommand string `yaml:"openLinkCommand,omitempty"`
 }
 
+type CustomCommandAfterHook struct {
+	CheckForConflicts bool `yaml:"checkForConflicts"`
+}
+
 type CustomCommand struct {
-	Key         string                `yaml:"key"`
-	Context     string                `yaml:"context"`
-	Command     string                `yaml:"command"`
-	Subprocess  bool                  `yaml:"subprocess"`
-	Prompts     []CustomCommandPrompt `yaml:"prompts"`
-	LoadingText string                `yaml:"loadingText"`
-	Description string                `yaml:"description"`
-	Stream      bool                  `yaml:"stream"`
-	ShowOutput  bool                  `yaml:"showOutput"`
+	Key         string                 `yaml:"key"`
+	Context     string                 `yaml:"context"`
+	Command     string                 `yaml:"command"`
+	Subprocess  bool                   `yaml:"subprocess"`
+	Prompts     []CustomCommandPrompt  `yaml:"prompts"`
+	LoadingText string                 `yaml:"loadingText"`
+	Description string                 `yaml:"description"`
+	Stream      bool                   `yaml:"stream"`
+	ShowOutput  bool                   `yaml:"showOutput"`
+	After       CustomCommandAfterHook `yaml:"after"`
 }
 
 type CustomCommandPrompt struct {
-	Key string `yaml:"key"`
-
 	// one of 'input', 'menu', 'confirm', or 'menuFromCommand'
-	Type string `yaml:"type"`
-
+	Type  string `yaml:"type"`
+	Key   string `yaml:"key"`
 	Title string `yaml:"title"`
 
-	// this only apply to input prompts
-	InitialValue string `yaml:"initialValue"`
+	// these only apply to input prompts
+	InitialValue string                   `yaml:"initialValue"`
+	Suggestions  CustomCommandSuggestions `yaml:"suggestions"`
 
 	// this only applies to confirm prompts
 	Body string `yaml:"body"`
@@ -379,6 +388,11 @@ type CustomCommandPrompt struct {
 	LabelFormat string `yaml:"labelFormat"`
 }
 
+type CustomCommandSuggestions struct {
+	Preset  string `yaml:"preset"`
+	Command string `yaml:"command"`
+}
+
 type CustomCommandMenuOption struct {
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`
@@ -388,26 +402,28 @@ type CustomCommandMenuOption struct {
 func GetDefaultConfig() *UserConfig {
 	return &UserConfig{
 		Gui: GuiConfig{
-			ScrollHeight:           2,
-			ScrollPastBottom:       true,
-			MouseEvents:            true,
-			SkipUnstageLineWarning: false,
-			SkipStashWarning:       false,
-			SidePanelWidth:         0.3333,
-			ExpandFocusedSidePanel: false,
-			MainPanelSplitMode:     "flexible",
-			Language:               "auto",
-			TimeFormat:             time.RFC822,
+			ScrollHeight:             2,
+			ScrollPastBottom:         true,
+			MouseEvents:              true,
+			SkipDiscardChangeWarning: false,
+			SkipStashWarning:         false,
+			SidePanelWidth:           0.3333,
+			ExpandFocusedSidePanel:   false,
+			MainPanelSplitMode:       "flexible",
+			Language:                 "auto",
+			TimeFormat:               "02 Jan 06",
+			ShortTimeFormat:          time.Kitchen,
 			Theme: ThemeConfig{
-				ActiveBorderColor:         []string{"green", "bold"},
-				InactiveBorderColor:       []string{"default"},
-				OptionsTextColor:          []string{"blue"},
-				SelectedLineBgColor:       []string{"blue"},
-				SelectedRangeBgColor:      []string{"blue"},
-				CherryPickedCommitBgColor: []string{"cyan"},
-				CherryPickedCommitFgColor: []string{"blue"},
-				UnstagedChangesColor:      []string{"red"},
-				DefaultFgColor:            []string{"default"},
+				ActiveBorderColor:          []string{"green", "bold"},
+				SearchingActiveBorderColor: []string{"cyan", "bold"},
+				InactiveBorderColor:        []string{"default"},
+				OptionsTextColor:           []string{"blue"},
+				SelectedLineBgColor:        []string{"blue"},
+				SelectedRangeBgColor:       []string{"blue"},
+				CherryPickedCommitBgColor:  []string{"cyan"},
+				CherryPickedCommitFgColor:  []string{"blue"},
+				UnstagedChangesColor:       []string{"red"},
+				DefaultFgColor:             []string{"default"},
 			},
 			CommitLength:                CommitLengthConfig{Show: true},
 			SkipNoStagedFilesWarning:    false,
@@ -417,7 +433,9 @@ func GetDefaultConfig() *UserConfig {
 			ShowFileTree:                true,
 			ShowRandomTip:               true,
 			ShowIcons:                   false,
+			NerdFontsVersion:            "",
 			ExperimentalShowBranchHeads: false,
+			ShowBranchCommitHash:        false,
 			CommandLogSize:              8,
 			SplitDiff:                   "auto",
 			SkipRewordInEditorWarning:   false,
@@ -431,7 +449,6 @@ func GetDefaultConfig() *UserConfig {
 			},
 			Commit: CommitConfig{
 				SignOff: false,
-				Verbose: "default",
 			},
 			Merging: MergingConfig{
 				ManualCommit: false,
@@ -443,8 +460,10 @@ func GetDefaultConfig() *UserConfig {
 				ShowWholeGraph: false,
 			},
 			SkipHookPrefix:      "WIP",
+			MainBranches:        []string{"master", "main"},
 			AutoFetch:           true,
 			AutoRefresh:         true,
+			FetchAll:            true,
 			BranchLogCmd:        "git log --graph --color=always --abbrev-commit --decorate --date=relative --pretty=medium {{branchName}} --",
 			AllBranchesLogCmd:   "git log --graph --all --color=always --abbrev-commit --decorate --date=relative  --pretty=medium",
 			DisableForcePushing: false,

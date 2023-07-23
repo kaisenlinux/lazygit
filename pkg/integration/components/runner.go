@@ -95,8 +95,6 @@ func runTest(
 		return nil
 	}
 
-	logf("path: %s", paths.Root())
-
 	if err := prepareTestDir(test, paths, projectRootDir); err != nil {
 		return err
 	}
@@ -136,14 +134,14 @@ func buildLazygit() error {
 	// return nil
 
 	osCommand := oscommands.NewDummyOSCommand()
-	return osCommand.Cmd.New(fmt.Sprintf(
-		"go build -o %s pkg/integration/clients/injector/main.go", tempLazygitPath(),
-	)).Run()
+	return osCommand.Cmd.New([]string{
+		"go", "build", "-o", tempLazygitPath(), filepath.FromSlash("pkg/integration/clients/injector/main.go"),
+	}).Run()
 }
 
 func createFixture(test *IntegrationTest, paths Paths, rootDir string) error {
 	shell := NewShell(paths.ActualRepo(), func(errorMsg string) { panic(errorMsg) })
-	shell.RunCommand("git init -b master")
+	shell.Init()
 
 	os.Setenv(GIT_CONFIG_GLOBAL_ENV_VAR, globalGitConfigPath(rootDir))
 
@@ -158,7 +156,7 @@ func globalGitConfigPath(rootDir string) string {
 
 func getGitVersion() (*git_commands.GitVersion, error) {
 	osCommand := oscommands.NewDummyOSCommand()
-	cmdObj := osCommand.Cmd.New("git --version")
+	cmdObj := osCommand.Cmd.New([]string{"git", "--version"})
 	versionStr, err := cmdObj.RunWithOutput()
 	if err != nil {
 		return nil, err
@@ -180,13 +178,19 @@ func getLazygitCommand(test *IntegrationTest, paths Paths, rootDir string, sandb
 		return nil, err
 	}
 
-	cmdStr := fmt.Sprintf("%s -debug --use-config-dir=%s --path=%s %s", tempLazygitPath(), paths.Config(), paths.ActualRepo(), test.ExtraCmdArgs())
+	cmdArgs := []string{tempLazygitPath(), "-debug", "--use-config-dir=" + paths.Config(), "--path=" + paths.ActualRepo()}
+	cmdArgs = append(cmdArgs, test.ExtraCmdArgs()...)
 
-	cmdObj := osCommand.Cmd.New(cmdStr)
+	cmdObj := osCommand.Cmd.New(cmdArgs)
 
 	cmdObj.AddEnvVars(fmt.Sprintf("%s=%s", TEST_NAME_ENV_VAR, test.Name()))
 	if sandbox {
 		cmdObj.AddEnvVars(fmt.Sprintf("%s=%s", SANDBOX_ENV_VAR, "true"))
+	}
+	if test.ExtraEnvVars() != nil {
+		for key, value := range test.ExtraEnvVars() {
+			cmdObj.AddEnvVars(fmt.Sprintf("%s=%s", key, value))
+		}
 	}
 
 	if keyPressDelay > 0 {

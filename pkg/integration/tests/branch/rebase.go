@@ -8,7 +8,7 @@ import (
 
 var Rebase = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Rebase onto another branch, deal with the conflicts.",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -32,7 +32,7 @@ var Rebase = NewIntegrationTest(NewIntegrationTestArgs{
 
 		t.ExpectPopup().Menu().
 			Title(Equals("Rebase 'first-change-branch' onto 'second-change-branch'")).
-			Select(Contains("simple rebase")).
+			Select(Contains("Simple rebase")).
 			Confirm()
 
 		t.Common().AcknowledgeConflicts()
@@ -46,11 +46,11 @@ var Rebase = NewIntegrationTest(NewIntegrationTestArgs{
 			IsFocused().
 			PressPrimaryAction()
 
-		t.Views().Information().Content(Contains("rebasing"))
+		t.Views().Information().Content(Contains("Rebasing"))
 
 		t.Common().ContinueOnConflictsResolved()
 
-		t.Views().Information().Content(DoesNotContain("rebasing"))
+		t.Views().Information().Content(DoesNotContain("Rebasing"))
 
 		t.Views().Commits().TopLines(
 			Contains("second-change-branch unrelated change"),

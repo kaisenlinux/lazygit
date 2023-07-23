@@ -8,7 +8,7 @@ import (
 
 var RevertMerge = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Reverts a merge commit and chooses to revert to the parent commit",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -26,7 +26,7 @@ var RevertMerge = NewIntegrationTest(NewIntegrationTestArgs{
 			Lines(
 				Contains("first change"),
 				Contains("second-change-branch unrelated change"),
-				Contains("cancel"),
+				Contains("Cancel"),
 			).
 			Select(Contains("first change")).
 			Confirm()

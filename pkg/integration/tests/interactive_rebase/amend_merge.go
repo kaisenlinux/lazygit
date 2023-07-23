@@ -12,7 +12,7 @@ var (
 
 var AmendMerge = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Amends a staged file to a merge commit.",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -42,7 +42,7 @@ var AmendMerge = NewIntegrationTest(NewIntegrationTestArgs{
 			Press(keys.Commits.AmendToCommit)
 
 		t.ExpectPopup().Confirmation().
-			Title(Equals("Amend Last Commit")).
+			Title(Equals("Amend last commit")).
 			Content(Contains("Are you sure you want to amend last commit?")).
 			Confirm()
 

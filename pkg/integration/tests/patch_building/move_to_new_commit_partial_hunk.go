@@ -7,7 +7,7 @@ import (
 
 var MoveToNewCommitPartialHunk = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Move a patch from a commit to a new commit, with only parts of a hunk in the patch",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -43,9 +43,9 @@ var MoveToNewCommitPartialHunk = NewIntegrationTest(NewIntegrationTestArgs{
 			PressEnter().
 			PressPrimaryAction()
 
-		t.Views().Information().Content(Contains("building patch"))
+		t.Views().Information().Content(Contains("Building patch"))
 
-		t.Common().SelectPatchOption(Contains("move patch into new commit"))
+		t.Common().SelectPatchOption(Contains("Move patch into new commit"))
 
 		t.Views().CommitFiles().
 			IsFocused().

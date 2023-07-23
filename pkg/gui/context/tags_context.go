@@ -1,45 +1,45 @@
 package context
 
 import (
-	"github.com/jesseduffield/gocui"
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
+	"github.com/jesseduffield/lazygit/pkg/gui/presentation"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
 )
 
 type TagsContext struct {
-	*BasicViewModel[*models.Tag]
+	*FilteredListViewModel[*models.Tag]
 	*ListContextTrait
 }
 
-var _ types.IListContext = (*TagsContext)(nil)
+var (
+	_ types.IListContext    = (*TagsContext)(nil)
+	_ types.DiffableContext = (*TagsContext)(nil)
+)
 
 func NewTagsContext(
-	getModel func() []*models.Tag,
-	view *gocui.View,
-	getDisplayStrings func(startIdx int, length int) [][]string,
-
-	onFocus func(types.OnFocusOpts) error,
-	onRenderToMain func() error,
-	onFocusLost func(opts types.OnFocusLostOpts) error,
-
-	c *types.HelperCommon,
+	c *ContextCommon,
 ) *TagsContext {
-	viewModel := NewBasicViewModel(getModel)
+	viewModel := NewFilteredListViewModel(
+		func() []*models.Tag { return c.Model().Tags },
+		func(tag *models.Tag) []string {
+			return []string{tag.Name, tag.Message}
+		},
+	)
+
+	getDisplayStrings := func(startIdx int, length int) [][]string {
+		return presentation.GetTagListDisplayStrings(viewModel.GetItems(), c.Modes().Diffing.Ref)
+	}
 
 	return &TagsContext{
-		BasicViewModel: viewModel,
+		FilteredListViewModel: viewModel,
 		ListContextTrait: &ListContextTrait{
 			Context: NewSimpleContext(NewBaseContext(NewBaseContextOpts{
-				View:       view,
+				View:       c.Views().Tags,
 				WindowName: "branches",
 				Key:        TAGS_CONTEXT_KEY,
 				Kind:       types.SIDE_CONTEXT,
 				Focusable:  true,
-			}), ContextCallbackOpts{
-				OnFocus:        onFocus,
-				OnFocusLost:    onFocusLost,
-				OnRenderToMain: onRenderToMain,
-			}),
+			})),
 			list:              viewModel,
 			getDisplayStrings: getDisplayStrings,
 			c:                 c,
@@ -62,4 +62,10 @@ func (self *TagsContext) GetSelectedRef() types.Ref {
 		return nil
 	}
 	return tag
+}
+
+func (self *TagsContext) GetDiffTerminals() []string {
+	itemId := self.GetSelectedItemId()
+
+	return []string{itemId}
 }

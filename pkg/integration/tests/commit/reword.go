@@ -7,7 +7,7 @@ import (
 
 var Reword = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Staging a couple files and committing",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -61,6 +61,7 @@ var Reword = NewIntegrationTest(NewIntegrationTestArgs{
 		t.Views().Commits().
 			Lines(
 				Contains(wipCommitMessage),
+				Contains(commitMessage),
 			)
 	},
 })

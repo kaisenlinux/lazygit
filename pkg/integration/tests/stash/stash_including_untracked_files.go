@@ -7,7 +7,7 @@ import (
 
 var StashIncludingUntrackedFiles = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Stashing all files including untracked ones",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -27,7 +27,7 @@ var StashIncludingUntrackedFiles = NewIntegrationTest(NewIntegrationTestArgs{
 			).
 			Press(keys.Files.ViewStashOptions)
 
-		t.ExpectPopup().Menu().Title(Equals("Stash options")).Select(Contains("stash all changes including untracked files")).Confirm()
+		t.ExpectPopup().Menu().Title(Equals("Stash options")).Select(Contains("Stash all changes including untracked files")).Confirm()
 
 		t.ExpectPopup().Prompt().Title(Equals("Stash changes")).Type("my stashed file").Confirm()
 

@@ -7,7 +7,7 @@ import (
 
 var Delete = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Try to delete the checked out branch first (to no avail), and then delete another branch.",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -32,7 +32,7 @@ var Delete = NewIntegrationTest(NewIntegrationTestArgs{
 			Press(keys.Universal.Remove).
 			Tap(func() {
 				t.ExpectPopup().Confirmation().
-					Title(Equals("Delete Branch")).
+					Title(Equals("Delete branch")).
 					Content(Contains("Are you sure you want to delete the branch 'branch-one'?")).
 					Confirm()
 			}).

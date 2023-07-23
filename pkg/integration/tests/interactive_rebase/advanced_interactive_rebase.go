@@ -16,7 +16,7 @@ const (
 
 var AdvancedInteractiveRebase = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "It begins an interactive rebase and verifies to have the possibility of editing the commits of the branch before proceeding with the actual rebase",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
 		shell.
@@ -40,7 +40,7 @@ var AdvancedInteractiveRebase = NewIntegrationTest(NewIntegrationTestArgs{
 
 		t.ExpectPopup().Menu().
 			Title(Equals(fmt.Sprintf("Rebase '%s' onto '%s'", TOP_BRANCH, BASE_BRANCH))).
-			Select(Contains("interactive rebase")).
+			Select(Contains("Interactive rebase")).
 			Confirm()
 		t.Views().Commits().
 			IsFocused().

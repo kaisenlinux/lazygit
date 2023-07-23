@@ -3,6 +3,7 @@ package presentation
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/fsmiamoto/git-todo-parser/todo"
 	"github.com/jesseduffield/generics/set"
@@ -16,6 +17,7 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/theme"
 	"github.com/jesseduffield/lazygit/pkg/utils"
 	"github.com/kyokomi/emoji/v2"
+	"github.com/samber/lo"
 	"github.com/sasha-s/go-deadlock"
 )
 
@@ -41,6 +43,8 @@ func GetCommitListDisplayStrings(
 	cherryPickedCommitShaSet *set.Set[string],
 	diffName string,
 	timeFormat string,
+	shortTimeFormat string,
+	now time.Time,
 	parseEmoji bool,
 	selectedCommitSha string,
 	startIdx int,
@@ -100,13 +104,19 @@ func GetCommitListDisplayStrings(
 	for i, commit := range filteredCommits {
 		unfilteredIdx := i + startIdx
 		bisectStatus = getBisectStatus(unfilteredIdx, commit.Sha, bisectInfo, bisectBounds)
-		isYouAreHereCommit := showYouAreHereLabel && unfilteredIdx == rebaseOffset
+		isYouAreHereCommit := false
+		if showYouAreHereLabel && (commit.Action == models.ActionConflict || unfilteredIdx == rebaseOffset) {
+			isYouAreHereCommit = true
+			showYouAreHereLabel = false
+		}
 		lines = append(lines, displayCommit(
 			common,
 			commit,
 			cherryPickedCommitShaSet,
 			diffName,
 			timeFormat,
+			shortTimeFormat,
+			now,
 			parseEmoji,
 			getGraphLine(unfilteredIdx),
 			fullDescription,
@@ -253,6 +263,8 @@ func displayCommit(
 	cherryPickedCommitShaSet *set.Set[string],
 	diffName string,
 	timeFormat string,
+	shortTimeFormat string,
+	now time.Time,
 	parseEmoji bool,
 	graphLine string,
 	fullDescription bool,
@@ -265,7 +277,7 @@ func displayCommit(
 
 	actionString := ""
 	if commit.Action != models.ActionNone {
-		todoString := commit.Action.String()
+		todoString := lo.Ternary(commit.Action == models.ActionConflict, "conflict", commit.Action.String())
 		actionString = actionColorMap(commit.Action).Sprint(todoString) + " "
 	}
 
@@ -288,7 +300,8 @@ func displayCommit(
 	}
 
 	if isYouAreHereCommit {
-		youAreHere := style.FgYellow.Sprintf("<-- %s ---", common.Tr.YouAreHere)
+		color := lo.Ternary(commit.Action == models.ActionConflict, style.FgRed, style.FgYellow)
+		youAreHere := color.Sprintf("<-- %s ---", common.Tr.YouAreHere)
 		name = fmt.Sprintf("%s %s", youAreHere, name)
 	}
 
@@ -304,7 +317,9 @@ func displayCommit(
 	cols = append(cols, shaColor.Sprint(commit.ShortSha()))
 	cols = append(cols, bisectString)
 	if fullDescription {
-		cols = append(cols, style.FgBlue.Sprint(utils.UnixToDate(commit.UnixTimestamp, timeFormat)))
+		cols = append(cols, style.FgBlue.Sprint(
+			utils.UnixToDateSmart(now, commit.UnixTimestamp, timeFormat, shortTimeFormat),
+		))
 	}
 	cols = append(
 		cols,
@@ -382,6 +397,8 @@ func actionColorMap(action todo.TodoCommand) style.TextStyle {
 		return style.FgGreen
 	case todo.Fixup:
 		return style.FgMagenta
+	case models.ActionConflict:
+		return style.FgRed
 	default:
 		return style.FgYellow
 	}

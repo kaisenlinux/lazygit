@@ -52,7 +52,7 @@ func (self *ViewDriver) getSelectedLineIdx() (int, error) {
 }
 
 // asserts that the view has the expected title
-func (self *ViewDriver) Title(expected *Matcher) *ViewDriver {
+func (self *ViewDriver) Title(expected *TextMatcher) *ViewDriver {
 	self.t.assertWithRetries(func() (bool, string) {
 		actual := self.getView().Title
 		return expected.context(fmt.Sprintf("%s title", self.context)).test(actual)
@@ -64,9 +64,9 @@ func (self *ViewDriver) Title(expected *Matcher) *ViewDriver {
 // asserts that the view has lines matching the given matchers. One matcher must be passed for each line.
 // If you only care about the top n lines, use the TopLines method instead.
 // If you only care about a subset of lines, use the ContainsLines method instead.
-func (self *ViewDriver) Lines(matchers ...*Matcher) *ViewDriver {
+func (self *ViewDriver) Lines(matchers ...*TextMatcher) *ViewDriver {
 	self.validateMatchersPassed(matchers)
-	self.LineCount(len(matchers))
+	self.LineCount(EqualsInt(len(matchers)))
 
 	return self.assertLines(0, matchers...)
 }
@@ -75,15 +75,29 @@ func (self *ViewDriver) Lines(matchers ...*Matcher) *ViewDriver {
 // are passed, we only check the first three lines of the view.
 // This method is convenient when you have a list of commits but you only want to
 // assert on the first couple of commits.
-func (self *ViewDriver) TopLines(matchers ...*Matcher) *ViewDriver {
+func (self *ViewDriver) TopLines(matchers ...*TextMatcher) *ViewDriver {
 	self.validateMatchersPassed(matchers)
 	self.validateEnoughLines(matchers)
 
 	return self.assertLines(0, matchers...)
 }
 
+// Asserts on the visible lines of the view.
+// Note, this assumes that the view's viewport is filled with lines
+func (self *ViewDriver) VisibleLines(matchers ...*TextMatcher) *ViewDriver {
+	self.validateMatchersPassed(matchers)
+	self.validateVisibleLineCount(matchers)
+
+	// Get the origin of the view and offset that.
+	// Note that we don't do any retrying here so if we want to bring back retry logic
+	// we'll need to update this.
+	originY := self.getView().OriginY()
+
+	return self.assertLines(originY, matchers...)
+}
+
 // asserts that somewhere in the view there are consequetive lines matching the given matchers.
-func (self *ViewDriver) ContainsLines(matchers ...*Matcher) *ViewDriver {
+func (self *ViewDriver) ContainsLines(matchers ...*TextMatcher) *ViewDriver {
 	self.validateMatchersPassed(matchers)
 	self.validateEnoughLines(matchers)
 
@@ -133,8 +147,36 @@ func (self *ViewDriver) ContainsLines(matchers ...*Matcher) *ViewDriver {
 	return self
 }
 
+func (self *ViewDriver) ContainsColoredText(fgColorStr string, text string) *ViewDriver {
+	self.t.assertWithRetries(func() (bool, string) {
+		view := self.getView()
+		ok := self.getView().ContainsColoredText(fgColorStr, text)
+		if !ok {
+			return false, fmt.Sprintf("expected view '%s' to contain colored text '%s' but it didn't", view.Name(), text)
+		}
+
+		return true, ""
+	})
+
+	return self
+}
+
+func (self *ViewDriver) DoesNotContainColoredText(fgColorStr string, text string) *ViewDriver {
+	self.t.assertWithRetries(func() (bool, string) {
+		view := self.getView()
+		ok := !self.getView().ContainsColoredText(fgColorStr, text)
+		if !ok {
+			return false, fmt.Sprintf("expected view '%s' to NOT contain colored text '%s' but it didn't", view.Name(), text)
+		}
+
+		return true, ""
+	})
+
+	return self
+}
+
 // asserts on the lines that are selected in the view. Don't use the `IsSelected` matcher with this because it's redundant.
-func (self *ViewDriver) SelectedLines(matchers ...*Matcher) *ViewDriver {
+func (self *ViewDriver) SelectedLines(matchers ...*TextMatcher) *ViewDriver {
 	self.validateMatchersPassed(matchers)
 	self.validateEnoughLines(matchers)
 
@@ -169,13 +211,13 @@ func (self *ViewDriver) SelectedLines(matchers ...*Matcher) *ViewDriver {
 	return self
 }
 
-func (self *ViewDriver) validateMatchersPassed(matchers []*Matcher) {
+func (self *ViewDriver) validateMatchersPassed(matchers []*TextMatcher) {
 	if len(matchers) < 1 {
 		self.t.fail("'Lines' methods require at least one matcher to be passed as an argument. If you are trying to assert that there are no lines, use .IsEmpty()")
 	}
 }
 
-func (self *ViewDriver) validateEnoughLines(matchers []*Matcher) {
+func (self *ViewDriver) validateEnoughLines(matchers []*TextMatcher) {
 	view := self.getView()
 
 	self.t.assertWithRetries(func() (bool, string) {
@@ -184,7 +226,17 @@ func (self *ViewDriver) validateEnoughLines(matchers []*Matcher) {
 	})
 }
 
-func (self *ViewDriver) assertLines(offset int, matchers ...*Matcher) *ViewDriver {
+// assumes the view's viewport is filled with lines
+func (self *ViewDriver) validateVisibleLineCount(matchers []*TextMatcher) {
+	view := self.getView()
+
+	self.t.assertWithRetries(func() (bool, string) {
+		count := view.InnerHeight() + 1
+		return count == len(matchers), fmt.Sprintf("unexpected number of visible lines in view '%s'. Expected exactly %d, got %d", view.Name(), len(matchers), count)
+	})
+}
+
+func (self *ViewDriver) assertLines(offset int, matchers ...*TextMatcher) *ViewDriver {
 	view := self.getView()
 
 	for matcherIndex, matcher := range matchers {
@@ -224,7 +276,7 @@ func (self *ViewDriver) assertLines(offset int, matchers ...*Matcher) *ViewDrive
 }
 
 // asserts on the content of the view i.e. the stuff within the view's frame.
-func (self *ViewDriver) Content(matcher *Matcher) *ViewDriver {
+func (self *ViewDriver) Content(matcher *TextMatcher) *ViewDriver {
 	self.t.matchString(matcher, fmt.Sprintf("%s: Unexpected content.", self.context),
 		func() string {
 			return self.getView().Buffer()
@@ -237,7 +289,7 @@ func (self *ViewDriver) Content(matcher *Matcher) *ViewDriver {
 // asserts on the selected line of the view. If your view has multiple lines selected,
 // but also has a concept of a cursor position, this will assert on the line that
 // the cursor is on. Otherwise it will assert on the first line of the selection.
-func (self *ViewDriver) SelectedLine(matcher *Matcher) *ViewDriver {
+func (self *ViewDriver) SelectedLine(matcher *TextMatcher) *ViewDriver {
 	self.t.assertWithRetries(func() (bool, string) {
 		selectedLineIdx, err := self.getSelectedLineIdx()
 		if err != nil {
@@ -382,7 +434,7 @@ func (self *ViewDriver) PressEscape() *ViewDriver {
 // If this changes in future, we'll need to update this code to first attempt to find the item
 // in the current page and failing that, jump to the top of the view and iterate through all of it,
 // looking for the item.
-func (self *ViewDriver) NavigateToLine(matcher *Matcher) *ViewDriver {
+func (self *ViewDriver) NavigateToLine(matcher *TextMatcher) *ViewDriver {
 	self.IsFocused()
 
 	view := self.getView()
@@ -442,29 +494,56 @@ func (self *ViewDriver) IsEmpty() *ViewDriver {
 	return self
 }
 
-func (self *ViewDriver) LineCount(expectedCount int) *ViewDriver {
-	if expectedCount == 0 {
-		return self.IsEmpty()
-	}
-
+func (self *ViewDriver) LineCount(matcher *IntMatcher) *ViewDriver {
 	view := self.getView()
 
 	self.t.assertWithRetries(func() (bool, string) {
-		lines := view.BufferLines()
-		return len(lines) == expectedCount, fmt.Sprintf("unexpected number of lines in view '%s'. Expected %d, got %d", view.Name(), expectedCount, len(lines))
+		lineCount := self.getLineCount()
+		ok, _ := matcher.test(lineCount)
+		return ok, fmt.Sprintf("unexpected number of lines in view '%s'. Expected %s, got %d", view.Name(), matcher.name(), lineCount)
 	})
 
+	return self
+}
+
+func (self *ViewDriver) getLineCount() int {
+	// can't rely entirely on view.BufferLines because it returns 1 even if there's nothing in the view
+	if strings.TrimSpace(self.getView().Buffer()) == "" {
+		return 0
+	}
+
+	view := self.getView()
+	return len(view.BufferLines())
+}
+
+func (self *ViewDriver) IsVisible() *ViewDriver {
 	self.t.assertWithRetries(func() (bool, string) {
-		lines := view.BufferLines()
-
-		// if the view has a single blank line (often the case) we want to treat that as having no lines
-		if len(lines) == 1 && expectedCount == 1 {
-			actual := strings.TrimSpace(view.Buffer())
-			return actual != "", fmt.Sprintf("unexpected number of lines in view '%s'. Expected 1, got 0", view.Name())
-		}
-
-		return len(lines) == expectedCount, fmt.Sprintf("unexpected number of lines in view '%s'. Expected %d, got %d", view.Name(), expectedCount, len(lines))
+		return self.getView().Visible, fmt.Sprintf("%s: Expected view to be visible, but it was not", self.context)
 	})
+
+	return self
+}
+
+func (self *ViewDriver) IsInvisible() *ViewDriver {
+	self.t.assertWithRetries(func() (bool, string) {
+		return !self.getView().Visible, fmt.Sprintf("%s: Expected view to be visible, but it was not", self.context)
+	})
+
+	return self
+}
+
+// will filter or search depending on whether the view supports filtering/searching
+func (self *ViewDriver) FilterOrSearch(text string) *ViewDriver {
+	self.IsFocused()
+
+	self.Press(self.t.keys.Universal.StartSearch).
+		Tap(func() {
+			self.t.ExpectSearch().
+				Type(text).
+				Confirm()
+
+			self.t.Views().Search().IsVisible().Content(Contains(fmt.Sprintf("matches for '%s'", text)))
+		})
 
 	return self
 }
@@ -482,8 +561,8 @@ func (self *ViewDriver) Self() *ViewDriver {
 	return self
 }
 
-func expectedContentFromMatchers(matchers []*Matcher) string {
-	return strings.Join(lo.Map(matchers, func(matcher *Matcher, _ int) string {
+func expectedContentFromMatchers(matchers []*TextMatcher) string {
+	return strings.Join(lo.Map(matchers, func(matcher *TextMatcher, _ int) string {
 		return matcher.name()
 	}), "\n")
 }

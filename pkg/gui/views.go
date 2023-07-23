@@ -3,48 +3,10 @@ package gui
 import (
 	"github.com/jesseduffield/generics/slices"
 	"github.com/jesseduffield/gocui"
+	"github.com/jesseduffield/lazygit/pkg/gui/keybindings"
 	"github.com/jesseduffield/lazygit/pkg/theme"
+	"github.com/jesseduffield/lazygit/pkg/utils"
 )
-
-type Views struct {
-	Status         *gocui.View
-	Submodules     *gocui.View
-	Files          *gocui.View
-	Branches       *gocui.View
-	Remotes        *gocui.View
-	Tags           *gocui.View
-	RemoteBranches *gocui.View
-	ReflogCommits  *gocui.View
-	Commits        *gocui.View
-	Stash          *gocui.View
-
-	Main                   *gocui.View
-	Secondary              *gocui.View
-	Staging                *gocui.View
-	StagingSecondary       *gocui.View
-	PatchBuilding          *gocui.View
-	PatchBuildingSecondary *gocui.View
-	MergeConflicts         *gocui.View
-
-	Options           *gocui.View
-	Confirmation      *gocui.View
-	Menu              *gocui.View
-	CommitMessage     *gocui.View
-	CommitDescription *gocui.View
-	CommitFiles       *gocui.View
-	SubCommits        *gocui.View
-	Information       *gocui.View
-	AppStatus         *gocui.View
-	Search            *gocui.View
-	SearchPrefix      *gocui.View
-	Limit             *gocui.View
-	Suggestions       *gocui.View
-	Tooltip           *gocui.View
-	Extras            *gocui.View
-
-	// for playing the easter egg snake game
-	Snake *gocui.View
-}
 
 type viewNameMapping struct {
 	viewPtr **gocui.View
@@ -106,15 +68,6 @@ func (gui *Gui) orderedViewNameMappings() []viewNameMapping {
 	}
 }
 
-func (gui *Gui) windowForView(viewName string) string {
-	context, ok := gui.contextForView(viewName)
-	if !ok {
-		panic("todo: deal with this")
-	}
-
-	return context.GetWindowName()
-}
-
 func (gui *Gui) createAllViews() error {
 	frameRunes := []rune{'─', '│', '┌', '┐', '└', '┘'}
 	switch gui.c.UserConfig.Gui.Border {
@@ -140,9 +93,15 @@ func (gui *Gui) createAllViews() error {
 	gui.Views.Options.Frame = false
 
 	gui.Views.SearchPrefix.BgColor = gocui.ColorDefault
-	gui.Views.SearchPrefix.FgColor = gocui.ColorGreen
+	gui.Views.SearchPrefix.FgColor = gocui.ColorCyan
 	gui.Views.SearchPrefix.Frame = false
-	gui.setViewContent(gui.Views.SearchPrefix, SEARCH_PREFIX)
+	gui.c.SetViewContent(gui.Views.SearchPrefix, gui.Tr.SearchPrefix)
+
+	gui.Views.Search.BgColor = gocui.ColorDefault
+	gui.Views.Search.FgColor = gocui.ColorCyan
+	gui.Views.Search.Editable = true
+	gui.Views.Search.Frame = false
+	gui.Views.Search.Editor = gocui.EditorFunc(gui.searchEditor)
 
 	gui.Views.Stash.Title = gui.c.Tr.StashTitle
 
@@ -190,11 +149,6 @@ func (gui *Gui) createAllViews() error {
 
 	gui.Views.Status.Title = gui.c.Tr.StatusTitle
 
-	gui.Views.Search.BgColor = gocui.ColorDefault
-	gui.Views.Search.FgColor = gocui.ColorGreen
-	gui.Views.Search.Editable = true
-	gui.Views.Search.Frame = false
-
 	gui.Views.AppStatus.BgColor = gocui.ColorDefault
 	gui.Views.AppStatus.FgColor = gocui.ColorCyan
 	gui.Views.AppStatus.Visible = false
@@ -207,12 +161,16 @@ func (gui *Gui) createAllViews() error {
 
 	gui.Views.CommitDescription.Visible = false
 	gui.Views.CommitDescription.Title = gui.c.Tr.CommitDescriptionTitle
-	gui.Views.CommitDescription.Subtitle = gui.Tr.CommitDescriptionSubTitle
+	gui.Views.CommitDescription.Subtitle = utils.ResolvePlaceholderString(gui.Tr.CommitDescriptionSubTitle,
+		map[string]string{
+			"togglePanelKeyBinding": keybindings.Label(gui.UserConfig.Keybinding.Universal.TogglePanel),
+		})
 	gui.Views.CommitDescription.FgColor = theme.GocuiDefaultTextColor
 	gui.Views.CommitDescription.Editable = true
 	gui.Views.CommitDescription.Editor = gocui.EditorFunc(gui.commitDescriptionEditor)
 
 	gui.Views.Confirmation.Visible = false
+	gui.Views.Confirmation.Editor = gocui.EditorFunc(gui.promptEditor)
 
 	gui.Views.Suggestions.Visible = false
 

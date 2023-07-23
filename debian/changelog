@@ -1,3 +1,10 @@
+lazygit (0.39.2-1kaisen) kaisen-packages; urgency=medium
+
+  * Import the 0.39.2 version
+  * Update the quilt patch
+
+ -- Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>  Sun, 23 Jul 2023 02:19:17 +0100
+
 lazygit (0.38.2-1kaisen) kaisen-packages; urgency=medium
 
   * Import the 0.38.2 version

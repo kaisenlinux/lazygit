@@ -7,7 +7,7 @@ import (
 
 var SelectAllFiles = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "All all files of a commit to a custom patch with the 'a' keybinding",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -33,7 +33,7 @@ var SelectAllFiles = NewIntegrationTest(NewIntegrationTestArgs{
 			).
 			Press(keys.Files.ToggleStagedAll)
 
-		t.Views().Information().Content(Contains("building patch"))
+		t.Views().Information().Content(Contains("Building patch"))
 
 		t.Views().Secondary().Content(
 			Contains("file1").Contains("file3").Contains("file3"),

@@ -7,7 +7,7 @@ import (
 
 var FromOtherBranch = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Opening lazygit when bisect has been started from another branch. There's an issue where we don't reselect the current branch if we mark the current branch as bad so this test side-steps that problem",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupRepo: func(shell *Shell) {
 		shell.
@@ -15,11 +15,11 @@ var FromOtherBranch = NewIntegrationTest(NewIntegrationTestArgs{
 			NewBranch("other").
 			CreateNCommits(10).
 			Checkout("master").
-			RunCommand("git bisect start other~2 other~5")
+			StartBisect("other~2", "other~5")
 	},
 	SetupConfig: func(cfg *config.AppConfig) {},
 	Run: func(t *TestDriver, keys config.KeybindingConfig) {
-		t.Views().Information().Content(Contains("bisecting"))
+		t.Views().Information().Content(Contains("Bisecting"))
 
 		t.Views().Commits().
 			Focus().
@@ -32,11 +32,11 @@ var FromOtherBranch = NewIntegrationTest(NewIntegrationTestArgs{
 			SelectNextItem().
 			Press(keys.Commits.ViewBisectOptions).
 			Tap(func() {
-				t.ExpectPopup().Menu().Title(Equals("Bisect")).Select(MatchesRegexp(`mark .* as good`)).Confirm()
+				t.ExpectPopup().Menu().Title(Equals("Bisect")).Select(MatchesRegexp(`Mark .* as good`)).Confirm()
 
 				t.ExpectPopup().Alert().Title(Equals("Bisect complete")).Content(MatchesRegexp("(?s)commit 08.*Do you want to reset")).Confirm()
 
-				t.Views().Information().Content(DoesNotContain("bisecting"))
+				t.Views().Information().Content(DoesNotContain("Bisecting"))
 			}).
 			// back in master branch which just had the one commit
 			Lines(

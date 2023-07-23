@@ -13,19 +13,19 @@ func (self *FilesController) createResetMenu() error {
 	red := style.FgRed
 
 	nukeStr := "git reset --hard HEAD && git clean -fd"
-	if len(self.model.Submodules) > 0 {
-		nukeStr = fmt.Sprintf("%s (%s)", nukeStr, self.c.Tr.LcAndResetSubmodules)
+	if len(self.c.Model().Submodules) > 0 {
+		nukeStr = fmt.Sprintf("%s (%s)", nukeStr, self.c.Tr.AndResetSubmodules)
 	}
 
 	menuItems := []*types.MenuItem{
 		{
 			LabelColumns: []string{
-				self.c.Tr.LcDiscardAllChangesToAllFiles,
+				self.c.Tr.DiscardAllChangesToAllFiles,
 				red.Sprint(nukeStr),
 			},
 			OnPress: func() error {
 				self.c.LogAction(self.c.Tr.Actions.NukeWorkingTree)
-				if err := self.git.WorkingTree.ResetAndClean(); err != nil {
+				if err := self.c.Git().WorkingTree.ResetAndClean(); err != nil {
 					return self.c.Error(err)
 				}
 
@@ -36,12 +36,12 @@ func (self *FilesController) createResetMenu() error {
 		},
 		{
 			LabelColumns: []string{
-				self.c.Tr.LcDiscardAnyUnstagedChanges,
+				self.c.Tr.DiscardAnyUnstagedChanges,
 				red.Sprint("git checkout -- ."),
 			},
 			OnPress: func() error {
 				self.c.LogAction(self.c.Tr.Actions.DiscardUnstagedFileChanges)
-				if err := self.git.WorkingTree.DiscardAnyUnstagedFileChanges(); err != nil {
+				if err := self.c.Git().WorkingTree.DiscardAnyUnstagedFileChanges(); err != nil {
 					return self.c.Error(err)
 				}
 
@@ -51,12 +51,12 @@ func (self *FilesController) createResetMenu() error {
 		},
 		{
 			LabelColumns: []string{
-				self.c.Tr.LcDiscardUntrackedFiles,
+				self.c.Tr.DiscardUntrackedFiles,
 				red.Sprint("git clean -fd"),
 			},
 			OnPress: func() error {
 				self.c.LogAction(self.c.Tr.Actions.RemoveUntrackedFiles)
-				if err := self.git.WorkingTree.RemoveUntrackedFiles(); err != nil {
+				if err := self.c.Git().WorkingTree.RemoveUntrackedFiles(); err != nil {
 					return self.c.Error(err)
 				}
 
@@ -66,19 +66,19 @@ func (self *FilesController) createResetMenu() error {
 		},
 		{
 			LabelColumns: []string{
-				self.c.Tr.LcDiscardStagedChanges,
+				self.c.Tr.DiscardStagedChanges,
 				red.Sprint("stash staged and drop stash"),
 			},
 			Tooltip: self.c.Tr.DiscardStagedChangesDescription,
 			OnPress: func() error {
 				self.c.LogAction(self.c.Tr.Actions.RemoveStagedFiles)
-				if !self.helpers.WorkingTree.IsWorkingTreeDirty() {
+				if !self.c.Helpers().WorkingTree.IsWorkingTreeDirty() {
 					return self.c.ErrorMsg(self.c.Tr.NoTrackedStagedFilesStash)
 				}
-				if err := self.git.Stash.SaveStagedChanges("[lazygit] tmp stash"); err != nil {
+				if err := self.c.Git().Stash.SaveStagedChanges("[lazygit] tmp stash"); err != nil {
 					return self.c.Error(err)
 				}
-				if err := self.git.Stash.DropNewest(); err != nil {
+				if err := self.c.Git().Stash.DropNewest(); err != nil {
 					return self.c.Error(err)
 				}
 
@@ -88,12 +88,12 @@ func (self *FilesController) createResetMenu() error {
 		},
 		{
 			LabelColumns: []string{
-				self.c.Tr.LcSoftReset,
+				self.c.Tr.SoftReset,
 				red.Sprint("git reset --soft HEAD"),
 			},
 			OnPress: func() error {
 				self.c.LogAction(self.c.Tr.Actions.SoftReset)
-				if err := self.git.WorkingTree.ResetSoft("HEAD"); err != nil {
+				if err := self.c.Git().WorkingTree.ResetSoft("HEAD"); err != nil {
 					return self.c.Error(err)
 				}
 
@@ -108,7 +108,7 @@ func (self *FilesController) createResetMenu() error {
 			},
 			OnPress: func() error {
 				self.c.LogAction(self.c.Tr.Actions.MixedReset)
-				if err := self.git.WorkingTree.ResetMixed("HEAD"); err != nil {
+				if err := self.c.Git().WorkingTree.ResetMixed("HEAD"); err != nil {
 					return self.c.Error(err)
 				}
 
@@ -118,12 +118,12 @@ func (self *FilesController) createResetMenu() error {
 		},
 		{
 			LabelColumns: []string{
-				self.c.Tr.LcHardReset,
+				self.c.Tr.HardReset,
 				red.Sprint("git reset --hard HEAD"),
 			},
 			OnPress: func() error {
 				self.c.LogAction(self.c.Tr.Actions.HardReset)
-				if err := self.git.WorkingTree.ResetHard("HEAD"); err != nil {
+				if err := self.c.Git().WorkingTree.ResetHard("HEAD"); err != nil {
 					return self.c.Error(err)
 				}
 

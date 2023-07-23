@@ -7,7 +7,7 @@ import (
 
 var CreateBranch = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Create a branch from a stash entry",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -27,7 +27,7 @@ var CreateBranch = NewIntegrationTest(NewIntegrationTestArgs{
 			Press(keys.Universal.New).
 			Tap(func() {
 				t.ExpectPopup().Prompt().
-					Title(Contains("New Branch Name (Branch is off of 'stash@{0}: On master: stash one'")).
+					Title(Contains("New branch name (branch is off of 'stash@{0}: On master: stash one'")).
 					Type("new_branch").
 					Confirm()
 			})

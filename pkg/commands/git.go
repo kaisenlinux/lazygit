@@ -24,6 +24,7 @@ type GitCommand struct {
 	Commit      *git_commands.CommitCommands
 	Config      *git_commands.ConfigCommands
 	Custom      *git_commands.CustomCommands
+	Diff        *git_commands.DiffCommands
 	File        *git_commands.FileCommands
 	Flow        *git_commands.FlowCommands
 	Patch       *git_commands.PatchCommands
@@ -112,13 +113,13 @@ func NewGitCommandAux(
 	tagCommands := git_commands.NewTagCommands(gitCommon)
 	commitCommands := git_commands.NewCommitCommands(gitCommon)
 	customCommands := git_commands.NewCustomCommands(gitCommon)
+	diffCommands := git_commands.NewDiffCommands(gitCommon)
 	fileCommands := git_commands.NewFileCommands(gitCommon)
 	submoduleCommands := git_commands.NewSubmoduleCommands(gitCommon)
 	workingTreeCommands := git_commands.NewWorkingTreeCommands(gitCommon, submoduleCommands, fileLoader)
 	rebaseCommands := git_commands.NewRebaseCommands(gitCommon, commitCommands, workingTreeCommands)
 	stashCommands := git_commands.NewStashCommands(gitCommon, fileLoader, workingTreeCommands)
-	// TODO: have patch builder take workingTreeCommands in its entirety
-	patchBuilder := patch.NewPatchBuilder(cmn.Log, workingTreeCommands.ApplyPatch,
+	patchBuilder := patch.NewPatchBuilder(cmn.Log,
 		func(from string, to string, reverse bool, filename string, plain bool) (string, error) {
 			// TODO: make patch builder take Gui.IgnoreWhitespaceInDiffView into
 			// account. For now we just pass false.
@@ -127,9 +128,9 @@ func NewGitCommandAux(
 	patchCommands := git_commands.NewPatchCommands(gitCommon, rebaseCommands, commitCommands, statusCommands, stashCommands, patchBuilder)
 	bisectCommands := git_commands.NewBisectCommands(gitCommon)
 
-	branchLoader := git_commands.NewBranchLoader(cmn, branchCommands.GetRawBranches, branchCommands.CurrentBranchInfo, configCommands)
+	branchLoader := git_commands.NewBranchLoader(cmn, cmd, branchCommands.CurrentBranchInfo, configCommands)
 	commitFileLoader := git_commands.NewCommitFileLoader(cmn, cmd)
-	commitLoader := git_commands.NewCommitLoader(cmn, cmd, dotGitDir, branchCommands.CurrentBranchInfo, statusCommands.RebaseMode)
+	commitLoader := git_commands.NewCommitLoader(cmn, cmd, dotGitDir, statusCommands.RebaseMode, gitCommon)
 	reflogCommitLoader := git_commands.NewReflogCommitLoader(cmn, cmd)
 	remoteLoader := git_commands.NewRemoteLoader(cmn, cmd, repo.Remotes)
 	stashLoader := git_commands.NewStashLoader(cmn, cmd)
@@ -140,6 +141,7 @@ func NewGitCommandAux(
 		Commit:      commitCommands,
 		Config:      configCommands,
 		Custom:      customCommands,
+		Diff:        diffCommands,
 		File:        fileCommands,
 		Flow:        flowCommands,
 		Patch:       patchCommands,
@@ -275,5 +277,5 @@ func findDotGitDir(stat func(string) (os.FileInfo, error), readFile func(filenam
 }
 
 func VerifyInGitRepo(osCommand *oscommands.OSCommand) error {
-	return osCommand.Cmd.New("git rev-parse --git-dir").DontLog().Run()
+	return osCommand.Cmd.New(git_commands.NewGitCmd("rev-parse").Arg("--git-dir").ToArgv()).DontLog().Run()
 }

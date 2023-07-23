@@ -7,7 +7,7 @@ import (
 
 var AmendHeadCommitDuringRebase = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Amends the current head commit from the commits panel during a rebase.",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -43,7 +43,7 @@ var AmendHeadCommitDuringRebase = NewIntegrationTest(NewIntegrationTestArgs{
 			Press(keys.Commits.AmendToCommit).
 			Tap(func() {
 				t.ExpectPopup().Confirmation().
-					Title(Equals("Amend Last Commit")).
+					Title(Equals("Amend last commit")).
 					Content(Contains("Are you sure you want to amend last commit?")).
 					Confirm()
 			}).

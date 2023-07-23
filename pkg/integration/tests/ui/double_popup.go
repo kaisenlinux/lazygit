@@ -7,7 +7,7 @@ import (
 
 var DoublePopup = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Open a popup from within another popup and assert you can escape back to the side panels",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -25,7 +25,7 @@ var DoublePopup = NewIntegrationTest(NewIntegrationTestArgs{
 
 		t.GlobalPress(keys.Universal.OpenRecentRepos)
 
-		t.ExpectPopup().Menu().Title(Contains("recent repositories")).Cancel()
+		t.ExpectPopup().Menu().Title(Contains("Recent repositories")).Cancel()
 
 		t.Views().Branches().IsFocused()
 

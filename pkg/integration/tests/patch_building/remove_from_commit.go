@@ -7,7 +7,7 @@ import (
 
 var RemoveFromCommit = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Remove a custom patch from a commit",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -31,11 +31,11 @@ var RemoveFromCommit = NewIntegrationTest(NewIntegrationTestArgs{
 			).
 			PressPrimaryAction()
 
-		t.Views().Information().Content(Contains("building patch"))
+		t.Views().Information().Content(Contains("Building patch"))
 
 		t.Views().PatchBuildingSecondary().Content(Contains("+file1 content"))
 
-		t.Common().SelectPatchOption(Contains("remove patch from original commit"))
+		t.Common().SelectPatchOption(Contains("Remove patch from original commit"))
 
 		t.Views().Files().IsEmpty()
 

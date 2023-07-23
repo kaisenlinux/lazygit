@@ -7,7 +7,7 @@ import (
 
 var Reset = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Hard reset to a reflog commit",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -29,8 +29,8 @@ var Reset = NewIntegrationTest(NewIntegrationTestArgs{
 			Press(keys.Commits.ViewResetOptions).
 			Tap(func() {
 				t.ExpectPopup().Menu().
-					Title(Contains("reset to")).
-					Select(Contains("hard reset")).
+					Title(Contains("Reset to")).
+					Select(Contains("Hard reset")).
 					Confirm()
 			}).
 			TopLines(

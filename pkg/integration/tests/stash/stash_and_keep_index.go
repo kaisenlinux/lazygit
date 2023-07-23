@@ -7,7 +7,7 @@ import (
 
 var StashAndKeepIndex = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Stash staged changes",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -28,7 +28,7 @@ var StashAndKeepIndex = NewIntegrationTest(NewIntegrationTestArgs{
 			).
 			Press(keys.Files.ViewStashOptions)
 
-		t.ExpectPopup().Menu().Title(Equals("Stash options")).Select(Contains("stash all changes and keep index")).Confirm()
+		t.ExpectPopup().Menu().Title(Equals("Stash options")).Select(Contains("Stash all changes and keep index")).Confirm()
 
 		t.ExpectPopup().Prompt().Title(Equals("Stash changes")).Type("my stashed file").Confirm()
 

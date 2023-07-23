@@ -7,7 +7,7 @@ import (
 
 var MoveToIndexPartOfAdjacentAddedLines = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Move a patch from a commit to the index, with only some lines of a range of adjacent added lines in the patch",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -43,9 +43,9 @@ var MoveToIndexPartOfAdjacentAddedLines = NewIntegrationTest(NewIntegrationTestA
 			PressEnter().
 			PressPrimaryAction()
 
-		t.Views().Information().Content(Contains("building patch"))
+		t.Views().Information().Content(Contains("Building patch"))
 
-		t.Common().SelectPatchOption(Contains("move patch out into index"))
+		t.Common().SelectPatchOption(Contains("Move patch out into index"))
 
 		t.Views().CommitFiles().
 			IsFocused().

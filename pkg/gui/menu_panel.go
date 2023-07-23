@@ -1,31 +1,18 @@
 package gui
 
 import (
-	"fmt"
-
-	"github.com/jesseduffield/lazygit/pkg/gui/keybindings"
 	"github.com/jesseduffield/lazygit/pkg/gui/presentation"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
 	"github.com/jesseduffield/lazygit/pkg/theme"
 	"github.com/jesseduffield/lazygit/pkg/utils"
 )
 
-func (gui *Gui) getMenuOptions() map[string]string {
-	keybindingConfig := gui.c.UserConfig.Keybinding
-
-	return map[string]string{
-		keybindings.Label(keybindingConfig.Universal.Return): gui.c.Tr.LcClose,
-		fmt.Sprintf("%s %s", keybindings.Label(keybindingConfig.Universal.PrevItem), keybindings.Label(keybindingConfig.Universal.NextItem)): gui.c.Tr.LcNavigate,
-		keybindings.Label(keybindingConfig.Universal.Select): gui.c.Tr.LcExecute,
-	}
-}
-
 // note: items option is mutated by this function
 func (gui *Gui) createMenu(opts types.CreateMenuOptions) error {
 	if !opts.HideCancel {
 		// this is mutative but I'm okay with that for now
 		opts.Items = append(opts.Items, &types.MenuItem{
-			LabelColumns: []string{gui.c.Tr.LcCancel},
+			LabelColumns: []string{gui.c.Tr.Cancel},
 			OnPress: func() error {
 				return nil
 			},
@@ -54,14 +41,11 @@ func (gui *Gui) createMenu(opts types.CreateMenuOptions) error {
 		}
 	}
 
-	gui.State.Contexts.Menu.SetMenuItems(opts.Items)
+	gui.State.Contexts.Menu.SetMenuItems(opts.Items, opts.ColumnAlignment)
 	gui.State.Contexts.Menu.SetSelectedLineIdx(0)
 
 	gui.Views.Menu.Title = opts.Title
 	gui.Views.Menu.FgColor = theme.GocuiDefaultTextColor
-	gui.Views.Menu.SetOnSelectItem(gui.onSelectItemWrapper(func(selectedLine int) error {
-		return nil
-	}))
 
 	gui.Views.Tooltip.Wrap = true
 	gui.Views.Tooltip.FgColor = theme.GocuiDefaultTextColor

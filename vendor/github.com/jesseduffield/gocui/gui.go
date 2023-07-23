@@ -173,15 +173,30 @@ type Gui struct {
 	screen         tcell.Screen
 	suspendedMutex sync.Mutex
 	suspended      bool
+
+	taskManager *TaskManager
+}
+
+type NewGuiOpts struct {
+	OutputMode      OutputMode
+	SupportOverlaps bool
+	PlayRecording   bool
+	Headless        bool
+	// only applicable when Headless is true
+	Width int
+	// only applicable when Headless is true
+	Height int
+
+	RuneReplacements map[rune]string
 }
 
 // NewGui returns a new Gui object with a given output mode.
-func NewGui(mode OutputMode, supportOverlaps bool, playRecording bool, headless bool, runeReplacements map[rune]string) (*Gui, error) {
+func NewGui(opts NewGuiOpts) (*Gui, error) {
 	g := &Gui{}
 
 	var err error
-	if headless {
-		err = g.tcellInitSimulation()
+	if opts.Headless {
+		err = g.tcellInitSimulation(opts.Width, opts.Height)
 	} else {
 		err = g.tcellInit(runeReplacements)
 	}
@@ -189,7 +204,7 @@ func NewGui(mode OutputMode, supportOverlaps bool, playRecording bool, headless 
 		return nil, err
 	}
 
-	if headless || runtime.GOOS == "windows" {
+	if opts.Headless || runtime.GOOS == "windows" {
 		g.maxX, g.maxY = g.screen.Size()
 	} else {
 		// TODO: find out if we actually need this bespoke logic for linux
@@ -199,14 +214,15 @@ func NewGui(mode OutputMode, supportOverlaps bool, playRecording bool, headless 
 		}
 	}
 
-	g.outputMode = mode
+	g.outputMode = opts.OutputMode
 
 	g.stop = make(chan struct{})
 
 	g.gEvents = make(chan GocuiEvent, 20)
 	g.userEvents = make(chan userEvent, 20)
+	g.taskManager = newTaskManager()
 
-	if playRecording {
+	if opts.PlayRecording {
 		g.ReplayedEvents = replayedEvents{
 			Keys:    make(chan *TcellKeyEventWrapper),
 			Resizes: make(chan *TcellResizeEventWrapper),
@@ -218,16 +234,27 @@ func NewGui(mode OutputMode, supportOverlaps bool, playRecording bool, headless 
 
 	// SupportOverlaps is true when we allow for view edges to overlap with other
 	// view edges
-	g.SupportOverlaps = supportOverlaps
+	g.SupportOverlaps = opts.SupportOverlaps
 
 	// default keys for when searching strings in a view
 	g.SearchEscapeKey = KeyEsc
 	g.NextSearchMatchKey = 'n'
 	g.PrevSearchMatchKey = 'N'
 
-	g.playRecording = playRecording
+	g.playRecording = opts.PlayRecording
 
 	return g, nil
+}
+
+func (g *Gui) NewTask() *TaskImpl {
+	return g.taskManager.NewTask()
+}
+
+// An idle listener listens for when the program is idle. This is useful for
+// integration tests which can wait for the program to be idle before taking
+// the next step in the test.
+func (g *Gui) AddIdleListener(c chan struct{}) {
+	g.taskManager.addIdleListener(c)
 }
 
 // Close finalizes the library. It should be called after a successful
@@ -593,7 +620,8 @@ func getKey(key interface{}) (Key, rune, error) {
 
 // userEvent represents an event triggered by the user.
 type userEvent struct {
-	f func(*Gui) error
+	f    func(*Gui) error
+	task Task
 }
 
 // Update executes the passed function. This method can be called safely from a
@@ -602,14 +630,49 @@ type userEvent struct {
 // the user events queue. Given that Update spawns a goroutine, the order in
 // which the user events will be handled is not guaranteed.
 func (g *Gui) Update(f func(*Gui) error) {
-	go g.UpdateAsync(f)
+	task := g.NewTask()
+
+	go g.updateAsyncAux(f, task)
 }
 
 // UpdateAsync is a version of Update that does not spawn a go routine, it can
 // be a bit more efficient in cases where Update is called many times like when
 // tailing a file.  In general you should use Update()
 func (g *Gui) UpdateAsync(f func(*Gui) error) {
-	g.userEvents <- userEvent{f: f}
+	task := g.NewTask()
+
+	g.updateAsyncAux(f, task)
+}
+
+func (g *Gui) updateAsyncAux(f func(*Gui) error, task Task) {
+	g.userEvents <- userEvent{f: f, task: task}
+}
+
+// Calls a function in a goroutine. Handles panics gracefully and tracks
+// number of background tasks.
+// Always use this when you want to spawn a goroutine and you want lazygit to
+// consider itself 'busy` as it runs the code. Don't use for long-running
+// background goroutines where you wouldn't want lazygit to be considered busy
+// (i.e. when you wouldn't want a loader to be shown to the user)
+func (g *Gui) OnWorker(f func(Task)) {
+	task := g.NewTask()
+	go func() {
+		g.onWorkerAux(f, task)
+		task.Done()
+	}()
+}
+
+func (g *Gui) onWorkerAux(f func(Task), task Task) {
+	panicking := true
+	defer func() {
+		if panicking && Screen != nil {
+			Screen.Fini()
+		}
+	}()
+
+	f(task)
+
+	panicking = false
 }
 
 // A Manager is in charge of GUI's layout and can be used to build widgets.
@@ -666,27 +729,42 @@ func (g *Gui) MainLoop() error {
 	}
 
 	for {
-		select {
-		case ev := <-g.gEvents:
-			if err := g.handleEvent(&ev); err != nil {
-				return err
-			}
-		case ev := <-g.userEvents:
-			if err := ev.f(g); err != nil {
-				return err
-			}
-		}
-		if err := g.consumeevents(); err != nil {
-			return err
-		}
-		if err := g.flush(); err != nil {
+		err := g.processEvent()
+		if err != nil {
 			return err
 		}
 	}
 }
 
-// consumeevents handles the remaining events in the events pool.
-func (g *Gui) consumeevents() error {
+func (g *Gui) processEvent() error {
+	select {
+	case ev := <-g.gEvents:
+		task := g.NewTask()
+		defer func() { task.Done() }()
+
+		if err := g.handleEvent(&ev); err != nil {
+			return err
+		}
+	case ev := <-g.userEvents:
+		defer func() { ev.task.Done() }()
+
+		if err := ev.f(g); err != nil {
+			return err
+		}
+	}
+
+	if err := g.processRemainingEvents(); err != nil {
+		return err
+	}
+	if err := g.flush(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// processRemainingEvents handles the remaining events in the events pool.
+func (g *Gui) processRemainingEvents() error {
 	for {
 		select {
 		case ev := <-g.gEvents:
@@ -694,7 +772,9 @@ func (g *Gui) consumeevents() error {
 				return err
 			}
 		case ev := <-g.userEvents:
-			if err := ev.f(g); err != nil {
+			err := ev.f(g)
+			ev.task.Done()
+			if err != nil {
 				return err
 			}
 		default:
@@ -1355,7 +1435,7 @@ func (g *Gui) StartTicking(ctx context.Context) {
 
 				for _, view := range g.Views() {
 					if view.HasLoader {
-						g.userEvents <- userEvent{func(g *Gui) error { return nil }}
+						g.UpdateAsync(func(g *Gui) error { return nil })
 						continue outer
 					}
 				}

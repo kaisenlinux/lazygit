@@ -34,11 +34,11 @@ func (gui *Gui) moveMainContextPairToTop(pair types.MainContextPair) {
 }
 
 func (gui *Gui) moveMainContextToTop(context types.Context) {
-	gui.setWindowContext(context)
+	gui.helpers.Window.SetWindowContext(context)
 
 	view := context.GetView()
 
-	topView := gui.topViewInWindow(context.GetWindowName())
+	topView := gui.helpers.Window.TopViewInWindow(context.GetWindowName())
 	if topView == nil {
 		gui.Log.Error("unexpected: topView is nil")
 		return
@@ -65,6 +65,8 @@ func (gui *Gui) RefreshMainView(opts *types.ViewUpdateOpts, context types.Contex
 	if opts.Title != "" {
 		view.Title = opts.Title
 	}
+
+	view.Subtitle = opts.SubTitle
 
 	if err := gui.runTaskForView(view, opts.Task); err != nil {
 		gui.c.Log.Error(err)
@@ -145,8 +147,4 @@ func (gui *Gui) refreshMainViews(opts types.RefreshMainOpts) error {
 
 func (gui *Gui) splitMainPanel(splitMainPanel bool) {
 	gui.State.SplitMainPanel = splitMainPanel
-}
-
-func (gui *Gui) isMainPanelSplit() bool {
-	return gui.State.SplitMainPanel
 }

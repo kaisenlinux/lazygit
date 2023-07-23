@@ -1,50 +1,56 @@
 package context
 
 import (
-	"github.com/jesseduffield/gocui"
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
+	"github.com/jesseduffield/lazygit/pkg/gui/presentation"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
 )
 
 type BranchesContext struct {
-	*BasicViewModel[*models.Branch]
+	*FilteredListViewModel[*models.Branch]
 	*ListContextTrait
 }
 
-var _ types.IListContext = (*BranchesContext)(nil)
+var (
+	_ types.IListContext    = (*BranchesContext)(nil)
+	_ types.DiffableContext = (*BranchesContext)(nil)
+)
 
-func NewBranchesContext(
-	getModel func() []*models.Branch,
-	view *gocui.View,
-	getDisplayStrings func(startIdx int, length int) [][]string,
+func NewBranchesContext(c *ContextCommon) *BranchesContext {
+	viewModel := NewFilteredListViewModel(
+		func() []*models.Branch { return c.Model().Branches },
+		func(branch *models.Branch) []string {
+			return []string{branch.Name}
+		},
+	)
 
-	onFocus func(types.OnFocusOpts) error,
-	onRenderToMain func() error,
-	onFocusLost func(opts types.OnFocusLostOpts) error,
+	getDisplayStrings := func(startIdx int, length int) [][]string {
+		return presentation.GetBranchListDisplayStrings(
+			viewModel.GetItems(),
+			c.State().GetRepoState().GetScreenMode() != types.SCREEN_NORMAL,
+			c.Modes().Diffing.Ref,
+			c.Tr,
+			c.UserConfig,
+		)
+	}
 
-	c *types.HelperCommon,
-) *BranchesContext {
-	viewModel := NewBasicViewModel(getModel)
-
-	return &BranchesContext{
-		BasicViewModel: viewModel,
+	self := &BranchesContext{
+		FilteredListViewModel: viewModel,
 		ListContextTrait: &ListContextTrait{
 			Context: NewSimpleContext(NewBaseContext(NewBaseContextOpts{
-				View:       view,
+				View:       c.Views().Branches,
 				WindowName: "branches",
 				Key:        LOCAL_BRANCHES_CONTEXT_KEY,
 				Kind:       types.SIDE_CONTEXT,
 				Focusable:  true,
-			}), ContextCallbackOpts{
-				OnFocus:        onFocus,
-				OnFocusLost:    onFocusLost,
-				OnRenderToMain: onRenderToMain,
-			}),
+			})),
 			list:              viewModel,
 			getDisplayStrings: getDisplayStrings,
 			c:                 c,
 		},
 	}
+
+	return self
 }
 
 func (self *BranchesContext) GetSelectedItemId() string {
@@ -62,4 +68,17 @@ func (self *BranchesContext) GetSelectedRef() types.Ref {
 		return nil
 	}
 	return branch
+}
+
+func (self *BranchesContext) GetDiffTerminals() []string {
+	// for our local branches we want to include both the branch and its upstream
+	branch := self.GetSelected()
+	if branch != nil {
+		names := []string{branch.ID()}
+		if branch.IsTrackingRemote() {
+			names = append(names, branch.ID()+"@{u}")
+		}
+		return names
+	}
+	return nil
 }

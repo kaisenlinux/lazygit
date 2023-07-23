@@ -7,7 +7,7 @@ import (
 
 var ApplyPatch = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Restore part of a stash entry via applying a custom patch",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -35,15 +35,15 @@ var ApplyPatch = NewIntegrationTest(NewIntegrationTestArgs{
 					).
 					PressPrimaryAction()
 
-				t.Views().Information().Content(Contains("building patch"))
+				t.Views().Information().Content(Contains("Building patch"))
 
 				t.Views().
 					CommitFiles().
 					Press(keys.Universal.CreatePatchOptionsMenu)
 
 				t.ExpectPopup().Menu().
-					Title(Equals("Patch Options")).
-					Select(MatchesRegexp(`apply patch$`)).Confirm()
+					Title(Equals("Patch options")).
+					Select(MatchesRegexp(`Apply patch$`)).Confirm()
 			})
 
 		t.Views().Files().Lines(

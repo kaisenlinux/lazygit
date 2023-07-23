@@ -7,7 +7,7 @@ import (
 
 var CreateTag = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Create a new tag on branch",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -28,7 +28,7 @@ var CreateTag = NewIntegrationTest(NewIntegrationTestArgs{
 
 		t.ExpectPopup().Menu().
 			Title(Equals("Create tag")).
-			Select(Contains("lightweight")).
+			Select(Contains("Lightweight")).
 			Confirm()
 
 		t.ExpectPopup().Prompt().

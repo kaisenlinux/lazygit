@@ -7,7 +7,7 @@ import (
 
 var SpecificSelection = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Build a custom patch with a specific selection of lines, adding individual lines, as well as a range and hunk, and adding a file directly",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -39,7 +39,7 @@ var SpecificSelection = NewIntegrationTest(NewIntegrationTestArgs{
 			).
 			PressPrimaryAction().
 			Tap(func() {
-				t.Views().Information().Content(Contains("building patch"))
+				t.Views().Information().Content(Contains("Building patch"))
 
 				t.Views().Secondary().Content(Contains("direct file content"))
 			}).
@@ -78,7 +78,7 @@ var SpecificSelection = NewIntegrationTest(NewIntegrationTestArgs{
 				Contains(` 1f`),
 			).
 			Tap(func() {
-				t.Views().Information().Content(Contains("building patch"))
+				t.Views().Information().Content(Contains("Building patch"))
 
 				t.Views().Secondary().Content(
 					// when we're inside the patch building panel, we only show the patch
@@ -113,7 +113,7 @@ var SpecificSelection = NewIntegrationTest(NewIntegrationTestArgs{
 			NavigateToLine(Contains("+2g")).
 			PressPrimaryAction().
 			Tap(func() {
-				t.Views().Information().Content(Contains("building patch"))
+				t.Views().Information().Content(Contains("Building patch"))
 
 				t.Views().Secondary().ContainsLines(
 					Contains("+2a"),

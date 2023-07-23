@@ -7,7 +7,7 @@ import (
 
 var StageLines = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Stage and unstage various lines of a file in the staging panel",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -92,8 +92,8 @@ var StageLines = NewIntegrationTest(NewIntegrationTestArgs{
 			Press(keys.Universal.Remove).
 			Tap(func() {
 				t.ExpectPopup().Confirmation().
-					Title(Equals("Unstage lines")).
-					Content(Contains("Are you sure you want to delete the selected lines")).
+					Title(Equals("Discard change")).
+					Content(Contains("Are you sure you want to discard this change")).
 					Confirm()
 			}).
 			IsEmpty()

@@ -7,7 +7,7 @@ import (
 
 var Checkout = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Checkout a reflog commit as a detached head",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -29,7 +29,7 @@ var Checkout = NewIntegrationTest(NewIntegrationTestArgs{
 			PressPrimaryAction().
 			Tap(func() {
 				t.ExpectPopup().Confirmation().
-					Title(Contains("checkout commit")).
+					Title(Contains("Checkout commit")).
 					Content(Contains("Are you sure you want to checkout this commit?")).
 					Confirm()
 			}).

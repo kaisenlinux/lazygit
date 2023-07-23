@@ -7,7 +7,7 @@ import (
 
 var Add = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Add a submodule",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -19,16 +19,16 @@ var Add = NewIntegrationTest(NewIntegrationTestArgs{
 			Press(keys.Universal.New).
 			Tap(func() {
 				t.ExpectPopup().Prompt().
-					Title(Equals("new submodule URL:")).
+					Title(Equals("New submodule URL:")).
 					Type("../other_repo").Confirm()
 
 				t.ExpectPopup().Prompt().
-					Title(Equals("new submodule name:")).
+					Title(Equals("New submodule name:")).
 					InitialText(Equals("other_repo")).
 					Clear().Type("my_submodule").Confirm()
 
 				t.ExpectPopup().Prompt().
-					Title(Equals("new submodule path:")).
+					Title(Equals("New submodule path:")).
 					InitialText(Equals("my_submodule")).
 					Clear().Type("my_submodule_path").Confirm()
 			}).

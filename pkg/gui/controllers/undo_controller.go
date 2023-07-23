@@ -3,6 +3,7 @@ package controllers
 import (
 	"fmt"
 
+	"github.com/jesseduffield/gocui"
 	"github.com/jesseduffield/lazygit/pkg/commands/types/enums"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
 	"github.com/jesseduffield/lazygit/pkg/utils"
@@ -20,17 +21,17 @@ import (
 
 type UndoController struct {
 	baseController
-	*controllerCommon
+	c *ControllerCommon
 }
 
 var _ types.IController = &UndoController{}
 
 func NewUndoController(
-	common *controllerCommon,
+	common *ControllerCommon,
 ) *UndoController {
 	return &UndoController{
-		baseController:   baseController{},
-		controllerCommon: common,
+		baseController: baseController{},
+		c:              common,
 	}
 }
 
@@ -54,13 +55,13 @@ func (self *UndoController) GetKeybindings(opts types.KeybindingsOpts) []*types.
 		{
 			Key:         opts.GetKey(opts.Config.Universal.Undo),
 			Handler:     self.reflogUndo,
-			Description: self.c.Tr.LcUndoReflog,
+			Description: self.c.Tr.UndoReflog,
 			Tooltip:     self.c.Tr.UndoTooltip,
 		},
 		{
 			Key:         opts.GetKey(opts.Config.Universal.Redo),
 			Handler:     self.reflogRedo,
-			Description: self.c.Tr.LcRedoReflog,
+			Description: self.c.Tr.RedoReflog,
 			Tooltip:     self.c.Tr.RedoTooltip,
 		},
 	}
@@ -76,8 +77,8 @@ func (self *UndoController) reflogUndo() error {
 	undoEnvVars := []string{"GIT_REFLOG_ACTION=[lazygit undo]"}
 	undoingStatus := self.c.Tr.UndoingStatus
 
-	if self.git.Status.WorkingTreeState() == enums.REBASE_MODE_REBASING {
-		return self.c.ErrorMsg(self.c.Tr.LcCantUndoWhileRebasing)
+	if self.c.Git().Status.WorkingTreeState() == enums.REBASE_MODE_REBASING {
+		return self.c.ErrorMsg(self.c.Tr.CantUndoWhileRebasing)
 	}
 
 	return self.parseReflogForActions(func(counter int, action reflogAction) (bool, error) {
@@ -104,7 +105,7 @@ func (self *UndoController) reflogUndo() error {
 				Prompt: fmt.Sprintf(self.c.Tr.CheckoutPrompt, action.from),
 				HandleConfirm: func() error {
 					self.c.LogAction(self.c.Tr.Actions.Undo)
-					return self.helpers.Refs.CheckoutRef(action.from, types.CheckoutRefOptions{
+					return self.c.Helpers().Refs.CheckoutRef(action.from, types.CheckoutRefOptions{
 						EnvVars:       undoEnvVars,
 						WaitingStatus: undoingStatus,
 					})
@@ -124,8 +125,8 @@ func (self *UndoController) reflogRedo() error {
 	redoEnvVars := []string{"GIT_REFLOG_ACTION=[lazygit redo]"}
 	redoingStatus := self.c.Tr.RedoingStatus
 
-	if self.git.Status.WorkingTreeState() == enums.REBASE_MODE_REBASING {
-		return self.c.ErrorMsg(self.c.Tr.LcCantRedoWhileRebasing)
+	if self.c.Git().Status.WorkingTreeState() == enums.REBASE_MODE_REBASING {
+		return self.c.ErrorMsg(self.c.Tr.CantRedoWhileRebasing)
 	}
 
 	return self.parseReflogForActions(func(counter int, action reflogAction) (bool, error) {
@@ -156,7 +157,7 @@ func (self *UndoController) reflogRedo() error {
 				Prompt: fmt.Sprintf(self.c.Tr.CheckoutPrompt, action.to),
 				HandleConfirm: func() error {
 					self.c.LogAction(self.c.Tr.Actions.Redo)
-					return self.helpers.Refs.CheckoutRef(action.to, types.CheckoutRefOptions{
+					return self.c.Helpers().Refs.CheckoutRef(action.to, types.CheckoutRefOptions{
 						EnvVars:       redoEnvVars,
 						WaitingStatus: redoingStatus,
 					})
@@ -179,7 +180,7 @@ func (self *UndoController) reflogRedo() error {
 // Though we might support this later, hence the use of the CURRENT_REBASE action kind.
 func (self *UndoController) parseReflogForActions(onUserAction func(counter int, action reflogAction) (bool, error)) error {
 	counter := 0
-	reflogCommits := self.model.FilteredReflogCommits
+	reflogCommits := self.c.Model().FilteredReflogCommits
 	rebaseFinishCommitSha := ""
 	var action *reflogAction
 	for reflogCommitIdx, reflogCommit := range reflogCommits {
@@ -233,29 +234,29 @@ type hardResetOptions struct {
 // only to be used in the undo flow for now (does an autostash)
 func (self *UndoController) hardResetWithAutoStash(commitSha string, options hardResetOptions) error {
 	reset := func() error {
-		if err := self.helpers.Refs.ResetToRef(commitSha, "hard", options.EnvVars); err != nil {
+		if err := self.c.Helpers().Refs.ResetToRef(commitSha, "hard", options.EnvVars); err != nil {
 			return self.c.Error(err)
 		}
 		return nil
 	}
 
 	// if we have any modified tracked files we need to ask the user if they want us to stash for them
-	dirtyWorkingTree := self.helpers.WorkingTree.IsWorkingTreeDirty()
+	dirtyWorkingTree := self.c.Helpers().WorkingTree.IsWorkingTreeDirty()
 	if dirtyWorkingTree {
 		// offer to autostash changes
 		return self.c.Confirm(types.ConfirmOpts{
 			Title:  self.c.Tr.AutoStashTitle,
 			Prompt: self.c.Tr.AutoStashPrompt,
 			HandleConfirm: func() error {
-				return self.c.WithWaitingStatus(options.WaitingStatus, func() error {
-					if err := self.git.Stash.Save(self.c.Tr.StashPrefix + commitSha); err != nil {
+				return self.c.WithWaitingStatus(options.WaitingStatus, func(gocui.Task) error {
+					if err := self.c.Git().Stash.Push(self.c.Tr.StashPrefix + commitSha); err != nil {
 						return self.c.Error(err)
 					}
 					if err := reset(); err != nil {
 						return err
 					}
 
-					err := self.git.Stash.Pop(0)
+					err := self.c.Git().Stash.Pop(0)
 					if err := self.c.Refresh(types.RefreshOptions{}); err != nil {
 						return err
 					}
@@ -268,7 +269,7 @@ func (self *UndoController) hardResetWithAutoStash(commitSha string, options har
 		})
 	}
 
-	return self.c.WithWaitingStatus(options.WaitingStatus, func() error {
+	return self.c.WithWaitingStatus(options.WaitingStatus, func(gocui.Task) error {
 		return reset()
 	})
 }

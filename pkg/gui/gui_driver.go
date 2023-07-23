@@ -2,6 +2,7 @@ package gui
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -17,7 +18,8 @@ import (
 // this gives our integration test a way of interacting with the gui for sending keypresses
 // and reading state.
 type GuiDriver struct {
-	gui *Gui
+	gui        *Gui
+	isIdleChan chan struct{}
 }
 
 var _ integrationTypes.GuiDriver = &GuiDriver{}
@@ -39,6 +41,9 @@ func (self *GuiDriver) PressKey(keyStr string) {
 		tcell.NewEventKey(tcellKey, r, tcell.ModNone),
 		0,
 	)
+
+	// wait until lazygit is idle (i.e. all processing is done) before continuing
+	<-self.isIdleChan
 }
 
 func (self *GuiDriver) Keys() config.KeybindingConfig {
@@ -50,7 +55,7 @@ func (self *GuiDriver) CurrentContext() types.Context {
 }
 
 func (self *GuiDriver) ContextForView(viewName string) types.Context {
-	context, ok := self.gui.contextForView(viewName)
+	context, ok := self.gui.helpers.View.ContextForView(viewName)
 	if !ok {
 		return nil
 	}
@@ -64,13 +69,17 @@ func (self *GuiDriver) Fail(message string) {
 		"%s\nFinal Lazygit state:\n%s\nUpon failure, focused view was '%s'.\nLog:\n%s", message,
 		self.gui.g.Snapshot(),
 		currentView.Name(),
-		strings.Join(self.gui.CmdLog, "\n"),
+		strings.Join(self.gui.GuiLog, "\n"),
 	)
 
 	self.gui.g.Close()
 	// need to give the gui time to close
 	time.Sleep(time.Millisecond * 100)
-	panic(fullMessage)
+	_, err := fmt.Fprintln(os.Stderr, fullMessage)
+	if err != nil {
+		panic("Test failed. Failed writing to stderr")
+	}
+	panic("Test failed")
 }
 
 // logs to the normal place that you log to i.e. viewable with `lazygit --logs`

@@ -9,17 +9,17 @@ import (
 
 type StashController struct {
 	baseController
-	*controllerCommon
+	c *ControllerCommon
 }
 
 var _ types.IController = &StashController{}
 
 func NewStashController(
-	common *controllerCommon,
+	common *ControllerCommon,
 ) *StashController {
 	return &StashController{
-		baseController:   baseController{},
-		controllerCommon: common,
+		baseController: baseController{},
+		c:              common,
 	}
 }
 
@@ -28,31 +28,59 @@ func (self *StashController) GetKeybindings(opts types.KeybindingsOpts) []*types
 		{
 			Key:         opts.GetKey(opts.Config.Universal.Select),
 			Handler:     self.checkSelected(self.handleStashApply),
-			Description: self.c.Tr.LcApply,
+			Description: self.c.Tr.Apply,
 		},
 		{
 			Key:         opts.GetKey(opts.Config.Stash.PopStash),
 			Handler:     self.checkSelected(self.handleStashPop),
-			Description: self.c.Tr.LcPop,
+			Description: self.c.Tr.Pop,
 		},
 		{
 			Key:         opts.GetKey(opts.Config.Universal.Remove),
 			Handler:     self.checkSelected(self.handleStashDrop),
-			Description: self.c.Tr.LcDrop,
+			Description: self.c.Tr.Drop,
 		},
 		{
 			Key:         opts.GetKey(opts.Config.Universal.New),
 			Handler:     self.checkSelected(self.handleNewBranchOffStashEntry),
-			Description: self.c.Tr.LcNewBranch,
+			Description: self.c.Tr.NewBranch,
 		},
 		{
 			Key:         opts.GetKey(opts.Config.Stash.RenameStash),
 			Handler:     self.checkSelected(self.handleRenameStashEntry),
-			Description: self.c.Tr.LcRenameStash,
+			Description: self.c.Tr.RenameStash,
 		},
 	}
 
 	return bindings
+}
+
+func (self *StashController) GetOnRenderToMain() func() error {
+	return func() error {
+		return self.c.Helpers().Diff.WithDiffModeCheck(func() error {
+			var task types.UpdateTask
+			stashEntry := self.context().GetSelected()
+			if stashEntry == nil {
+				task = types.NewRenderStringTask(self.c.Tr.NoStashEntries)
+			} else {
+				task = types.NewRunPtyTask(
+					self.c.Git().Stash.ShowStashEntryCmdObj(
+						stashEntry.Index,
+						self.c.State().GetIgnoreWhitespaceInDiffView(),
+					).GetCmd(),
+				)
+			}
+
+			return self.c.RenderToMainViews(types.RefreshMainOpts{
+				Pair: self.c.MainViewPairs().Normal,
+				Main: &types.ViewUpdateOpts{
+					Title:    "Stash",
+					SubTitle: self.c.Helpers().Diff.IgnoringWhitespaceSubTitle(),
+					Task:     task,
+				},
+			})
+		})
+	}
 }
 
 func (self *StashController) checkSelected(callback func(*models.StashEntry) error) func() error {
@@ -71,13 +99,13 @@ func (self *StashController) Context() types.Context {
 }
 
 func (self *StashController) context() *context.StashContext {
-	return self.contexts.Stash
+	return self.c.Contexts().Stash
 }
 
 func (self *StashController) handleStashApply(stashEntry *models.StashEntry) error {
 	apply := func() error {
 		self.c.LogAction(self.c.Tr.Actions.Stash)
-		err := self.git.Stash.Apply(stashEntry.Index)
+		err := self.c.Git().Stash.Apply(stashEntry.Index)
 		_ = self.postStashRefresh()
 		if err != nil {
 			return self.c.Error(err)
@@ -101,7 +129,7 @@ func (self *StashController) handleStashApply(stashEntry *models.StashEntry) err
 func (self *StashController) handleStashPop(stashEntry *models.StashEntry) error {
 	pop := func() error {
 		self.c.LogAction(self.c.Tr.Actions.Stash)
-		err := self.git.Stash.Pop(stashEntry.Index)
+		err := self.c.Git().Stash.Pop(stashEntry.Index)
 		_ = self.postStashRefresh()
 		if err != nil {
 			return self.c.Error(err)
@@ -128,7 +156,7 @@ func (self *StashController) handleStashDrop(stashEntry *models.StashEntry) erro
 		Prompt: self.c.Tr.SureDropStashEntry,
 		HandleConfirm: func() error {
 			self.c.LogAction(self.c.Tr.Actions.Stash)
-			err := self.git.Stash.Drop(stashEntry.Index)
+			err := self.c.Git().Stash.Drop(stashEntry.Index)
 			_ = self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.STASH}})
 			if err != nil {
 				return self.c.Error(err)
@@ -143,7 +171,7 @@ func (self *StashController) postStashRefresh() error {
 }
 
 func (self *StashController) handleNewBranchOffStashEntry(stashEntry *models.StashEntry) error {
-	return self.helpers.Refs.NewBranch(stashEntry.RefName(), stashEntry.Description(), "")
+	return self.c.Helpers().Refs.NewBranch(stashEntry.RefName(), stashEntry.Description(), "")
 }
 
 func (self *StashController) handleRenameStashEntry(stashEntry *models.StashEntry) error {
@@ -159,12 +187,13 @@ func (self *StashController) handleRenameStashEntry(stashEntry *models.StashEntr
 		InitialContent: stashEntry.Name,
 		HandleConfirm: func(response string) error {
 			self.c.LogAction(self.c.Tr.Actions.RenameStash)
-			err := self.git.Stash.Rename(stashEntry.Index, response)
+			err := self.c.Git().Stash.Rename(stashEntry.Index, response)
 			_ = self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.STASH}})
 			if err != nil {
 				return err
 			}
 			self.context().SetSelectedLineIdx(0) // Select the renamed stash
+			self.context().FocusLine()
 			return nil
 		},
 	})

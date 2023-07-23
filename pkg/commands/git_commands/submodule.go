@@ -2,7 +2,6 @@ package git_commands
 
 import (
 	"bufio"
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -82,38 +81,60 @@ func (self *SubmoduleCommands) Stash(submodule *models.SubmoduleConfig) error {
 		return nil
 	}
 
-	return self.cmd.New("git -C " + self.cmd.Quote(submodule.Path) + " stash --include-untracked").Run()
+	cmdArgs := NewGitCmd("stash").
+		RepoPath(submodule.Path).
+		Arg("--include-untracked").
+		ToArgv()
+
+	return self.cmd.New(cmdArgs).Run()
 }
 
 func (self *SubmoduleCommands) Reset(submodule *models.SubmoduleConfig) error {
-	return self.cmd.New("git submodule update --init --force -- " + self.cmd.Quote(submodule.Path)).Run()
+	cmdArgs := NewGitCmd("submodule").
+		Arg("update", "--init", "--force", "--", submodule.Path).
+		ToArgv()
+
+	return self.cmd.New(cmdArgs).Run()
 }
 
 func (self *SubmoduleCommands) UpdateAll() error {
 	// not doing an --init here because the user probably doesn't want that
-	return self.cmd.New("git submodule update --force").Run()
+	cmdArgs := NewGitCmd("submodule").Arg("update", "--force").ToArgv()
+
+	return self.cmd.New(cmdArgs).Run()
 }
 
 func (self *SubmoduleCommands) Delete(submodule *models.SubmoduleConfig) error {
 	// based on https://gist.github.com/myusuf3/7f645819ded92bda6677
 
-	if err := self.cmd.New("git submodule deinit --force -- " + self.cmd.Quote(submodule.Path)).Run(); err != nil {
-		if strings.Contains(err.Error(), "did not match any file(s) known to git") {
-			if err := self.cmd.New("git config --file .gitmodules --remove-section submodule." + self.cmd.Quote(submodule.Name)).Run(); err != nil {
-				return err
-			}
+	if err := self.cmd.New(
+		NewGitCmd("submodule").
+			Arg("deinit", "--force", "--", submodule.Path).ToArgv(),
+	).Run(); err != nil {
+		if !strings.Contains(err.Error(), "did not match any file(s) known to git") {
+			return err
+		}
 
-			if err := self.cmd.New("git config --remove-section submodule." + self.cmd.Quote(submodule.Name)).Run(); err != nil {
-				return err
-			}
+		if err := self.cmd.New(
+			NewGitCmd("config").
+				Arg("--file", ".gitmodules", "--remove-section", "submodule."+submodule.Path).
+				ToArgv(),
+		).Run(); err != nil {
+			return err
+		}
 
-			// if there's an error here about it not existing then we'll just continue to do `git rm`
-		} else {
+		if err := self.cmd.New(
+			NewGitCmd("config").
+				Arg("--remove-section", "submodule."+submodule.Path).
+				ToArgv(),
+		).Run(); err != nil {
 			return err
 		}
 	}
 
-	if err := self.cmd.New("git rm --force -r " + submodule.Path).Run(); err != nil {
+	if err := self.cmd.New(
+		NewGitCmd("rm").Arg("--force", "-r", submodule.Path).ToArgv(),
+	).Run(); err != nil {
 		// if the directory isn't there then that's fine
 		self.Log.Error(err)
 	}
@@ -122,24 +143,35 @@ func (self *SubmoduleCommands) Delete(submodule *models.SubmoduleConfig) error {
 }
 
 func (self *SubmoduleCommands) Add(name string, path string, url string) error {
-	return self.cmd.
-		New(
-			fmt.Sprintf(
-				"git submodule add --force --name %s -- %s %s ",
-				self.cmd.Quote(name),
-				self.cmd.Quote(url),
-				self.cmd.Quote(path),
-			)).
-		Run()
+	cmdArgs := NewGitCmd("submodule").
+		Arg("add").
+		Arg("--force").
+		Arg("--name").
+		Arg(name).
+		Arg("--").
+		Arg(url).
+		Arg(path).
+		ToArgv()
+
+	return self.cmd.New(cmdArgs).Run()
 }
 
 func (self *SubmoduleCommands) UpdateUrl(name string, path string, newUrl string) error {
+	setUrlCmdStr := NewGitCmd("config").
+		Arg(
+			"--file", ".gitmodules", "submodule."+name+".url", newUrl,
+		).
+		ToArgv()
+
 	// the set-url command is only for later git versions so we're doing it manually here
-	if err := self.cmd.New("git config --file .gitmodules submodule." + self.cmd.Quote(name) + ".url " + self.cmd.Quote(newUrl)).Run(); err != nil {
+	if err := self.cmd.New(setUrlCmdStr).Run(); err != nil {
 		return err
 	}
 
-	if err := self.cmd.New("git submodule sync -- " + self.cmd.Quote(path)).Run(); err != nil {
+	syncCmdStr := NewGitCmd("submodule").Arg("sync", "--", path).
+		ToArgv()
+
+	if err := self.cmd.New(syncCmdStr).Run(); err != nil {
 		return err
 	}
 
@@ -147,27 +179,45 @@ func (self *SubmoduleCommands) UpdateUrl(name string, path string, newUrl string
 }
 
 func (self *SubmoduleCommands) Init(path string) error {
-	return self.cmd.New("git submodule init -- " + self.cmd.Quote(path)).Run()
+	cmdArgs := NewGitCmd("submodule").Arg("init", "--", path).
+		ToArgv()
+
+	return self.cmd.New(cmdArgs).Run()
 }
 
 func (self *SubmoduleCommands) Update(path string) error {
-	return self.cmd.New("git submodule update --init -- " + self.cmd.Quote(path)).Run()
+	cmdArgs := NewGitCmd("submodule").Arg("update", "--init", "--", path).
+		ToArgv()
+
+	return self.cmd.New(cmdArgs).Run()
 }
 
 func (self *SubmoduleCommands) BulkInitCmdObj() oscommands.ICmdObj {
-	return self.cmd.New("git submodule init")
+	cmdArgs := NewGitCmd("submodule").Arg("init").
+		ToArgv()
+
+	return self.cmd.New(cmdArgs)
 }
 
 func (self *SubmoduleCommands) BulkUpdateCmdObj() oscommands.ICmdObj {
-	return self.cmd.New("git submodule update")
+	cmdArgs := NewGitCmd("submodule").Arg("update").
+		ToArgv()
+
+	return self.cmd.New(cmdArgs)
 }
 
 func (self *SubmoduleCommands) ForceBulkUpdateCmdObj() oscommands.ICmdObj {
-	return self.cmd.New("git submodule update --force")
+	cmdArgs := NewGitCmd("submodule").Arg("update", "--force").
+		ToArgv()
+
+	return self.cmd.New(cmdArgs)
 }
 
 func (self *SubmoduleCommands) BulkDeinitCmdObj() oscommands.ICmdObj {
-	return self.cmd.New("git submodule deinit --all --force")
+	cmdArgs := NewGitCmd("submodule").Arg("deinit", "--all", "--force").
+		ToArgv()
+
+	return self.cmd.New(cmdArgs)
 }
 
 func (self *SubmoduleCommands) ResetSubmodules(submodules []*models.SubmoduleConfig) error {

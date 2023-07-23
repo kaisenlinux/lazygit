@@ -7,7 +7,7 @@ import (
 
 var DetachedHead = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Create a new branch on detached head",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -25,7 +25,7 @@ var DetachedHead = NewIntegrationTest(NewIntegrationTestArgs{
 			Press(keys.Universal.New)
 
 		t.ExpectPopup().Prompt().
-			Title(MatchesRegexp(`^New Branch Name \(Branch is off of '[0-9a-f]+'\)$`)).
+			Title(MatchesRegexp(`^New branch name \(branch is off of '[0-9a-f]+'\)$`)).
 			Type("new-branch").
 			Confirm()
 

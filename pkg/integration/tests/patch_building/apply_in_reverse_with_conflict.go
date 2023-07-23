@@ -7,7 +7,7 @@ import (
 
 var ApplyInReverseWithConflict = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Apply a custom patch in reverse, resulting in a conflict",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -40,7 +40,7 @@ var ApplyInReverseWithConflict = NewIntegrationTest(NewIntegrationTestArgs{
 			// Add both files to the patch; the first will conflict, the second won't
 			PressPrimaryAction().
 			Tap(func() {
-				t.Views().Information().Content(Contains("building patch"))
+				t.Views().Information().Content(Contains("Building patch"))
 
 				t.Views().PatchBuildingSecondary().Content(
 					Contains("+more file1 content"))
@@ -51,12 +51,11 @@ var ApplyInReverseWithConflict = NewIntegrationTest(NewIntegrationTestArgs{
 		t.Views().PatchBuildingSecondary().Content(
 			Contains("+more file1 content").Contains("+more file2 content"))
 
-		t.Common().SelectPatchOption(Contains("apply patch in reverse"))
+		t.Common().SelectPatchOption(Contains("Apply patch in reverse"))
 
 		t.ExpectPopup().Alert().
 			Title(Equals("Error")).
-			Content(Contains("Applied patch to 'file1' with conflicts.").
-				Contains("Applied patch to 'file2' cleanly.")).
+			Content(Contains("Applied patch to 'file1' with conflicts.")).
 			Confirm()
 
 		t.Views().Files().

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/go-errors/errors"
+	"github.com/sirupsen/logrus"
 
 	"github.com/jesseduffield/generics/slices"
 	appTypes "github.com/jesseduffield/lazygit/pkg/app/types"
@@ -22,6 +23,7 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/env"
 	"github.com/jesseduffield/lazygit/pkg/gui"
 	"github.com/jesseduffield/lazygit/pkg/i18n"
+	"github.com/jesseduffield/lazygit/pkg/logs"
 	"github.com/jesseduffield/lazygit/pkg/updates"
 )
 
@@ -33,7 +35,6 @@ type App struct {
 	Config    config.AppConfigurer
 	OSCommand *oscommands.OSCommand
 	Gui       *gui.Gui
-	Updater   *updates.Updater // may only need this on the Gui
 }
 
 func Run(
@@ -77,6 +78,18 @@ func NewCommon(config config.AppConfigurer) (*common.Common, error) {
 	}, nil
 }
 
+func newLogger(cfg config.AppConfigurer) *logrus.Entry {
+	if cfg.GetDebug() {
+		logPath, err := config.LogPath()
+		if err != nil {
+			log.Fatal(err)
+		}
+		return logs.NewDevelopmentLogger(logPath)
+	} else {
+		return logs.NewProductionLogger()
+	}
+}
+
 // NewApp bootstrap a new application
 func NewApp(config config.AppConfigurer, common *common.Common) (*App, error) {
 	app := &App{
@@ -87,8 +100,7 @@ func NewApp(config config.AppConfigurer, common *common.Common) (*App, error) {
 
 	app.OSCommand = oscommands.NewOSCommand(common, config, oscommands.GetPlatform(), oscommands.NewNullGuiIO(app.Log))
 
-	var err error
-	app.Updater, err = updates.NewUpdater(common, config, app.OSCommand)
+	updater, err := updates.NewUpdater(common, config, app.OSCommand)
 	if err != nil {
 		return app, err
 	}
@@ -108,7 +120,12 @@ func NewApp(config config.AppConfigurer, common *common.Common) (*App, error) {
 		return app, err
 	}
 
-	app.Gui, err = gui.NewGui(common, config, gitVersion, app.Updater, showRecentRepos, dirName)
+	// used for testing purposes
+	if os.Getenv("SHOW_RECENT_REPOS") == "true" {
+		showRecentRepos = true
+	}
+
+	app.Gui, err = gui.NewGui(common, config, gitVersion, updater, showRecentRepos, dirName)
 	if err != nil {
 		return app, err
 	}
@@ -177,7 +194,7 @@ func (app *App) setupRepo() (bool, error) {
 				fmt.Print(app.Tr.InitialBranch)
 				response, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 				if trimmedResponse := strings.Trim(response, " \r\n"); len(trimmedResponse) > 0 {
-					initialBranchArg += "--initial-branch=" + app.OSCommand.Quote(trimmedResponse)
+					initialBranchArg += "--initial-branch=" + trimmedResponse
 				}
 			}
 		case "create":
@@ -193,7 +210,11 @@ func (app *App) setupRepo() (bool, error) {
 		}
 
 		if shouldInitRepo {
-			if err := app.OSCommand.Cmd.New("git init " + initialBranchArg).Run(); err != nil {
+			args := []string{"git", "init"}
+			if initialBranchArg != "" {
+				args = append(args, initialBranchArg)
+			}
+			if err := app.OSCommand.Cmd.New(args).Run(); err != nil {
 				return false, err
 			}
 			return false, nil

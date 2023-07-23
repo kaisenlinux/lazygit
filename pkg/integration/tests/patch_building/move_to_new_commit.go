@@ -7,7 +7,7 @@ import (
 
 var MoveToNewCommit = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Move a patch from a commit to a new commit",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -46,9 +46,9 @@ var MoveToNewCommit = NewIntegrationTest(NewIntegrationTestArgs{
 			PressPrimaryAction().
 			PressEscape()
 
-		t.Views().Information().Content(Contains("building patch"))
+		t.Views().Information().Content(Contains("Building patch"))
 
-		t.Common().SelectPatchOption(Contains("move patch into new commit"))
+		t.Common().SelectPatchOption(Contains("Move patch into new commit"))
 
 		t.Views().Commits().
 			IsFocused().

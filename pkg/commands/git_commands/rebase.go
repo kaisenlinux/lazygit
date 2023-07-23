@@ -41,7 +41,7 @@ func (self *RebaseCommands) RewordCommit(commits []*models.Commit, index int, me
 		return self.commit.RewordLastCommit(message)
 	}
 
-	err := self.BeginInteractiveRebaseForCommit(commits, index)
+	err := self.BeginInteractiveRebaseForCommit(commits, index, false)
 	if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func (self *RebaseCommands) GenericAmend(commits []*models.Commit, index int, f 
 		return f()
 	}
 
-	err := self.BeginInteractiveRebaseForCommit(commits, index)
+	err := self.BeginInteractiveRebaseForCommit(commits, index, false)
 	if err != nil {
 		return err
 	}
@@ -165,9 +165,10 @@ func logTodoChanges(changes []daemon.ChangeTodoAction) string {
 }
 
 type PrepareInteractiveRebaseCommandOpts struct {
-	baseShaOrRoot  string
-	instruction    daemon.Instruction
-	overrideEditor bool
+	baseShaOrRoot              string
+	instruction                daemon.Instruction
+	overrideEditor             bool
+	keepCommitsThatBecomeEmpty bool
 }
 
 // PrepareInteractiveRebaseCommand returns the cmd for an interactive rebase
@@ -176,26 +177,24 @@ type PrepareInteractiveRebaseCommandOpts struct {
 func (self *RebaseCommands) PrepareInteractiveRebaseCommand(opts PrepareInteractiveRebaseCommandOpts) oscommands.ICmdObj {
 	ex := oscommands.GetLazygitPath()
 
+	cmdArgs := NewGitCmd("rebase").
+		Arg("--interactive").
+		Arg("--autostash").
+		Arg("--keep-empty").
+		ArgIf(opts.keepCommitsThatBecomeEmpty && !self.version.IsOlderThan(2, 26, 0), "--empty=keep").
+		Arg("--no-autosquash").
+		ArgIf(!self.version.IsOlderThan(2, 22, 0), "--rebase-merges").
+		Arg(opts.baseShaOrRoot).
+		ToArgv()
+
 	debug := "FALSE"
 	if self.Debug {
 		debug = "TRUE"
 	}
 
-	emptyArg := " --empty=keep"
-	if self.version.IsOlderThan(2, 26, 0) {
-		emptyArg = ""
-	}
+	self.Log.WithField("command", cmdArgs).Debug("RunCommand")
 
-	rebaseMergesArg := " --rebase-merges"
-	if self.version.IsOlderThan(2, 22, 0) {
-		rebaseMergesArg = ""
-	}
-
-	cmdStr := fmt.Sprintf("git rebase --interactive --autostash --keep-empty%s --no-autosquash%s %s",
-		emptyArg, rebaseMergesArg, opts.baseShaOrRoot)
-	self.Log.WithField("command", cmdStr).Debug("RunCommand")
-
-	cmdObj := self.cmd.New(cmdStr)
+	cmdObj := self.cmd.New(cmdArgs)
 
 	gitSequenceEditor := ex
 
@@ -228,7 +227,8 @@ func (self *RebaseCommands) AmendTo(commits []*models.Commit, commitIndex int) e
 	}
 
 	// Get the sha of the commit we just created
-	fixupSha, err := self.cmd.New("git rev-parse --verify HEAD").RunWithOutput()
+	cmdArgs := NewGitCmd("rev-parse").Arg("--verify", "HEAD").ToArgv()
+	fixupSha, err := self.cmd.New(cmdArgs).RunWithOutput()
 	if err != nil {
 		return err
 	}
@@ -243,19 +243,19 @@ func (self *RebaseCommands) AmendTo(commits []*models.Commit, commitIndex int) e
 // EditRebaseTodo sets the action for a given rebase commit in the git-rebase-todo file
 func (self *RebaseCommands) EditRebaseTodo(commit *models.Commit, action todo.TodoCommand) error {
 	return utils.EditRebaseTodo(
-		filepath.Join(self.dotGitDir, "rebase-merge/git-rebase-todo"), commit.Sha, commit.Action, action)
+		filepath.Join(self.dotGitDir, "rebase-merge/git-rebase-todo"), commit.Sha, commit.Action, action, self.config.GetCoreCommentChar())
 }
 
 // MoveTodoDown moves a rebase todo item down by one position
 func (self *RebaseCommands) MoveTodoDown(commit *models.Commit) error {
 	fileName := filepath.Join(self.dotGitDir, "rebase-merge/git-rebase-todo")
-	return utils.MoveTodoDown(fileName, commit.Sha, commit.Action)
+	return utils.MoveTodoDown(fileName, commit.Sha, commit.Action, self.config.GetCoreCommentChar())
 }
 
 // MoveTodoDown moves a rebase todo item down by one position
 func (self *RebaseCommands) MoveTodoUp(commit *models.Commit) error {
 	fileName := filepath.Join(self.dotGitDir, "rebase-merge/git-rebase-todo")
-	return utils.MoveTodoUp(fileName, commit.Sha, commit.Action)
+	return utils.MoveTodoUp(fileName, commit.Sha, commit.Action, self.config.GetCoreCommentChar())
 }
 
 // SquashAllAboveFixupCommits squashes all fixup! commits above the given one
@@ -265,19 +265,18 @@ func (self *RebaseCommands) SquashAllAboveFixupCommits(commit *models.Commit) er
 		shaOrRoot = "--root"
 	}
 
-	return self.runSkipEditorCommand(
-		self.cmd.New(
-			fmt.Sprintf(
-				"git rebase --interactive --rebase-merges --autostash --autosquash %s",
-				shaOrRoot,
-			),
-		),
-	)
+	cmdArgs := NewGitCmd("rebase").
+		Arg("--interactive", "--rebase-merges", "--autostash", "--autosquash", shaOrRoot).
+		ToArgv()
+
+	return self.runSkipEditorCommand(self.cmd.New(cmdArgs))
 }
 
 // BeginInteractiveRebaseForCommit starts an interactive rebase to edit the current
 // commit and pick all others. After this you'll want to call `self.ContinueRebase()
-func (self *RebaseCommands) BeginInteractiveRebaseForCommit(commits []*models.Commit, commitIndex int) error {
+func (self *RebaseCommands) BeginInteractiveRebaseForCommit(
+	commits []*models.Commit, commitIndex int, keepCommitsThatBecomeEmpty bool,
+) error {
 	if len(commits)-1 < commitIndex {
 		return errors.New("index outside of range of commits")
 	}
@@ -296,9 +295,10 @@ func (self *RebaseCommands) BeginInteractiveRebaseForCommit(commits []*models.Co
 	self.os.LogCommand(logTodoChanges(changes), false)
 
 	return self.PrepareInteractiveRebaseCommand(PrepareInteractiveRebaseCommandOpts{
-		baseShaOrRoot:  getBaseShaOrRoot(commits, commitIndex+1),
-		overrideEditor: true,
-		instruction:    daemon.NewChangeTodoActionsInstruction(changes),
+		baseShaOrRoot:              getBaseShaOrRoot(commits, commitIndex+1),
+		overrideEditor:             true,
+		keepCommitsThatBecomeEmpty: keepCommitsThatBecomeEmpty,
+		instruction:                daemon.NewChangeTodoActionsInstruction(changes),
 	}).Run()
 }
 
@@ -308,7 +308,9 @@ func (self *RebaseCommands) RebaseBranch(branchName string) error {
 }
 
 func (self *RebaseCommands) GenericMergeOrRebaseActionCmdObj(commandType string, command string) oscommands.ICmdObj {
-	return self.cmd.New("git " + commandType + " --" + command)
+	cmdArgs := NewGitCmd(commandType).Arg("--" + command).ToArgv()
+
+	return self.cmd.New(cmdArgs)
 }
 
 func (self *RebaseCommands) ContinueRebase() error {
@@ -360,12 +362,14 @@ func (self *RebaseCommands) runSkipEditorCommand(cmdObj oscommands.ICmdObj) erro
 
 // DiscardOldFileChanges discards changes to a file from an old commit
 func (self *RebaseCommands) DiscardOldFileChanges(commits []*models.Commit, commitIndex int, fileName string) error {
-	if err := self.BeginInteractiveRebaseForCommit(commits, commitIndex); err != nil {
+	if err := self.BeginInteractiveRebaseForCommit(commits, commitIndex, false); err != nil {
 		return err
 	}
 
 	// check if file exists in previous commit (this command returns an error if the file doesn't exist)
-	if err := self.cmd.New("git cat-file -e HEAD^:" + self.cmd.Quote(fileName)).Run(); err != nil {
+	cmdArgs := NewGitCmd("cat-file").Arg("-e", "HEAD^:"+fileName).ToArgv()
+
+	if err := self.cmd.New(cmdArgs).Run(); err != nil {
 		if err := self.os.Remove(fileName); err != nil {
 			return err
 		}

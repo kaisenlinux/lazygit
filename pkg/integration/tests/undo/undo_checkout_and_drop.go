@@ -7,7 +7,7 @@ import (
 
 var UndoCheckoutAndDrop = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Drop some commits and then undo/redo the actions",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -24,7 +24,7 @@ var UndoCheckoutAndDrop = NewIntegrationTest(NewIntegrationTestArgs{
 
 		confirmCommitDrop := func() {
 			t.ExpectPopup().Confirmation().
-				Title(Equals("Delete Commit")).
+				Title(Equals("Delete commit")).
 				Content(Equals("Are you sure you want to delete this commit?")).
 				Confirm()
 		}

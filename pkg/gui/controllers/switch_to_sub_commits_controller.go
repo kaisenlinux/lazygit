@@ -15,22 +15,22 @@ type CanSwitchToSubCommits interface {
 
 type SwitchToSubCommitsController struct {
 	baseController
-	*controllerCommon
+	c       *ControllerCommon
 	context CanSwitchToSubCommits
 
 	setSubCommits func([]*models.Commit)
 }
 
 func NewSwitchToSubCommitsController(
-	controllerCommon *controllerCommon,
+	controllerCommon *ControllerCommon,
 	setSubCommits func([]*models.Commit),
 	context CanSwitchToSubCommits,
 ) *SwitchToSubCommitsController {
 	return &SwitchToSubCommitsController{
-		baseController:   baseController{},
-		controllerCommon: controllerCommon,
-		context:          context,
-		setSubCommits:    setSubCommits,
+		baseController: baseController{},
+		c:              controllerCommon,
+		context:        context,
+		setSubCommits:  setSubCommits,
 	}
 }
 
@@ -39,7 +39,7 @@ func (self *SwitchToSubCommitsController) GetKeybindings(opts types.KeybindingsO
 		{
 			Handler:     self.viewCommits,
 			Key:         opts.GetKey(opts.Config.Universal.GoInto),
-			Description: self.c.Tr.LcViewCommits,
+			Description: self.c.Tr.ViewCommits,
 		},
 	}
 
@@ -57,10 +57,10 @@ func (self *SwitchToSubCommitsController) viewCommits() error {
 	}
 
 	// need to populate my sub commits
-	commits, err := self.git.Loaders.CommitLoader.GetCommits(
+	commits, err := self.c.Git().Loaders.CommitLoader.GetCommits(
 		git_commands.GetCommitsOptions{
 			Limit:                true,
-			FilterPath:           self.modes.Filtering.GetPath(),
+			FilterPath:           self.c.Modes().Filtering.GetPath(),
 			IncludeRebaseCommits: false,
 			RefName:              ref.FullRefName(),
 		},
@@ -71,19 +71,22 @@ func (self *SwitchToSubCommitsController) viewCommits() error {
 
 	self.setSubCommits(commits)
 
-	self.contexts.SubCommits.SetSelectedLineIdx(0)
-	self.contexts.SubCommits.SetParentContext(self.context)
-	self.contexts.SubCommits.SetWindowName(self.context.GetWindowName())
-	self.contexts.SubCommits.SetTitleRef(ref.Description())
-	self.contexts.SubCommits.SetRef(ref)
-	self.contexts.SubCommits.SetLimitCommits(true)
+	subCommitsContext := self.c.Contexts().SubCommits
+	subCommitsContext.SetSelectedLineIdx(0)
+	subCommitsContext.SetParentContext(self.context)
+	subCommitsContext.SetWindowName(self.context.GetWindowName())
+	subCommitsContext.SetTitleRef(ref.Description())
+	subCommitsContext.SetRef(ref)
+	subCommitsContext.SetLimitCommits(true)
+	subCommitsContext.ClearSearchString()
+	subCommitsContext.GetView().ClearSearch()
 
-	err = self.c.PostRefreshUpdate(self.contexts.SubCommits)
+	err = self.c.PostRefreshUpdate(self.c.Contexts().SubCommits)
 	if err != nil {
 		return err
 	}
 
-	return self.c.PushContext(self.contexts.SubCommits)
+	return self.c.PushContext(self.c.Contexts().SubCommits)
 }
 
 func (self *SwitchToSubCommitsController) Context() types.Context {

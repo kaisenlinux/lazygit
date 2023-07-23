@@ -48,8 +48,7 @@ func TestIntegration(t *testing.T) {
 		},
 		false,
 		0,
-		// allowing two attempts at the test. If a test fails intermittently,
-		// there may be a concurrency issue that we need to resolve.
+		// Allow two attempts at each test to get around flakiness
 		2,
 	)
 

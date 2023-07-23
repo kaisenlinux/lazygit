@@ -6,10 +6,10 @@ import (
 )
 
 type ListControllerFactory struct {
-	c *types.HelperCommon
+	c *ControllerCommon
 }
 
-func NewListControllerFactory(c *types.HelperCommon) *ListControllerFactory {
+func NewListControllerFactory(c *ControllerCommon) *ListControllerFactory {
 	return &ListControllerFactory{
 		c: c,
 	}
@@ -25,7 +25,7 @@ func (self *ListControllerFactory) Create(context types.IListContext) *ListContr
 
 type ListController struct {
 	baseController
-	c *types.HelperCommon
+	c *ControllerCommon
 
 	context types.IListContext
 }
@@ -54,12 +54,6 @@ func (self *ListController) HandleScrollUp() error {
 	scrollHeight := self.c.UserConfig.Gui.ScrollHeight
 	self.context.GetViewTrait().ScrollUp(scrollHeight)
 
-	// we only need to do a line change if our line has been pushed out of the viewport, because
-	// at the moment much logic depends on the selected line always being visible
-	if !self.isSelectedLineInViewPort() {
-		return self.handleLineChange(-scrollHeight)
-	}
-
 	return nil
 }
 
@@ -67,17 +61,7 @@ func (self *ListController) HandleScrollDown() error {
 	scrollHeight := self.c.UserConfig.Gui.ScrollHeight
 	self.context.GetViewTrait().ScrollDown(scrollHeight)
 
-	if !self.isSelectedLineInViewPort() {
-		return self.handleLineChange(scrollHeight)
-	}
-
 	return nil
-}
-
-func (self *ListController) isSelectedLineInViewPort() bool {
-	selectedLineIdx := self.context.GetList().GetSelectedLineIdx()
-	startIdx, length := self.context.GetViewTrait().ViewPortYBounds()
-	return selectedLineIdx >= startIdx && selectedLineIdx < startIdx+length
 }
 
 func (self *ListController) scrollHorizontal(scrollFunc func()) error {
@@ -161,23 +145,12 @@ func (self *ListController) GetKeybindings(opts types.KeybindingsOpts) []*types.
 		{Tag: "navigation", Key: opts.GetKey(opts.Config.Universal.PrevItem), Handler: self.HandlePrevLine},
 		{Tag: "navigation", Key: opts.GetKey(opts.Config.Universal.NextItemAlt), Handler: self.HandleNextLine},
 		{Tag: "navigation", Key: opts.GetKey(opts.Config.Universal.NextItem), Handler: self.HandleNextLine},
-		{Tag: "navigation", Key: opts.GetKey(opts.Config.Universal.PrevPage), Handler: self.HandlePrevPage, Description: self.c.Tr.LcPrevPage},
-		{Tag: "navigation", Key: opts.GetKey(opts.Config.Universal.NextPage), Handler: self.HandleNextPage, Description: self.c.Tr.LcNextPage},
-		{Tag: "navigation", Key: opts.GetKey(opts.Config.Universal.GotoTop), Handler: self.HandleGotoTop, Description: self.c.Tr.LcGotoTop},
+		{Tag: "navigation", Key: opts.GetKey(opts.Config.Universal.PrevPage), Handler: self.HandlePrevPage, Description: self.c.Tr.PrevPage},
+		{Tag: "navigation", Key: opts.GetKey(opts.Config.Universal.NextPage), Handler: self.HandleNextPage, Description: self.c.Tr.NextPage},
+		{Tag: "navigation", Key: opts.GetKey(opts.Config.Universal.GotoTop), Handler: self.HandleGotoTop, Description: self.c.Tr.GotoTop},
 		{Tag: "navigation", Key: opts.GetKey(opts.Config.Universal.ScrollLeft), Handler: self.HandleScrollLeft},
 		{Tag: "navigation", Key: opts.GetKey(opts.Config.Universal.ScrollRight), Handler: self.HandleScrollRight},
-		{
-			Key:         opts.GetKey(opts.Config.Universal.StartSearch),
-			Handler:     func() error { self.c.OpenSearch(); return nil },
-			Description: self.c.Tr.LcStartSearch,
-			Tag:         "navigation",
-		},
-		{
-			Key:         opts.GetKey(opts.Config.Universal.GotoBottom),
-			Description: self.c.Tr.LcGotoBottom,
-			Handler:     self.HandleGotoBottom,
-			Tag:         "navigation",
-		},
+		{Tag: "navigation", Key: opts.GetKey(opts.Config.Universal.GotoBottom), Handler: self.HandleGotoBottom, Description: self.c.Tr.GotoBottom},
 	}
 }
 

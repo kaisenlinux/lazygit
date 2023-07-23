@@ -14,10 +14,12 @@ func commonSetup(shell *Shell) {
 
 	shell.UpdateFileAndAdd("filterFile", "new filterFile content")
 	shell.Commit("only filterFile")
+
+	shell.EmptyCommit("none of the two")
 }
 
 func postFilterTest(t *TestDriver) {
-	t.Views().Information().Content(Contains("filtering by 'filterFile'"))
+	t.Views().Information().Content(Contains("Filtering by 'filterFile'"))
 
 	t.Views().Commits().
 		IsFocused().

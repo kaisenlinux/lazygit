@@ -7,7 +7,7 @@ import (
 
 var ResetUpstream = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Reset the upstream of a branch",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -25,8 +25,8 @@ var ResetUpstream = NewIntegrationTest(NewIntegrationTestArgs{
 			Press(keys.Branches.SetUpstream).
 			Tap(func() {
 				t.ExpectPopup().Menu().
-					Title(Equals("Set/unset upstream")).
-					Select(Contains("unset upstream of selected branch")).
+					Title(Equals("Set/Unset upstream")).
+					Select(Contains("Unset upstream of selected branch")).
 					Confirm()
 			}).
 			Lines(

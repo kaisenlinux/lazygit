@@ -7,7 +7,7 @@ import (
 
 var BasicCmdAtRuntime = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Using a custom command provided at runtime to create a new file",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupRepo: func(shell *Shell) {
 		shell.EmptyCommit("blah")
@@ -20,7 +20,7 @@ var BasicCmdAtRuntime = NewIntegrationTest(NewIntegrationTestArgs{
 			Press(keys.Universal.ExecuteCustomCommand)
 
 		t.ExpectPopup().Prompt().
-			Title(Equals("Custom Command:")).
+			Title(Equals("Custom command:")).
 			Type("touch file.txt").
 			Confirm()
 

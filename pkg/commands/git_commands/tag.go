@@ -1,8 +1,6 @@
 package git_commands
 
-import (
-	"fmt"
-)
+import "github.com/jesseduffield/gocui"
 
 type TagCommands struct {
 	*GitCommon
@@ -15,25 +13,32 @@ func NewTagCommands(gitCommon *GitCommon) *TagCommands {
 }
 
 func (self *TagCommands) CreateLightweight(tagName string, ref string) error {
-	if len(ref) > 0 {
-		return self.cmd.New(fmt.Sprintf("git tag -- %s %s", self.cmd.Quote(tagName), self.cmd.Quote(ref))).Run()
-	} else {
-		return self.cmd.New(fmt.Sprintf("git tag -- %s", self.cmd.Quote(tagName))).Run()
-	}
+	cmdArgs := NewGitCmd("tag").Arg("--", tagName).
+		ArgIf(len(ref) > 0, ref).
+		ToArgv()
+
+	return self.cmd.New(cmdArgs).Run()
 }
 
 func (self *TagCommands) CreateAnnotated(tagName, ref, msg string) error {
-	if len(ref) > 0 {
-		return self.cmd.New(fmt.Sprintf("git tag %s %s -m %s", self.cmd.Quote(tagName), self.cmd.Quote(ref), self.cmd.Quote(msg))).Run()
-	} else {
-		return self.cmd.New(fmt.Sprintf("git tag %s -m %s", self.cmd.Quote(tagName), self.cmd.Quote(msg))).Run()
-	}
+	cmdArgs := NewGitCmd("tag").Arg(tagName).
+		ArgIf(len(ref) > 0, ref).
+		Arg("-m", msg).
+		ToArgv()
+
+	return self.cmd.New(cmdArgs).Run()
 }
 
 func (self *TagCommands) Delete(tagName string) error {
-	return self.cmd.New(fmt.Sprintf("git tag -d %s", self.cmd.Quote(tagName))).Run()
+	cmdArgs := NewGitCmd("tag").Arg("-d", tagName).
+		ToArgv()
+
+	return self.cmd.New(cmdArgs).Run()
 }
 
-func (self *TagCommands) Push(remoteName string, tagName string) error {
-	return self.cmd.New(fmt.Sprintf("git push %s tag %s", self.cmd.Quote(remoteName), self.cmd.Quote(tagName))).PromptOnCredentialRequest().WithMutex(self.syncMutex).Run()
+func (self *TagCommands) Push(task gocui.Task, remoteName string, tagName string) error {
+	cmdArgs := NewGitCmd("push").Arg(remoteName, "tag", tagName).
+		ToArgv()
+
+	return self.cmd.New(cmdArgs).PromptOnCredentialRequest(task).WithMutex(self.syncMutex).Run()
 }

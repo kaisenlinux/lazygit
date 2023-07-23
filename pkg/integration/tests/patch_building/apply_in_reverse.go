@@ -7,7 +7,7 @@ import (
 
 var ApplyInReverse = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Apply a custom patch in reverse",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -31,11 +31,11 @@ var ApplyInReverse = NewIntegrationTest(NewIntegrationTestArgs{
 			).
 			PressPrimaryAction()
 
-		t.Views().Information().Content(Contains("building patch"))
+		t.Views().Information().Content(Contains("Building patch"))
 
 		t.Views().PatchBuildingSecondary().Content(Contains("+file1 content"))
 
-		t.Common().SelectPatchOption(Contains("apply patch in reverse"))
+		t.Common().SelectPatchOption(Contains("Apply patch in reverse"))
 
 		t.Views().Files().
 			Focus().

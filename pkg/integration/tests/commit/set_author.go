@@ -7,7 +7,7 @@ import (
 
 var SetAuthor = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Set author on a commit",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -32,7 +32,7 @@ var SetAuthor = NewIntegrationTest(NewIntegrationTestArgs{
 			Tap(func() {
 				t.ExpectPopup().Menu().
 					Title(Equals("Amend commit attribute")).
-					Select(Contains(" set author")). // adding space at start to distinguish from 'reset author'
+					Select(Contains(" Set author")). // adding space at start to distinguish from 'reset author'
 					Confirm()
 
 				t.ExpectPopup().Prompt().

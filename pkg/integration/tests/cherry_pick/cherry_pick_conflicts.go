@@ -8,7 +8,7 @@ import (
 
 var CherryPickConflicts = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Cherry pick commits from the subcommits view, with conflicts",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -48,7 +48,7 @@ var CherryPickConflicts = NewIntegrationTest(NewIntegrationTestArgs{
 			Press(keys.Commits.PasteCommits)
 
 		t.ExpectPopup().Alert().
-			Title(Equals("Cherry-Pick")).
+			Title(Equals("Cherry-pick")).
 			Content(Contains("Are you sure you want to cherry-pick the copied commits onto this branch?")).
 			Confirm()
 

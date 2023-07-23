@@ -7,7 +7,7 @@ import (
 
 var ResetAuthor = NewIntegrationTest(NewIntegrationTestArgs{
 	Description:  "Reset author on a commit",
-	ExtraCmdArgs: "",
+	ExtraCmdArgs: []string{},
 	Skip:         false,
 	SetupConfig:  func(config *config.AppConfig) {},
 	SetupRepo: func(shell *Shell) {
@@ -29,7 +29,7 @@ var ResetAuthor = NewIntegrationTest(NewIntegrationTestArgs{
 			Tap(func() {
 				t.ExpectPopup().Menu().
 					Title(Equals("Amend commit attribute")).
-					Select(Contains("reset author")).
+					Select(Contains("Reset author")).
 					Confirm()
 			}).
 			Lines(

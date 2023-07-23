@@ -235,13 +235,8 @@ func (u *Updater) getBinaryUrl(newVersion string) string {
 }
 
 // Update downloads the latest binary and replaces the current binary with it
-func (u *Updater) Update(newVersion string, onFinish func(error) error) {
-	go utils.Safe(func() {
-		err := u.update(newVersion)
-		if err = onFinish(err); err != nil {
-			u.Log.Error(err)
-		}
-	})
+func (u *Updater) Update(newVersion string) error {
+	return u.update(newVersion)
 }
 
 func (u *Updater) update(newVersion string) error {
@@ -288,7 +283,7 @@ func (u *Updater) downloadAndInstall(rawUrl string) error {
 	}
 
 	u.Log.Info("untarring tarball/unzipping zip file")
-	err = u.OSCommand.Cmd.New(fmt.Sprintf("tar -zxf %s %s", u.OSCommand.Quote(zipPath), "lazygit")).Run()
+	err = u.OSCommand.Cmd.New([]string{"tar", "-zxf", zipPath, "lazygit"}).Run()
 	if err != nil {
 		return err
 	}
