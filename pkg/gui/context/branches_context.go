@@ -31,6 +31,7 @@ func NewBranchesContext(c *ContextCommon) *BranchesContext {
 			c.Modes().Diffing.Ref,
 			c.Tr,
 			c.UserConfig,
+			c.Model().Worktrees,
 		)
 	}
 
@@ -81,4 +82,8 @@ func (self *BranchesContext) GetDiffTerminals() []string {
 		return names
 	}
 	return nil
+}
+
+func (self *BranchesContext) ShowBranchHeadsInSubCommits() bool {
+	return true
 }

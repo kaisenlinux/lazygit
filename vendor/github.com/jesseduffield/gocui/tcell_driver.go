@@ -5,8 +5,8 @@
 package gocui
 
 import (
-	"github.com/gdamore/tcell/v2"
 	"github.com/mattn/go-runewidth"
+	"github.com/stefanhaller/tcell/v2"
 )
 
 // We probably don't want this being a global variable for YOLO for now
@@ -154,18 +154,20 @@ type gocuiEventType uint8
 //	The 'Mod', 'Key' and 'Ch' fields are valid if 'Type' is 'eventKey'.
 //	The 'MouseX' and 'MouseY' fields are valid if 'Type' is 'eventMouse'.
 //	The 'Width' and 'Height' fields are valid if 'Type' is 'eventResize'.
+//	The 'Focused' field is valid if 'Type' is 'eventFocus'.
 //	The 'Err' field is valid if 'Type' is 'eventError'.
 type GocuiEvent struct {
-	Type   gocuiEventType
-	Mod    Modifier
-	Key    Key
-	Ch     rune
-	Width  int
-	Height int
-	Err    error
-	MouseX int
-	MouseY int
-	N      int
+	Type    gocuiEventType
+	Mod     Modifier
+	Key     Key
+	Ch      rune
+	Width   int
+	Height  int
+	Err     error
+	MouseX  int
+	MouseY  int
+	Focused bool
+	N       int
 }
 
 // Event types.
@@ -174,6 +176,7 @@ const (
 	eventKey
 	eventResize
 	eventMouse
+	eventFocus
 	eventInterrupt
 	eventError
 	eventRaw
@@ -367,6 +370,11 @@ func (g *Gui) pollEvent() GocuiEvent {
 			Key:    mouseKey,
 			Ch:     0,
 			Mod:    mouseMod,
+		}
+	case *tcell.EventFocus:
+		return GocuiEvent{
+			Type:    eventFocus,
+			Focused: tev.Focused,
 		}
 	default:
 		return GocuiEvent{Type: eventNone}

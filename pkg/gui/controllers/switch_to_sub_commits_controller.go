@@ -11,6 +11,7 @@ var _ types.IController = &SwitchToSubCommitsController{}
 type CanSwitchToSubCommits interface {
 	types.Context
 	GetSelectedRef() types.Ref
+	ShowBranchHeadsInSubCommits() bool
 }
 
 type SwitchToSubCommitsController struct {
@@ -70,6 +71,7 @@ func (self *SwitchToSubCommitsController) viewCommits() error {
 	}
 
 	self.setSubCommits(commits)
+	self.c.Helpers().Refresh.RefreshAuthors(commits)
 
 	subCommitsContext := self.c.Contexts().SubCommits
 	subCommitsContext.SetSelectedLineIdx(0)
@@ -78,6 +80,7 @@ func (self *SwitchToSubCommitsController) viewCommits() error {
 	subCommitsContext.SetTitleRef(ref.Description())
 	subCommitsContext.SetRef(ref)
 	subCommitsContext.SetLimitCommits(true)
+	subCommitsContext.SetShowBranchHeads(self.context.ShowBranchHeadsInSubCommits())
 	subCommitsContext.ClearSearchString()
 	subCommitsContext.GetView().ClearSearch()
 

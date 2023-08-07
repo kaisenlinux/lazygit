@@ -1,7 +1,7 @@
 Author: Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>
 
---- lazygit-0.36.0.orig/main.go
-+++ lazygit-0.36.0/main.go
+--- lazygit-0.40.2.orig/main.go
++++ lazygit-0.40.2/main.go
 @@ -6,15 +6,13 @@ import (
  
  // These values may be set by the build script via the LDFLAGS argument
@@ -10,8 +10,8 @@ Author: Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>
 -	date        string
 -	version     string
 -	buildSource = "unknown"
-+	date        = "2023/07/23"
-+	version     = "0.39.2"
++	date        = "2023/08/07"
++	version     = "0.40.2"
 +	buildSource = "Built by the Kaisen Linux developers"
  )
  

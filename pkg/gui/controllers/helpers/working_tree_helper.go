@@ -8,7 +8,6 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/config"
 	"github.com/jesseduffield/lazygit/pkg/gui/context"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
-	"github.com/jesseduffield/lazygit/pkg/utils"
 )
 
 type IWorkingTreeHelper interface {
@@ -99,19 +98,19 @@ func (self *WorkingTreeHelper) HandleCommitPressWithMessage(initialMessage strin
 
 	return self.commitsHelper.OpenCommitMessagePanel(
 		&OpenCommitMessagePanelOpts{
-			CommitIndex:     context.NoCommitIndex,
-			InitialMessage:  initialMessage,
-			Title:           self.c.Tr.CommitSummary,
-			PreserveMessage: true,
-			OnConfirm:       self.handleCommit,
+			CommitIndex:      context.NoCommitIndex,
+			InitialMessage:   initialMessage,
+			SummaryTitle:     self.c.Tr.CommitSummaryTitle,
+			DescriptionTitle: self.c.Tr.CommitDescriptionTitle,
+			PreserveMessage:  true,
+			OnConfirm:        self.handleCommit,
 		},
 	)
 }
 
-func (self *WorkingTreeHelper) handleCommit(message string) error {
-	cmdObj := self.c.Git().Commit.CommitCmdObj(message)
+func (self *WorkingTreeHelper) handleCommit(summary string, description string) error {
+	cmdObj := self.c.Git().Commit.CommitCmdObj(summary, description)
 	self.c.LogAction(self.c.Tr.Actions.Commit)
-	_ = self.commitsHelper.PopCommitMessageContexts()
 	return self.gpgHelper.WithGpgHandling(cmdObj, self.c.Tr.CommittingStatus, func() error {
 		self.commitsHelper.OnCommitSuccess()
 		return nil
@@ -203,7 +202,7 @@ func (self *WorkingTreeHelper) prepareFilesForCommit() error {
 }
 
 func (self *WorkingTreeHelper) commitPrefixConfigForRepo() *config.CommitPrefixConfig {
-	cfg, ok := self.c.UserConfig.Git.CommitPrefixes[utils.GetCurrentRepoName()]
+	cfg, ok := self.c.UserConfig.Git.CommitPrefixes[self.c.Git().RepoPaths.RepoName()]
 	if !ok {
 		return nil
 	}

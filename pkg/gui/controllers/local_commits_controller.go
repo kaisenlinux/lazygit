@@ -100,8 +100,14 @@ func (self *LocalCommitsController) GetKeybindings(opts types.KeybindingsOpts) [
 		},
 		{
 			Key:         opts.GetKey(opts.Config.Commits.PasteCommits),
-			Handler:     opts.Guards.OutsideFilterMode(self.paste),
+			Handler:     self.paste,
 			Description: self.c.Tr.PasteCommits,
+		},
+		{
+			Key:         opts.GetKey(opts.Config.Commits.MarkCommitAsBaseForRebase),
+			Handler:     self.checkSelected(self.markAsBaseCommit),
+			Description: self.c.Tr.MarkAsBaseCommit,
+			Tooltip:     self.c.Tr.MarkAsBaseCommitTooltip,
 		},
 		// overriding these navigation keybindings because we might need to load
 		// more commits on demand
@@ -171,7 +177,7 @@ func (self *LocalCommitsController) GetOnRenderToMain() func() error {
 							"ref": commit.Name,
 						}))
 			} else {
-				cmdObj := self.c.Git().Commit.ShowCmdObj(commit.Sha, self.c.Modes().Filtering.GetPath(), self.c.State().GetIgnoreWhitespaceInDiffView())
+				cmdObj := self.c.Git().Commit.ShowCmdObj(commit.Sha, self.c.Modes().Filtering.GetPath(), self.c.GetAppState().IgnoreWhitespaceInDiffView)
 				task = types.NewRunPtyTask(cmdObj.GetCmd())
 			}
 
@@ -267,22 +273,22 @@ func (self *LocalCommitsController) reword(commit *models.Commit) error {
 
 	return self.c.Helpers().Commits.OpenCommitMessagePanel(
 		&helpers.OpenCommitMessagePanelOpts{
-			CommitIndex:     self.context().GetSelectedLineIdx(),
-			InitialMessage:  commitMessage,
-			Title:           self.c.Tr.Actions.RewordCommit,
-			PreserveMessage: false,
-			OnConfirm:       self.handleReword,
+			CommitIndex:      self.context().GetSelectedLineIdx(),
+			InitialMessage:   commitMessage,
+			SummaryTitle:     self.c.Tr.Actions.RewordCommit,
+			DescriptionTitle: self.c.Tr.CommitDescriptionTitle,
+			PreserveMessage:  false,
+			OnConfirm:        self.handleReword,
 		},
 	)
 }
 
-func (self *LocalCommitsController) handleReword(message string) error {
-	err := self.c.Git().Rebase.RewordCommit(self.c.Model().Commits, self.c.Contexts().LocalCommits.GetSelectedLineIdx(), message)
+func (self *LocalCommitsController) handleReword(summary string, description string) error {
+	err := self.c.Git().Rebase.RewordCommit(self.c.Model().Commits, self.c.Contexts().LocalCommits.GetSelectedLineIdx(), summary, description)
 	if err != nil {
 		return self.c.Error(err)
 	}
 	self.c.Helpers().Commits.OnCommitSuccess()
-	_ = self.c.Helpers().Commits.PopCommitMessageContexts()
 	return self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC})
 }
 
@@ -415,10 +421,15 @@ func (self *LocalCommitsController) handleMidRebaseCommand(action todo.TodoComma
 	}
 
 	self.c.LogAction("Update rebase TODO")
-	self.c.LogCommand(
-		fmt.Sprintf("Updating rebase action of commit %s to '%s'", commit.ShortSha(), action.String()),
-		false,
+
+	msg := utils.ResolvePlaceholderString(
+		self.c.Tr.Log.HandleMidRebaseCommand,
+		map[string]string{
+			"shortSha": commit.ShortSha(),
+			"action":   action.String(),
+		},
 	)
+	self.c.LogCommand(msg, false)
 
 	if err := self.c.Git().Rebase.EditRebaseTodo(commit, action); err != nil {
 		return false, self.c.Error(err)
@@ -446,7 +457,14 @@ func (self *LocalCommitsController) moveDown(commit *models.Commit) error {
 		// logging directly here because MoveTodoDown doesn't have enough information
 		// to provide a useful log
 		self.c.LogAction(self.c.Tr.Actions.MoveCommitDown)
-		self.c.LogCommand(fmt.Sprintf("Moving commit %s down", commit.ShortSha()), false)
+
+		msg := utils.ResolvePlaceholderString(
+			self.c.Tr.Log.MovingCommitDown,
+			map[string]string{
+				"shortSha": commit.ShortSha(),
+			},
+		)
+		self.c.LogCommand(msg, false)
 
 		if err := self.c.Git().Rebase.MoveTodoDown(commit); err != nil {
 			return self.c.Error(err)
@@ -481,10 +499,13 @@ func (self *LocalCommitsController) moveUp(commit *models.Commit) error {
 		// logging directly here because MoveTodoDown doesn't have enough information
 		// to provide a useful log
 		self.c.LogAction(self.c.Tr.Actions.MoveCommitUp)
-		self.c.LogCommand(
-			fmt.Sprintf("Moving commit %s up", commit.ShortSha()),
-			false,
+		msg := utils.ResolvePlaceholderString(
+			self.c.Tr.Log.MovingCommitUp,
+			map[string]string{
+				"shortSha": commit.ShortSha(),
+			},
 		)
+		self.c.LogCommand(msg, false)
 
 		if err := self.c.Git().Rebase.MoveTodoUp(self.c.Model().Commits[index]); err != nil {
 			return self.c.Error(err)
@@ -682,7 +703,7 @@ func (self *LocalCommitsController) squashAllAboveFixupCommits(commit *models.Co
 }
 
 func (self *LocalCommitsController) createTag(commit *models.Commit) error {
-	return self.c.Helpers().Tags.CreateTagMenu(commit.Sha, func() {})
+	return self.c.Helpers().Tags.OpenCreateTagPrompt(commit.Sha, func() {})
 }
 
 func (self *LocalCommitsController) openSearch() error {
@@ -838,6 +859,16 @@ func (self *LocalCommitsController) context() *context.LocalCommitsContext {
 
 func (self *LocalCommitsController) paste() error {
 	return self.c.Helpers().CherryPick.Paste()
+}
+
+func (self *LocalCommitsController) markAsBaseCommit(commit *models.Commit) error {
+	if commit.Sha == self.c.Modes().MarkedBaseCommit.GetSha() {
+		// Reset when invoking it again on the marked commit
+		self.c.Modes().MarkedBaseCommit.SetSha("")
+	} else {
+		self.c.Modes().MarkedBaseCommit.SetSha(commit.Sha)
+	}
+	return self.c.PostRefreshUpdate(self.c.Contexts().LocalCommits)
 }
 
 func (self *LocalCommitsController) isHeadCommit() bool {

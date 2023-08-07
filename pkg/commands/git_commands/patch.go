@@ -1,7 +1,6 @@
 package git_commands
 
 import (
-	"fmt"
 	"path/filepath"
 	"time"
 
@@ -11,7 +10,6 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
 	"github.com/jesseduffield/lazygit/pkg/commands/patch"
 	"github.com/jesseduffield/lazygit/pkg/commands/types/enums"
-	"github.com/jesseduffield/lazygit/pkg/utils"
 )
 
 type PatchCommands struct {
@@ -81,7 +79,7 @@ func (self *PatchCommands) applyPatchFile(filepath string, opts ApplyPatchOpts) 
 }
 
 func (self *PatchCommands) SaveTemporaryPatch(patch string) (string, error) {
-	filepath := filepath.Join(self.os.GetTempDir(), utils.GetCurrentRepoName(), time.Now().Format("Jan _2 15.04.05.000000000")+".patch")
+	filepath := filepath.Join(self.os.GetTempDir(), self.repoPaths.RepoName(), time.Now().Format("Jan _2 15.04.05.000000000")+".patch")
 	self.Log.Infof("saving temporary patch to %s", filepath)
 	if err := self.os.CreateFileWithContent(filepath, patch); err != nil {
 		return "", err
@@ -274,7 +272,12 @@ func (self *PatchCommands) MovePatchIntoIndex(commits []*models.Commit, commitId
 	return self.rebase.ContinueRebase()
 }
 
-func (self *PatchCommands) PullPatchIntoNewCommit(commits []*models.Commit, commitIdx int) error {
+func (self *PatchCommands) PullPatchIntoNewCommit(
+	commits []*models.Commit,
+	commitIdx int,
+	commitSummary string,
+	commitDescription string,
+) error {
 	if err := self.rebase.BeginInteractiveRebaseForCommit(commits, commitIdx, false); err != nil {
 		return err
 	}
@@ -300,9 +303,7 @@ func (self *PatchCommands) PullPatchIntoNewCommit(commits []*models.Commit, comm
 		return err
 	}
 
-	head_message, _ := self.commit.GetHeadCommitMessage()
-	new_message := fmt.Sprintf("Split from \"%s\"", head_message)
-	if err := self.commit.CommitCmdObj(new_message).Run(); err != nil {
+	if err := self.commit.CommitCmdObj(commitSummary, commitDescription).Run(); err != nil {
 		return err
 	}
 

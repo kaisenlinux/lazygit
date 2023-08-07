@@ -330,7 +330,7 @@ func (self *ViewDriver) Focus() *ViewDriver {
 	}
 	windows := []window{
 		{name: "status", viewNames: []string{"status"}},
-		{name: "files", viewNames: []string{"files", "submodules"}},
+		{name: "files", viewNames: []string{"files", "worktrees", "submodules"}},
 		{name: "branches", viewNames: []string{"localBranches", "remotes", "tags"}},
 		{name: "commits", viewNames: []string{"commits", "reflogCommits"}},
 		{name: "stash", viewNames: []string{"stash"}},
@@ -393,14 +393,24 @@ func (self *ViewDriver) Press(keyStr string) *ViewDriver {
 	return self
 }
 
+// for use when typing or navigating, because in demos we want that to happen
+// faster
+func (self *ViewDriver) PressFast(keyStr string) *ViewDriver {
+	self.IsFocused()
+
+	self.t.pressFast(keyStr)
+
+	return self
+}
+
 // i.e. pressing down arrow
 func (self *ViewDriver) SelectNextItem() *ViewDriver {
-	return self.Press(self.t.keys.Universal.NextItem)
+	return self.PressFast(self.t.keys.Universal.NextItem)
 }
 
 // i.e. pressing up arrow
 func (self *ViewDriver) SelectPreviousItem() *ViewDriver {
-	return self.Press(self.t.keys.Universal.PrevItem)
+	return self.PressFast(self.t.keys.Universal.PrevItem)
 }
 
 // i.e. pressing space
@@ -539,11 +549,30 @@ func (self *ViewDriver) FilterOrSearch(text string) *ViewDriver {
 	self.Press(self.t.keys.Universal.StartSearch).
 		Tap(func() {
 			self.t.ExpectSearch().
+				Clear().
 				Type(text).
 				Confirm()
 
 			self.t.Views().Search().IsVisible().Content(Contains(fmt.Sprintf("matches for '%s'", text)))
 		})
+
+	return self
+}
+
+func (self *ViewDriver) SetCaption(caption string) *ViewDriver {
+	self.t.gui.SetCaption(caption)
+
+	return self
+}
+
+func (self *ViewDriver) SetCaptionPrefix(prefix string) *ViewDriver {
+	self.t.gui.SetCaptionPrefix(prefix)
+
+	return self
+}
+
+func (self *ViewDriver) Wait(milliseconds int) *ViewDriver {
+	self.t.Wait(milliseconds)
 
 	return self
 }

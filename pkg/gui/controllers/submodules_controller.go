@@ -36,6 +36,11 @@ func (self *SubmodulesController) GetKeybindings(opts types.KeybindingsOpts) []*
 			Description: self.c.Tr.EnterSubmodule,
 		},
 		{
+			Key:         opts.GetKey(opts.Config.Universal.Select),
+			Handler:     self.checkSelected(self.enter),
+			Description: self.c.Tr.EnterSubmodule,
+		},
+		{
 			Key:         opts.GetKey(opts.Config.Universal.Remove),
 			Handler:     self.checkSelected(self.remove),
 			Description: self.c.Tr.RemoveSubmodule,
@@ -97,7 +102,7 @@ func (self *SubmodulesController) GetOnRenderToMain() func() error {
 				if file == nil {
 					task = types.NewRenderStringTask(prefix)
 				} else {
-					cmdObj := self.c.Git().WorkingTree.WorktreeFileDiffCmdObj(file, false, !file.HasUnstagedChanges && file.HasStagedChanges, self.c.State().GetIgnoreWhitespaceInDiffView())
+					cmdObj := self.c.Git().WorkingTree.WorktreeFileDiffCmdObj(file, false, !file.HasUnstagedChanges && file.HasStagedChanges, self.c.GetAppState().IgnoreWhitespaceInDiffView)
 					task = types.NewRunCommandTaskWithPrefix(cmdObj.GetCmd(), prefix)
 				}
 			}

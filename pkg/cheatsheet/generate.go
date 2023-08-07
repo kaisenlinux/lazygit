@@ -15,7 +15,6 @@ import (
 	"strings"
 
 	"github.com/jesseduffield/generics/maps"
-	"github.com/jesseduffield/generics/slices"
 	"github.com/jesseduffield/lazycore/pkg/utils"
 	"github.com/jesseduffield/lazygit/pkg/app"
 	"github.com/jesseduffield/lazygit/pkg/config"
@@ -23,6 +22,7 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
 	"github.com/jesseduffield/lazygit/pkg/i18n"
 	"github.com/samber/lo"
+	"golang.org/x/exp/slices"
 )
 
 type bindingSection struct {
@@ -101,7 +101,7 @@ func localisedTitle(tr *i18n.TranslationSet, str string) string {
 		"reflogCommits":     tr.ReflogCommitsTitle,
 		"tags":              tr.TagsTitle,
 		"commitFiles":       tr.CommitFilesTitle,
-		"commitMessage":     tr.CommitMessageTitle,
+		"commitMessage":     tr.CommitSummaryTitle,
 		"commitDescription": tr.CommitDescriptionTitle,
 		"commits":           tr.CommitsTitle,
 		"confirmation":      tr.ConfirmationTitle,
@@ -116,6 +116,7 @@ func localisedTitle(tr *i18n.TranslationSet, str string) string {
 		"stash":             tr.StashTitle,
 		"suggestions":       tr.SuggestionsCheatsheetTitle,
 		"extras":            tr.ExtrasTitle,
+		"worktrees":         tr.WorktreesTitle,
 	}
 
 	title, ok := contextTitleMap[str]
@@ -128,7 +129,7 @@ func localisedTitle(tr *i18n.TranslationSet, str string) string {
 
 func getBindingSections(bindings []*types.Binding, tr *i18n.TranslationSet) []*bindingSection {
 	excludedViews := []string{"stagingSecondary", "patchBuildingSecondary"}
-	bindingsToDisplay := slices.Filter(bindings, func(binding *types.Binding) bool {
+	bindingsToDisplay := lo.Filter(bindings, func(binding *types.Binding, _ int) bool {
 		if lo.Contains(excludedViews, binding.ViewName) {
 			return false
 		}
@@ -161,7 +162,7 @@ func getBindingSections(bindings []*types.Binding, tr *i18n.TranslationSet) []*b
 		return a.header.title < b.header.title
 	})
 
-	return slices.Map(bindingGroups, func(hb headerWithBindings) *bindingSection {
+	return lo.Map(bindingGroups, func(hb headerWithBindings, _ int) *bindingSection {
 		return &bindingSection{
 			title:    hb.header.title,
 			bindings: hb.bindings,

@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
-
-	"github.com/jesseduffield/lazygit/pkg/secureexec"
 )
 
 // this is for running shell commands, mostly for the sake of setting up the repo
@@ -44,7 +43,7 @@ func (self *Shell) RunCommandExpectError(args []string) *Shell {
 }
 
 func (self *Shell) runCommandWithOutput(args []string) (string, error) {
-	cmd := secureexec.Command(args[0], args[1:]...)
+	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Env = os.Environ()
 	cmd.Dir = self.dir
 
@@ -61,7 +60,7 @@ func (self *Shell) RunShellCommand(cmdStr string) *Shell {
 		shellArg = "/C"
 	}
 
-	cmd := secureexec.Command(shell, shellArg, cmdStr)
+	cmd := exec.Command(shell, shellArg, cmdStr)
 	cmd.Env = os.Environ()
 	cmd.Dir = self.dir
 
@@ -75,6 +74,13 @@ func (self *Shell) RunShellCommand(cmdStr string) *Shell {
 
 func (self *Shell) CreateFile(path string, content string) *Shell {
 	fullPath := filepath.Join(self.dir, path)
+
+	// create any required directories
+	dir := filepath.Dir(fullPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		self.fail(fmt.Sprintf("error creating directory: %s\n%s", dir, err))
+	}
+
 	err := os.WriteFile(fullPath, []byte(content), 0o644)
 	if err != nil {
 		self.fail(fmt.Sprintf("error creating file: %s\n%s", fullPath, err))
@@ -85,7 +91,7 @@ func (self *Shell) CreateFile(path string, content string) *Shell {
 
 func (self *Shell) DeleteFile(path string) *Shell {
 	fullPath := filepath.Join(self.dir, path)
-	err := os.Remove(fullPath)
+	err := os.RemoveAll(fullPath)
 	if err != nil {
 		self.fail(fmt.Sprintf("error deleting file: %s\n%s", fullPath, err))
 	}
@@ -196,6 +202,21 @@ func (self *Shell) CreateNCommitsStartingAt(n, startIndex int) *Shell {
 	return self
 }
 
+// Only to be used in demos, because the list might change and we don't want
+// tests to break when it does.
+func (self *Shell) CreateNCommitsWithRandomMessages(n int) *Shell {
+	for i := 0; i < n; i++ {
+		file := RandomFiles[i]
+		self.CreateFileAndAdd(
+			file.Name,
+			file.Content,
+		).
+			Commit(RandomCommitMessages[i])
+	}
+
+	return self
+}
+
 func (self *Shell) SetConfig(key string, value string) *Shell {
 	self.RunCommand([]string{"git", "config", "--local", key, value})
 	return self
@@ -254,6 +275,30 @@ func (self *Shell) Init() *Shell {
 	return self
 }
 
+func (self *Shell) AddWorktree(base string, path string, newBranchName string) *Shell {
+	return self.RunCommand([]string{
+		"git", "worktree", "add", "-b",
+		newBranchName, path, base,
+	})
+}
+
+// add worktree and have it checkout the base branch
+func (self *Shell) AddWorktreeCheckout(base string, path string) *Shell {
+	return self.RunCommand([]string{
+		"git", "worktree", "add", path, base,
+	})
+}
+
+func (self *Shell) AddFileInWorktree(worktreePath string) *Shell {
+	self.CreateFile(filepath.Join(worktreePath, "content"), "content")
+
+	self.RunCommand([]string{
+		"git", "-C", worktreePath, "add", "content",
+	})
+
+	return self
+}
+
 func (self *Shell) MakeExecutable(path string) *Shell {
 	// 0755 sets the executable permission for owner, and read/execute permissions for group and others
 	err := os.Chmod(filepath.Join(self.dir, path), 0o755)
@@ -301,6 +346,14 @@ func (self *Shell) CopyFile(source string, destination string) *Shell {
 	if err != nil {
 		self.fail(err.Error())
 	}
+
+	return self
+}
+
+// NOTE: this only takes effect before running the test;
+// the test will still run in the original directory
+func (self *Shell) Chdir(path string) *Shell {
+	self.dir = filepath.Join(self.dir, path)
 
 	return self
 }

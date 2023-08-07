@@ -38,13 +38,18 @@ func NewLocalCommitsContext(c *ContextCommon) *LocalCommitsContext {
 		}
 
 		showYouAreHereLabel := c.Model().WorkingTreeStateAtLastCommitRefresh == enums.REBASE_MODE_REBASING
+		showBranchMarkerForHeadCommit := c.Git().Config.GetRebaseUpdateRefs()
 
 		return presentation.GetCommitListDisplayStrings(
 			c.Common,
 			c.Model().Commits,
+			c.Model().Branches,
+			c.Model().CheckedOutBranch,
+			showBranchMarkerForHeadCommit,
 			c.State().GetRepoState().GetScreenMode() != types.SCREEN_NORMAL,
 			c.Modes().CherryPicking.SelectedShaSet(),
 			c.Modes().Diffing.Ref,
+			c.Modes().MarkedBaseCommit.GetSha(),
 			c.UserConfig.Gui.TimeFormat,
 			c.UserConfig.Gui.ShortTimeFormat,
 			time.Now(),

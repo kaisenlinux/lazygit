@@ -62,7 +62,6 @@ gui:
   showListFooter: true # for seeing the '5 of 20' message in list panels
   showRandomTip: true
   showBranchCommitHash: false # show commit hashes alongside branch names
-  experimentalShowBranchHeads: false # visualize branch heads with (*) in commits list
   showBottomLine: true # for hiding the bottom information line (unless it has important information to tell you)
   showCommandLog: true
   showIcons: false # deprecated: use nerdFontsVersion instead
@@ -71,6 +70,7 @@ gui:
   splitDiff: 'auto' # one of 'auto' | 'always'
   skipRewordInEditorWarning: false # for skipping the confirmation before launching the reword editor
   border: 'single' # one of 'single' | 'double' | 'rounded' | 'hidden'
+  animateExplosion: true # shows an explosion animation when nuking the working tree
 git:
   paging:
     colorArg: always
@@ -106,6 +106,7 @@ git:
   parseEmoji: false
   diffContextSize: 3 # how many lines of context are shown around a change in diffs
 os:
+  copyToClipboardCmd: '' # See 'Custom Command for Copying to Clipboard' section
   editPreset: '' # see 'Configuring File Editing' section
   edit: ''
   editAtLine: ''
@@ -278,6 +279,20 @@ os:
   open: 'open {{filename}}'
 ```
 
+### Custom Command for Copying to Clipboard
+```yaml
+os:
+  copyToClipboardCmd: ''
+```
+Specify an external command to invoke when copying to clipboard is requested. `{{text}` will be replaced by text to be copied. Default is to copy to system clipboard.
+
+If you are working on a terminal that supports OSC52, the following command will let you take advantage of it:
+```
+os:
+  copyToClipboardCmd: printf "\033]52;c;$(printf {{text}} | base64)\a" > /dev/tty
+```
+
+
 ### Configuring File Editing
 
 There are two commands for opening files, `o` for "open" and `e` for "edit". `o`
@@ -308,6 +323,7 @@ os:
   editAtLine: 'myeditor --line={{line}} {{filename}}'
   editAtLineAndWait: 'myeditor --block --line={{line}} {{filename}}'
   editInTerminal: true
+  openDirInEditor: 'myeditor {{dir}}'
 ```
 
 The `editInTerminal` option is used to decide whether lazygit needs to suspend

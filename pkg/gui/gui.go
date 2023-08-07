@@ -24,6 +24,7 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/gui/modes/cherrypicking"
 	"github.com/jesseduffield/lazygit/pkg/gui/modes/diffing"
 	"github.com/jesseduffield/lazygit/pkg/gui/modes/filtering"
+	"github.com/jesseduffield/lazygit/pkg/gui/modes/marked_base_commit"
 	"github.com/jesseduffield/lazygit/pkg/gui/popup"
 	"github.com/jesseduffield/lazygit/pkg/gui/presentation"
 	"github.com/jesseduffield/lazygit/pkg/gui/presentation/authors"
@@ -64,13 +65,13 @@ type Gui struct {
 	CustomCommandsClient *custom_commands.Client
 
 	// this is a mapping of repos to gui states, so that we can restore the original
-	// gui state when returning from a subrepo
+	// gui state when returning from a subrepo.
+	// In repos with multiple worktrees, we store a separate repo state per worktree.
 	RepoStateMap         map[Repo]*GuiRepoState
 	Config               config.AppConfigurer
 	Updater              *updates.Updater
 	statusManager        *status.StatusManager
 	waitForIntro         sync.WaitGroup
-	fileWatcher          *fileWatcher
 	viewBufferManagerMap map[string]*tasks.ViewBufferManager
 	// holds a mapping of view names to ptmx's. This is for rendering command outputs
 	// from within a pty. The point of keeping track of them is so that if we re-size
@@ -102,9 +103,6 @@ type Gui struct {
 	PopupHandler types.IPopupHandler
 
 	IsNewRepo bool
-
-	// flag as to whether or not the diff view should ignore whitespace
-	IgnoreWhitespaceInDiffView bool
 
 	IsRefreshingFiles bool
 
@@ -141,14 +139,6 @@ type StateAccessor struct {
 }
 
 var _ types.IStateAccessor = new(StateAccessor)
-
-func (self *StateAccessor) GetIgnoreWhitespaceInDiffView() bool {
-	return self.gui.IgnoreWhitespaceInDiffView
-}
-
-func (self *StateAccessor) SetIgnoreWhitespaceInDiffView(value bool) {
-	self.gui.IgnoreWhitespaceInDiffView = value
-}
 
 func (self *StateAccessor) GetRepoPathStack() *utils.StringStack {
 	return self.gui.RepoPathStack
@@ -276,7 +266,7 @@ func (self *GuiRepoState) GetSplitMainPanel() bool {
 	return self.SplitMainPanel
 }
 
-func (gui *Gui) onNewRepo(startArgs appTypes.StartArgs, reuseState bool) error {
+func (gui *Gui) onNewRepo(startArgs appTypes.StartArgs, contextKey types.ContextKey) error {
 	var err error
 	gui.git, err = commands.NewGitCommand(
 		gui.Common,
@@ -289,12 +279,32 @@ func (gui *Gui) onNewRepo(startArgs appTypes.StartArgs, reuseState bool) error {
 		return err
 	}
 
-	contextToPush := gui.resetState(startArgs, reuseState)
+	contextToPush := gui.resetState(startArgs)
 
 	gui.resetHelpersAndControllers()
 
 	if err := gui.resetKeybindings(); err != nil {
 		return err
+	}
+
+	gui.g.SetFocusHandler(func(Focused bool) error {
+		if Focused {
+			gui.c.Log.Info("Receiving focus - refreshing")
+			return gui.helpers.Refresh.Refresh(types.RefreshOptions{Mode: types.ASYNC})
+		}
+
+		return nil
+	})
+
+	// if a context key has been given, push that instead, and set its index to 0
+	if contextKey != context.NO_CONTEXT {
+		contextToPush = gui.c.ContextForKey(contextKey)
+		// when we pass a list context, the expectation is that our cursor goes to the top,
+		// because e.g. with worktrees, we'll show the current worktree at the top of the list.
+		listContext, ok := contextToPush.(types.IListContext)
+		if ok {
+			listContext.GetList().SetSelectedLineIdx(0)
+		}
 	}
 
 	if err := gui.c.PushContext(contextToPush); err != nil {
@@ -313,26 +323,23 @@ func (gui *Gui) onNewRepo(startArgs appTypes.StartArgs, reuseState bool) error {
 // it gets a bit confusing to land back in the status panel when visiting a repo
 // you've already switched from. There's no doubt some easy way to make the UX
 // optimal for all cases but I'm too lazy to think about what that is right now
-func (gui *Gui) resetState(startArgs appTypes.StartArgs, reuseState bool) types.Context {
-	currentDir, err := os.Getwd()
+func (gui *Gui) resetState(startArgs appTypes.StartArgs) types.Context {
+	worktreePath := gui.git.RepoPaths.WorktreePath()
 
-	if reuseState {
-		if err == nil {
-			if state := gui.RepoStateMap[Repo(currentDir)]; state != nil {
-				gui.State = state
-				gui.State.ViewsSetup = false
+	if state := gui.RepoStateMap[Repo(worktreePath)]; state != nil {
+		gui.State = state
+		gui.State.ViewsSetup = false
 
-				// setting this to nil so we don't get stuck based on a popup that was
-				// previously opened
-				gui.Mutexes.PopupMutex.Lock()
-				gui.State.CurrentPopupOpts = nil
-				gui.Mutexes.PopupMutex.Unlock()
+		contextTree := gui.State.Contexts
+		gui.State.WindowViewNameMap = initialWindowViewNameMap(contextTree)
 
-				return gui.c.CurrentContext()
-			}
-		} else {
-			gui.c.Log.Error(err)
-		}
+		// setting this to nil so we don't get stuck based on a popup that was
+		// previously opened
+		gui.Mutexes.PopupMutex.Lock()
+		gui.State.CurrentPopupOpts = nil
+		gui.Mutexes.PopupMutex.Unlock()
+
+		return gui.c.CurrentContext()
 	}
 
 	contextTree := gui.contextTree()
@@ -340,6 +347,7 @@ func (gui *Gui) resetState(startArgs appTypes.StartArgs, reuseState bool) types.
 	initialScreenMode := initialScreenMode(startArgs, gui.Config)
 
 	gui.State = &GuiRepoState{
+		ViewsSetup: false,
 		Model: &types.Model{
 			CommitFiles:           nil,
 			Files:                 make([]*models.File, 0),
@@ -349,11 +357,13 @@ func (gui *Gui) resetState(startArgs appTypes.StartArgs, reuseState bool) types.
 			ReflogCommits:         make([]*models.Commit, 0),
 			BisectInfo:            git_commands.NewNullBisectInfo(),
 			FilesTrie:             patricia.NewTrie(),
+			Authors:               map[string]*models.Author{},
 		},
 		Modes: &types.Modes{
-			Filtering:     filtering.New(startArgs.FilterPath),
-			CherryPicking: cherrypicking.New(),
-			Diffing:       diffing.New(),
+			Filtering:        filtering.New(startArgs.FilterPath),
+			CherryPicking:    cherrypicking.New(),
+			Diffing:          diffing.New(),
+			MarkedBaseCommit: marked_base_commit.New(),
 		},
 		ScreenMode: initialScreenMode,
 		// TODO: only use contexts from context manager
@@ -363,7 +373,7 @@ func (gui *Gui) resetState(startArgs appTypes.StartArgs, reuseState bool) types.
 		SearchState:       types.NewSearchState(),
 	}
 
-	gui.RepoStateMap[Repo(currentDir)] = gui.State
+	gui.RepoStateMap[Repo(worktreePath)] = gui.State
 
 	return initialContext(contextTree, startArgs)
 }
@@ -380,7 +390,7 @@ func initialWindowViewNameMap(contextTree *context.ContextTree) *utils.ThreadSaf
 
 func initialScreenMode(startArgs appTypes.StartArgs, config config.AppConfigurer) types.WindowMaximisation {
 	if startArgs.FilterPath != "" || startArgs.GitArg != appTypes.GitArgNone {
-		return types.SCREEN_HALF
+		return types.SCREEN_FULL
 	} else {
 		defaultWindowSize := config.GetUserConfig().Gui.WindowSize
 
@@ -456,6 +466,7 @@ func NewGui(
 			SyncMutex:               &deadlock.Mutex{},
 			LocalCommitsMutex:       &deadlock.Mutex{},
 			SubCommitsMutex:         &deadlock.Mutex{},
+			AuthorsMutex:            &deadlock.Mutex{},
 			SubprocessMutex:         &deadlock.Mutex{},
 			PopupMutex:              &deadlock.Mutex{},
 			PtyMutex:                &deadlock.Mutex{},
@@ -463,8 +474,6 @@ func NewGui(
 		InitialDir:       initialDir,
 		afterLayoutFuncs: make(chan func() error, 1000),
 	}
-
-	gui.WatchFilesForChanges()
 
 	gui.PopupHandler = popup.NewPopupHandler(
 		cmn,
@@ -479,6 +488,7 @@ func NewGui(
 		func(message string) { gui.helpers.AppStatus.Toast(message) },
 		func() string { return gui.Views.Confirmation.TextArea.GetContent() },
 		func(f func(gocui.Task)) { gui.c.OnWorker(f) },
+		func() bool { return gui.c.InDemo() },
 	)
 
 	guiCommon := &guiCommon{gui: gui, IPopupHandler: gui.PopupHandler}
@@ -553,7 +563,7 @@ func (gui *Gui) initGocui(headless bool, test integrationTypes.IntegrationTest) 
 }
 
 func (gui *Gui) viewTabMap() map[string][]context.TabView {
-	return map[string][]context.TabView{
+	result := map[string][]context.TabView{
 		"branches": {
 			{
 				Tab:      gui.c.Tr.LocalBranchesTitle,
@@ -583,12 +593,18 @@ func (gui *Gui) viewTabMap() map[string][]context.TabView {
 				Tab:      gui.c.Tr.FilesTitle,
 				ViewName: "files",
 			},
+			context.TabView{
+				Tab:      gui.c.Tr.WorktreesTitle,
+				ViewName: "worktrees",
+			},
 			{
 				Tab:      gui.c.Tr.SubmodulesTitle,
 				ViewName: "submodules",
 			},
 		},
 	}
+
+	return result
 }
 
 // Run: setup the gui with keybindings and start the mainloop
@@ -637,7 +653,7 @@ func (gui *Gui) Run(startArgs appTypes.StartArgs) error {
 	}
 
 	// onNewRepo must be called after g.SetManager because SetManager deletes keybindings
-	if err := gui.onNewRepo(startArgs, false); err != nil {
+	if err := gui.onNewRepo(startArgs, context.NO_CONTEXT); err != nil {
 		return err
 	}
 
@@ -659,10 +675,6 @@ func (gui *Gui) RunAndHandleError(startArgs appTypes.StartArgs) error {
 		if err := gui.Run(startArgs); err != nil {
 			for _, manager := range gui.viewBufferManagerMap {
 				manager.Close()
-			}
-
-			if !gui.fileWatcher.Disabled {
-				gui.fileWatcher.Watcher.Close()
 			}
 
 			close(gui.stopChan)

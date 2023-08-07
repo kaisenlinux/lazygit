@@ -6,13 +6,13 @@ import (
 	"strings"
 
 	"github.com/jesseduffield/generics/set"
-	"github.com/jesseduffield/generics/slices"
 	"github.com/jesseduffield/go-git/v5/config"
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
 	"github.com/jesseduffield/lazygit/pkg/commands/oscommands"
 	"github.com/jesseduffield/lazygit/pkg/common"
 	"github.com/jesseduffield/lazygit/pkg/utils"
 	"github.com/samber/lo"
+	"golang.org/x/exp/slices"
 )
 
 // context:
@@ -75,20 +75,26 @@ outer:
 			if strings.EqualFold(reflogBranch.Name, branch.Name) {
 				branch.Recency = reflogBranch.Recency
 				branchesWithRecency = append(branchesWithRecency, branch)
-				branches = slices.Remove(branches, j)
+				branches = utils.Remove(branches, j)
 				continue outer
 			}
 		}
 	}
 
-	branches = slices.Prepend(branches, branchesWithRecency...)
+	// Sort branches that don't have a recency value alphabetically
+	// (we're really doing this for the sake of deterministic behaviour across git versions)
+	slices.SortFunc(branches, func(a *models.Branch, b *models.Branch) bool {
+		return a.Name < b.Name
+	})
+
+	branches = utils.Prepend(branches, branchesWithRecency...)
 
 	foundHead := false
 	for i, branch := range branches {
 		if branch.Head {
 			foundHead = true
 			branch.Recency = "  *"
-			branches = slices.Move(branches, i, 0)
+			branches = utils.Move(branches, i, 0)
 			break
 		}
 	}
@@ -97,7 +103,7 @@ outer:
 		if err != nil {
 			return nil, err
 		}
-		branches = slices.Prepend(branches, &models.Branch{Name: info.RefName, DisplayName: info.DisplayName, Head: true, DetachedHead: info.DetachedHead, Recency: "  *"})
+		branches = utils.Prepend(branches, &models.Branch{Name: info.RefName, DisplayName: info.DisplayName, Head: true, DetachedHead: info.DetachedHead, Recency: "  *"})
 	}
 
 	configBranches, err := self.config.Branches()
@@ -125,7 +131,7 @@ func (self *BranchLoader) obtainBranches() []*models.Branch {
 	trimmedOutput := strings.TrimSpace(output)
 	outputLines := strings.Split(trimmedOutput, "\n")
 
-	return slices.FilterMap(outputLines, func(line string) (*models.Branch, bool) {
+	return lo.FilterMap(outputLines, func(line string, _ int) (*models.Branch, bool) {
 		if line == "" {
 			return nil, false
 		}
@@ -165,7 +171,7 @@ var branchFields = []string{
 	"upstream:short",
 	"upstream:track",
 	"subject",
-	fmt.Sprintf("objectname:short=%d", utils.COMMIT_HASH_SHORT_SIZE),
+	"objectname",
 }
 
 // Obtain branch information from parsed line output of getRawBranches()

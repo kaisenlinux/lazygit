@@ -76,6 +76,10 @@ func (self *guiCommon) Context() types.IContextMgr {
 	return self.gui.State.ContextMgr
 }
 
+func (self *guiCommon) ContextForKey(key types.ContextKey) types.Context {
+	return self.gui.State.ContextMgr.ContextForKey(key)
+}
+
 func (self *guiCommon) ActivateContext(context types.Context) error {
 	return self.gui.State.ContextMgr.ActivateContext(context, types.OnFocusOpts{})
 }
@@ -176,4 +180,8 @@ func (self *guiCommon) AfterLayout(f func() error) {
 		// hopefully this never happens
 		self.gui.c.Log.Error("afterLayoutFuncs channel is full, skipping function")
 	}
+}
+
+func (self *guiCommon) InDemo() bool {
+	return self.gui.integrationTest != nil && self.gui.integrationTest.IsDemo()
 }

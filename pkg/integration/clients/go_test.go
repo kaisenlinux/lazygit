@@ -10,7 +10,6 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"testing"
@@ -37,6 +36,12 @@ func TestIntegration(t *testing.T) {
 		func(test *components.IntegrationTest, f func() error) {
 			defer func() { testNumber += 1 }()
 			if testNumber%parallelTotal != parallelIndex {
+				return
+			}
+
+			// not running demoes right now. Arguably we should, but we'd need to
+			// strip away any artificial lag they use.
+			if test.IsDemo() {
 				return
 			}
 
@@ -76,7 +81,7 @@ func runCmdHeadless(cmd *exec.Cmd) error {
 		return err
 	}
 
-	_, _ = io.Copy(ioutil.Discard, f)
+	_, _ = io.Copy(io.Discard, f)
 
 	if cmd.Wait() != nil {
 		// return an error with the stderr output

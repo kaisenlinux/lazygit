@@ -156,6 +156,7 @@ type TranslationSet struct {
 	GitconfigParseErr                   string
 	EditFile                            string
 	OpenFile                            string
+	OpenInEditor                        string
 	IgnoreFile                          string
 	ExcludeFile                         string
 	RefreshFiles                        string
@@ -192,7 +193,7 @@ type TranslationSet struct {
 	RecentRepos                         string
 	MergeOptionsTitle                   string
 	RebaseOptionsTitle                  string
-	CommitMessageTitle                  string
+	CommitSummaryTitle                  string
 	CommitDescriptionTitle              string
 	CommitDescriptionSubTitle           string
 	LocalBranchesTitle                  string
@@ -208,6 +209,7 @@ type TranslationSet struct {
 	ConflictsResolved                   string
 	Continue                            string
 	RebasingTitle                       string
+	RebasingFromBaseCommitTitle         string
 	SimpleRebase                        string
 	InteractiveRebase                   string
 	InteractiveRebaseTooltip            string
@@ -323,6 +325,7 @@ type TranslationSet struct {
 	ViewPatchOptions                    string
 	PatchOptionsTitle                   string
 	NoPatchError                        string
+	EmptyPatchError                     string
 	EnterFile                           string
 	ExitCustomPatchBuilder              string
 	EnterUpstream                       string
@@ -355,7 +358,9 @@ type TranslationSet struct {
 	PushTagTitle                        string
 	PushTag                             string
 	CreateTag                           string
-	CreateTagTitle                      string
+	CreatingTag                         string
+	ForceTag                            string
+	ForceTagPrompt                      string
 	FetchRemote                         string
 	FetchingRemoteStatus                string
 	CheckoutCommit                      string
@@ -480,6 +485,7 @@ type TranslationSet struct {
 	ErrCannotEditDirectory              string
 	ErrStageDirWithInlineMergeConflicts string
 	ErrRepositoryMovedOrDeleted         string
+	ErrWorktreeMovedOrRemoved           string
 	CommandLog                          string
 	ToggleShowCommandLog                string
 	FocusCommandLog                     string
@@ -540,8 +546,48 @@ type TranslationSet struct {
 	FilterPrefix                        string
 	ExitSearchMode                      string
 	ExitTextFilterMode                  string
+	SwitchToWorktree                    string
+	AlreadyCheckedOutByWorktree         string
+	BranchCheckedOutByWorktree          string
+	DetachWorktreeTooltip               string
+	Switching                           string
+	RemoveWorktree                      string
+	RemoveWorktreeTitle                 string
+	DetachWorktree                      string
+	DetachingWorktree                   string
+	WorktreesTitle                      string
+	WorktreeTitle                       string
+	RemoveWorktreePrompt                string
+	ForceRemoveWorktreePrompt           string
+	RemovingWorktree                    string
+	AddingWorktree                      string
+	CantDeleteCurrentWorktree           string
+	AlreadyInWorktree                   string
+	CantDeleteMainWorktree              string
+	NoWorktreesThisRepo                 string
+	MissingWorktree                     string
+	MainWorktree                        string
+	CreateWorktree                      string
+	NewWorktreePath                     string
+	NewWorktreeBase                     string
+	BranchNameCannotBeBlank             string
+	NewBranchName                       string
+	NewBranchNameLeaveBlank             string
+	ViewWorktreeOptions                 string
+	CreateWorktreeFrom                  string
+	CreateWorktreeFromDetached          string
+	LcWorktree                          string
+	ChangingDirectoryTo                 string
+	Name                                string
+	Branch                              string
+	Path                                string
+	MarkedBaseCommitStatus              string
+	MarkAsBaseCommit                    string
+	MarkAsBaseCommitTooltip             string
+	MarkedCommitMarker                  string
 	Actions                             Actions
 	Bisect                              Bisect
+	Log                                 Log
 }
 
 type Bisect struct {
@@ -551,13 +597,34 @@ type Bisect struct {
 	ResetTitle                  string
 	ResetPrompt                 string
 	ResetOption                 string
+	ChooseTerms                 string
+	OldTermPrompt               string
+	NewTermPrompt               string
 	BisectMenuTitle             string
 	Mark                        string
-	Skip                        string
+	SkipCurrent                 string
+	SkipSelected                string
 	CompleteTitle               string
 	CompletePrompt              string
 	CompletePromptIndeterminate string
 	Bisecting                   string
+}
+
+type Log struct {
+	EditRebase               string
+	MoveCommitUp             string
+	MoveCommitDown           string
+	CherryPickCommits        string
+	HandleUndo               string
+	HandleMidRebaseCommand   string
+	MovingCommitUp           string
+	MovingCommitDown         string
+	RemoveFile               string
+	CopyToClipboard          string
+	Remove                   string
+	CreateFileWithContent    string
+	AppendingLineToFile      string
+	EditRebaseFromBaseCommit string
 }
 
 type Actions struct {
@@ -666,6 +733,8 @@ type Actions struct {
 	ResetBisect                       string
 	BisectSkip                        string
 	BisectMark                        string
+	RemoveWorktree                    string
+	AddWorktree                       string
 }
 
 const englishIntroPopupMessage = `
@@ -825,7 +894,7 @@ func EnglishTranslationSet() TranslationSet {
 		OpenConfig:                          "Open config file",
 		EditConfig:                          "Edit config file",
 		ForcePush:                           "Force push",
-		ForcePushPrompt:                     "Your branch has diverged from the remote branch. Press 'esc' to cancel, or 'enter' to force push.",
+		ForcePushPrompt:                     "Your branch has diverged from the remote branch. Press {{.cancelKey}} to cancel, or {{.confirmKey}} to force push.",
 		ForcePushDisabled:                   "Your branch has diverged from the remote branch and you've disabled force pushing",
 		UpdatesRejectedAndForcePushDisabled: "Updates were rejected and you have disabled force pushing",
 		CheckForUpdate:                      "Check for update",
@@ -849,6 +918,7 @@ func EnglishTranslationSet() TranslationSet {
 		GitconfigParseErr:                   `Gogit failed to parse your gitconfig file due to the presence of unquoted '\' characters. Removing these should fix the issue.`,
 		EditFile:                            `Edit file`,
 		OpenFile:                            `Open file`,
+		OpenInEditor:                        "Open in editor",
 		IgnoreFile:                          `Add to .gitignore`,
 		ExcludeFile:                         `Add to .git/info/exclude`,
 		RefreshFiles:                        `Refresh files`,
@@ -884,7 +954,7 @@ func EnglishTranslationSet() TranslationSet {
 		RecentRepos:                         "Recent repositories",
 		MergeOptionsTitle:                   "Merge options",
 		RebaseOptionsTitle:                  "Rebase options",
-		CommitMessageTitle:                  "Commit summary",
+		CommitSummaryTitle:                  "Commit summary",
 		CommitDescriptionTitle:              "Commit description",
 		CommitDescriptionSubTitle:           "Press {{.togglePanelKeyBinding}} to toggle focus",
 		LocalBranchesTitle:                  "Local branches",
@@ -902,6 +972,7 @@ func EnglishTranslationSet() TranslationSet {
 		Continue:                            "Continue",
 		Keybindings:                         "Keybindings",
 		RebasingTitle:                       "Rebase '{{.checkedOutBranch}}' onto '{{.ref}}'",
+		RebasingFromBaseCommitTitle:         "Rebase '{{.checkedOutBranch}}' from marked base onto '{{.ref}}'",
 		SimpleRebase:                        "Simple rebase",
 		InteractiveRebase:                   "Interactive rebase",
 		InteractiveRebaseTooltip:            "Begin an interactive rebase with a break at the start, so you can update the TODO commits before continuing",
@@ -1017,6 +1088,7 @@ func EnglishTranslationSet() TranslationSet {
 		ViewPatchOptions:                    "View custom patch options",
 		PatchOptionsTitle:                   "Patch options",
 		NoPatchError:                        "No patch created yet. To start building a patch, use 'space' on a commit file or enter to add specific lines",
+		EmptyPatchError:                     "Patch is still empty. Add some files or lines to your patch first.",
 		EnterFile:                           "Enter file to add selected lines to the patch (or toggle directory collapsed)",
 		ExitCustomPatchBuilder:              `Exit custom patch builder`,
 		EnterUpstream:                       `Enter upstream as '<remote> <branchname>'`,
@@ -1039,8 +1111,8 @@ func EnglishTranslationSet() TranslationSet {
 		EditRemote:                          "Edit remote",
 		TagCommit:                           "Tag commit",
 		TagMenuTitle:                        "Create tag",
-		TagNameTitle:                        "Tag name:",
-		TagMessageTitle:                     "Tag message:",
+		TagNameTitle:                        "Tag name",
+		TagMessageTitle:                     "Tag description",
 		AnnotatedTag:                        "Annotated tag",
 		LightweightTag:                      "Lightweight tag",
 		DeleteTag:                           "Delete tag",
@@ -1049,7 +1121,9 @@ func EnglishTranslationSet() TranslationSet {
 		PushTagTitle:                        "Remote to push tag '{{.tagName}}' to:",
 		PushTag:                             "Push tag",
 		CreateTag:                           "Create tag",
-		CreateTagTitle:                      "Tag name:",
+		CreatingTag:                         "Creating tag",
+		ForceTag:                            "Force Tag",
+		ForceTagPrompt:                      "The tag '{{.tagName}}' exists already. Press {{.cancelKey}} to cancel, or {{.confirmKey}} to overwrite.",
 		FetchRemote:                         "Fetch remote",
 		FetchingRemoteStatus:                "Fetching remote",
 		CheckoutCommit:                      "Checkout commit",
@@ -1175,6 +1249,7 @@ func EnglishTranslationSet() TranslationSet {
 		ErrStageDirWithInlineMergeConflicts: "Cannot stage/unstage directory containing files with inline merge conflicts. Please fix up the merge conflicts first",
 		ErrRepositoryMovedOrDeleted:         "Cannot find repo. It might have been moved or deleted ¯\\_(ツ)_/¯",
 		CommandLog:                          "Command log",
+		ErrWorktreeMovedOrRemoved:           "Cannot find worktree. It might have been moved or removed ¯\\_(ツ)_/¯",
 		ToggleShowCommandLog:                "Toggle show/hide command log",
 		FocusCommandLog:                     "Focus command log",
 		CommandLogHeader:                    "You can hide/focus this panel by pressing '%s'\n",
@@ -1233,6 +1308,45 @@ func EnglishTranslationSet() TranslationSet {
 		SearchKeybindings:                   "%s: Next match, %s: Previous match, %s: Exit search mode",
 		SearchPrefix:                        "Search: ",
 		FilterPrefix:                        "Filter: ",
+		WorktreesTitle:                      "Worktrees",
+		WorktreeTitle:                       "Worktree",
+		SwitchToWorktree:                    "Switch to worktree",
+		AlreadyCheckedOutByWorktree:         "This branch is checked out by worktree {{.worktreeName}}. Do you want to switch to that worktree?",
+		BranchCheckedOutByWorktree:          "Branch {{.branchName}} is checked out by worktree {{.worktreeName}}",
+		DetachWorktreeTooltip:               "This will run `git checkout --detach` on the worktree so that it stops hogging the branch, but the worktree's working tree will be left alone",
+		Switching:                           "Switching",
+		RemoveWorktree:                      "Remove worktree",
+		RemoveWorktreeTitle:                 "Remove worktree",
+		RemoveWorktreePrompt:                "Are you sure you want to remove worktree '{{.worktreeName}}'?",
+		ForceRemoveWorktreePrompt:           "'{{.worktreeName}}' contains modified or untracked files (to be honest, it could contain both). Are you sure you want to remove it?",
+		RemovingWorktree:                    "Deleting worktree",
+		DetachWorktree:                      "Detach worktree",
+		DetachingWorktree:                   "Detaching worktree",
+		AddingWorktree:                      "Adding worktree",
+		CantDeleteCurrentWorktree:           "You cannot remove the current worktree!",
+		AlreadyInWorktree:                   "You are already in the selected worktree",
+		CantDeleteMainWorktree:              "You cannot remove the main worktree!",
+		NoWorktreesThisRepo:                 "No worktrees",
+		MissingWorktree:                     "(missing)",
+		MainWorktree:                        "(main)",
+		CreateWorktree:                      "Create worktree",
+		NewWorktreePath:                     "New worktree path",
+		NewWorktreeBase:                     "New worktree base ref",
+		BranchNameCannotBeBlank:             "Branch name cannot be blank",
+		NewBranchName:                       "New branch name",
+		NewBranchNameLeaveBlank:             "New branch name (leave blank to checkout {{.default}})",
+		ViewWorktreeOptions:                 "View worktree options",
+		CreateWorktreeFrom:                  "Create worktree from {{.ref}}",
+		CreateWorktreeFromDetached:          "Create worktree from {{.ref}} (detached)",
+		LcWorktree:                          "worktree",
+		ChangingDirectoryTo:                 "Changing directory to {{.path}}",
+		Name:                                "Name",
+		Branch:                              "Branch",
+		Path:                                "Path",
+		MarkedBaseCommitStatus:              "Marked a base commit for rebase",
+		MarkAsBaseCommit:                    "Mark commit as base commit for rebase",
+		MarkAsBaseCommitTooltip:             "Select a base commit for the next rebase; this will effectively perform a 'git rebase --onto'.",
+		MarkedCommitMarker:                  "↑↑↑ Will rebase from here ↑↑↑",
 		Actions: Actions{
 			// TODO: combine this with the original keybinding descriptions (those are all in lowercase atm)
 			CheckoutCommit:                    "Checkout commit",
@@ -1340,19 +1454,41 @@ func EnglishTranslationSet() TranslationSet {
 			ResetBisect:                       "Reset bisect",
 			BisectSkip:                        "Bisect skip",
 			BisectMark:                        "Bisect mark",
+			RemoveWorktree:                    "Remove worktree",
+			AddWorktree:                       "Add worktree",
 		},
 		Bisect: Bisect{
-			Mark:                        "Mark %s as %s",
+			Mark:                        "Mark current commit (%s) as %s",
 			MarkStart:                   "Mark %s as %s (start bisect)",
-			Skip:                        "Skip %s",
+			SkipCurrent:                 "Skip current commit (%s)",
+			SkipSelected:                "Skip selected commit (%s)",
 			ResetTitle:                  "Reset 'git bisect'",
 			ResetPrompt:                 "Are you sure you want to reset 'git bisect'?",
 			ResetOption:                 "Reset bisect",
+			ChooseTerms:                 "Choose bisect terms",
+			OldTermPrompt:               "Term for old/good commit:",
+			NewTermPrompt:               "Term for new/bad commit:",
 			BisectMenuTitle:             "Bisect",
 			CompleteTitle:               "Bisect complete",
 			CompletePrompt:              "Bisect complete! The following commit introduced the change:\n\n%s\n\nDo you want to reset 'git bisect' now?",
 			CompletePromptIndeterminate: "Bisect complete! Some commits were skipped, so any of the following commits may have introduced the change:\n\n%s\n\nDo you want to reset 'git bisect' now?",
 			Bisecting:                   "Bisecting",
+		},
+		Log: Log{
+			EditRebase:               "Beginning interactive rebase at '{{.ref}}'",
+			MoveCommitUp:             "Moving TODO down: '{{.shortSha}}'",
+			MoveCommitDown:           "Moving TODO down: '{{.shortSha}}'",
+			CherryPickCommits:        "Cherry-picking commits:\n'{{.commitLines}}'",
+			HandleUndo:               "Undoing last conflict resolution",
+			HandleMidRebaseCommand:   "Updating rebase action of commit {{.shortSha}} to '{{.action}}'",
+			MovingCommitUp:           "Moving commit {{.shortSha}} up",
+			MovingCommitDown:         "Moving commit {{.shortSha}} down",
+			RemoveFile:               "Deleting path '{{.path}}'",
+			CopyToClipboard:          "Copying '{{.str}}' to clipboard",
+			Remove:                   "Removing '{{.filename}}'",
+			CreateFileWithContent:    "Creating file '{{.path}}'",
+			AppendingLineToFile:      "Appending '{{.line}}' to file '{{.filename}}'",
+			EditRebaseFromBaseCommit: "Beginning interactive rebase from '{{.baseCommit}}' onto '{{.targetBranchName}}",
 		},
 	}
 }

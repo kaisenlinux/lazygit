@@ -24,6 +24,9 @@ type ICmdObj interface {
 	AddEnvVars(...string) ICmdObj
 	GetEnvVars() []string
 
+	// sets the working directory
+	SetWd(string) ICmdObj
+
 	// runs the command and returns an error if any
 	Run() error
 	// runs the command and returns the output as a string, and an error if any
@@ -70,10 +73,6 @@ type ICmdObj interface {
 }
 
 type CmdObj struct {
-	// the secureexec package will swap out the first arg with the full path to the binary,
-	// so we store these args separately so that ToString() will output the original
-	args []string
-
 	cmd *exec.Cmd
 
 	runner ICmdObjRunner
@@ -118,7 +117,7 @@ func (self *CmdObj) GetCmd() *exec.Cmd {
 
 func (self *CmdObj) ToString() string {
 	// if a given arg contains a space, we need to wrap it in quotes
-	quotedArgs := lo.Map(self.args, func(arg string, _ int) string {
+	quotedArgs := lo.Map(self.cmd.Args, func(arg string, _ int) string {
 		if strings.Contains(arg, " ") {
 			return `"` + arg + `"`
 		}
@@ -129,7 +128,7 @@ func (self *CmdObj) ToString() string {
 }
 
 func (self *CmdObj) Args() []string {
-	return self.args
+	return self.cmd.Args
 }
 
 func (self *CmdObj) AddEnvVars(vars ...string) ICmdObj {
@@ -140,6 +139,12 @@ func (self *CmdObj) AddEnvVars(vars ...string) ICmdObj {
 
 func (self *CmdObj) GetEnvVars() []string {
 	return self.cmd.Env
+}
+
+func (self *CmdObj) SetWd(wd string) ICmdObj {
+	self.cmd.Dir = wd
+
+	return self
 }
 
 func (self *CmdObj) DontLog() ICmdObj {

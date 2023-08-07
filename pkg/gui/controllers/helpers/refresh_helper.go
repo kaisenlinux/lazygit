@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/jesseduffield/generics/set"
-	"github.com/jesseduffield/generics/slices"
 	"github.com/jesseduffield/gocui"
 	"github.com/jesseduffield/lazygit/pkg/commands/git_commands"
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
@@ -15,9 +15,9 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/gui/filetree"
 	"github.com/jesseduffield/lazygit/pkg/gui/mergeconflicts"
 	"github.com/jesseduffield/lazygit/pkg/gui/presentation"
-	"github.com/jesseduffield/lazygit/pkg/gui/style"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
 	"github.com/jesseduffield/lazygit/pkg/utils"
+	"github.com/samber/lo"
 )
 
 type RefreshHelper struct {
@@ -27,7 +27,7 @@ type RefreshHelper struct {
 	patchBuildingHelper  *PatchBuildingHelper
 	stagingHelper        *StagingHelper
 	mergeConflictsHelper *MergeConflictsHelper
-	fileWatcher          types.IFileWatcher
+	worktreeHelper       *WorktreeHelper
 }
 
 func NewRefreshHelper(
@@ -37,7 +37,7 @@ func NewRefreshHelper(
 	patchBuildingHelper *PatchBuildingHelper,
 	stagingHelper *StagingHelper,
 	mergeConflictsHelper *MergeConflictsHelper,
-	fileWatcher types.IFileWatcher,
+	worktreeHelper *WorktreeHelper,
 ) *RefreshHelper {
 	return &RefreshHelper{
 		c:                    c,
@@ -46,11 +46,16 @@ func NewRefreshHelper(
 		patchBuildingHelper:  patchBuildingHelper,
 		stagingHelper:        stagingHelper,
 		mergeConflictsHelper: mergeConflictsHelper,
-		fileWatcher:          fileWatcher,
+		worktreeHelper:       worktreeHelper,
 	}
 }
 
 func (self *RefreshHelper) Refresh(options types.RefreshOptions) error {
+	t := time.Now()
+	defer func() {
+		self.c.Log.Infof(fmt.Sprintf("Refresh took %s", time.Since(t)))
+	}()
+
 	if options.Scope == nil {
 		self.c.Log.Infof(
 			"refreshing all scopes in %s mode",
@@ -77,6 +82,7 @@ func (self *RefreshHelper) Refresh(options types.RefreshOptions) error {
 				types.REFLOG,
 				types.TAGS,
 				types.REMOTES,
+				types.WORKTREES,
 				types.STATUS,
 				types.BISECT_INFO,
 				types.STAGING,
@@ -85,59 +91,85 @@ func (self *RefreshHelper) Refresh(options types.RefreshOptions) error {
 			scopeSet = set.NewFromSlice(options.Scope)
 		}
 
-		refresh := func(f func()) {
-			if options.Mode == types.ASYNC {
+		wg := sync.WaitGroup{}
+		refresh := func(name string, f func()) {
+			// if we're in a demo we don't want any async refreshes because
+			// everything happens fast and it's better to have everything update
+			// in the one frame
+			if !self.c.InDemo() && options.Mode == types.ASYNC {
 				self.c.OnWorker(func(t gocui.Task) {
 					f()
 				})
 			} else {
-				f()
+				wg.Add(1)
+				go utils.Safe(func() {
+					t := time.Now()
+					defer wg.Done()
+					f()
+					self.c.Log.Infof(fmt.Sprintf("refreshed %s in %s", name, time.Since(t)))
+				})
 			}
 		}
 
 		if scopeSet.Includes(types.COMMITS) || scopeSet.Includes(types.BRANCHES) || scopeSet.Includes(types.REFLOG) || scopeSet.Includes(types.BISECT_INFO) {
-			refresh(self.refreshCommits)
+			// whenever we change commits, we should update branches because the upstream/downstream
+			// counts can change. Whenever we change branches we should also change commits
+			// e.g. in the case of switching branches.
+			refresh("commits and commit files", self.refreshCommitsAndCommitFiles)
+			refresh("reflog and branches", self.refreshReflogAndBranches)
 		} else if scopeSet.Includes(types.REBASE_COMMITS) {
 			// the above block handles rebase commits so we only need to call this one
 			// if we've asked specifically for rebase commits and not those other things
-			refresh(func() { _ = self.refreshRebaseCommits() })
+			refresh("rebase commits", func() { _ = self.refreshRebaseCommits() })
 		}
 
 		if scopeSet.Includes(types.SUB_COMMITS) {
-			refresh(func() { _ = self.refreshSubCommitsWithLimit() })
+			refresh("sub commits", func() { _ = self.refreshSubCommitsWithLimit() })
 		}
 
 		// reason we're not doing this if the COMMITS type is included is that if the COMMITS type _is_ included we will refresh the commit files context anyway
 		if scopeSet.Includes(types.COMMIT_FILES) && !scopeSet.Includes(types.COMMITS) {
-			refresh(func() { _ = self.refreshCommitFilesContext() })
+			refresh("commit files", func() { _ = self.refreshCommitFilesContext() })
 		}
 
+		fileWg := sync.WaitGroup{}
 		if scopeSet.Includes(types.FILES) || scopeSet.Includes(types.SUBMODULES) {
-			refresh(func() { _ = self.refreshFilesAndSubmodules() })
+			fileWg.Add(1)
+			refresh("files", func() {
+				_ = self.refreshFilesAndSubmodules()
+				fileWg.Done()
+			})
 		}
 
 		if scopeSet.Includes(types.STASH) {
-			refresh(func() { _ = self.refreshStashEntries() })
+			refresh("stash", func() { _ = self.refreshStashEntries() })
 		}
 
 		if scopeSet.Includes(types.TAGS) {
-			refresh(func() { _ = self.refreshTags() })
+			refresh("tags", func() { _ = self.refreshTags() })
 		}
 
 		if scopeSet.Includes(types.REMOTES) {
-			refresh(func() { _ = self.refreshRemotes() })
+			refresh("remotes", func() { _ = self.refreshRemotes() })
+		}
+
+		if scopeSet.Includes(types.WORKTREES) {
+			refresh("worktrees", func() { _ = self.refreshWorktrees() })
 		}
 
 		if scopeSet.Includes(types.STAGING) {
-			refresh(func() { _ = self.stagingHelper.RefreshStagingPanel(types.OnFocusOpts{}) })
+			refresh("staging", func() {
+				fileWg.Wait()
+				_ = self.stagingHelper.RefreshStagingPanel(types.OnFocusOpts{})
+			})
 		}
 
 		if scopeSet.Includes(types.PATCH_BUILDING) {
-			refresh(func() { _ = self.patchBuildingHelper.RefreshPatchBuildingPanel(types.OnFocusOpts{}) })
+			refresh("patch building", func() { _ = self.patchBuildingHelper.RefreshPatchBuildingPanel(types.OnFocusOpts{}) })
 		}
 
 		if scopeSet.Includes(types.MERGE_CONFLICTS) || scopeSet.Includes(types.FILES) {
-			refresh(func() { _ = self.mergeConflictsHelper.RefreshMergeState() })
+			refresh("merge conflicts", func() { _ = self.mergeConflictsHelper.RefreshMergeState() })
 		}
 
 		self.refreshStatus()
@@ -145,6 +177,8 @@ func (self *RefreshHelper) Refresh(options types.RefreshOptions) error {
 		if options.Then != nil {
 			options.Then()
 		}
+
+		wg.Wait()
 	}
 
 	if options.Mode == types.BLOCK_UI {
@@ -170,13 +204,14 @@ func getScopeNames(scopes []types.RefreshableView) []string {
 		types.REFLOG:          "reflog",
 		types.TAGS:            "tags",
 		types.REMOTES:         "remotes",
+		types.WORKTREES:       "worktrees",
 		types.STATUS:          "status",
 		types.BISECT_INFO:     "bisect",
 		types.STAGING:         "staging",
 		types.MERGE_CONFLICTS: "mergeConflicts",
 	}
 
-	return slices.Map(scopes, func(scope types.RefreshableView) string {
+	return lo.Map(scopes, func(scope types.RefreshableView, _ int) string {
 		return scopeNameMap[scope]
 	})
 }
@@ -212,41 +247,55 @@ func (self *RefreshHelper) refreshReflogCommitsConsideringStartup() {
 	}
 }
 
-// whenever we change commits, we should update branches because the upstream/downstream
-// counts can change. Whenever we change branches we should probably also change commits
-// e.g. in the case of switching branches.
-func (self *RefreshHelper) refreshCommits() {
-	wg := sync.WaitGroup{}
-	wg.Add(2)
+func (self *RefreshHelper) refreshReflogAndBranches() {
+	self.refreshReflogCommitsConsideringStartup()
 
-	go utils.Safe(func() {
-		self.refreshReflogCommitsConsideringStartup()
+	self.refreshBranches()
+}
 
-		self.refreshBranches()
-		wg.Done()
-	})
-
-	go utils.Safe(func() {
-		_ = self.refreshCommitsWithLimit()
-		ctx, ok := self.c.Contexts().CommitFiles.GetParentContext()
-		if ok && ctx.GetKey() == context.LOCAL_COMMITS_CONTEXT_KEY {
-			// This makes sense when we've e.g. just amended a commit, meaning we get a new commit SHA at the same position.
-			// However if we've just added a brand new commit, it pushes the list down by one and so we would end up
-			// showing the contents of a different commit than the one we initially entered.
-			// Ideally we would know when to refresh the commit files context and when not to,
-			// or perhaps we could just pop that context off the stack whenever cycling windows.
-			// For now the awkwardness remains.
-			commit := self.c.Contexts().LocalCommits.GetSelected()
-			if commit != nil {
-				self.c.Contexts().CommitFiles.SetRef(commit)
-				self.c.Contexts().CommitFiles.SetTitleRef(commit.RefName())
-				_ = self.refreshCommitFilesContext()
-			}
+func (self *RefreshHelper) refreshCommitsAndCommitFiles() {
+	_ = self.refreshCommitsWithLimit()
+	ctx, ok := self.c.Contexts().CommitFiles.GetParentContext()
+	if ok && ctx.GetKey() == context.LOCAL_COMMITS_CONTEXT_KEY {
+		// This makes sense when we've e.g. just amended a commit, meaning we get a new commit SHA at the same position.
+		// However if we've just added a brand new commit, it pushes the list down by one and so we would end up
+		// showing the contents of a different commit than the one we initially entered.
+		// Ideally we would know when to refresh the commit files context and when not to,
+		// or perhaps we could just pop that context off the stack whenever cycling windows.
+		// For now the awkwardness remains.
+		commit := self.c.Contexts().LocalCommits.GetSelected()
+		if commit != nil {
+			self.c.Contexts().CommitFiles.SetRef(commit)
+			self.c.Contexts().CommitFiles.SetTitleRef(commit.RefName())
+			_ = self.refreshCommitFilesContext()
 		}
-		wg.Done()
-	})
+	}
+}
 
-	wg.Wait()
+func (self *RefreshHelper) determineCheckedOutBranchName() string {
+	if rebasedBranch := self.c.Git().Status.BranchBeingRebased(); rebasedBranch != "" {
+		// During a rebase we're on a detached head, so cannot determine the
+		// branch name in the usual way. We need to read it from the
+		// ".git/rebase-merge/head-name" file instead.
+		return strings.TrimPrefix(rebasedBranch, "refs/heads/")
+	}
+
+	if bisectInfo := self.c.Git().Bisect.GetInfo(); bisectInfo.Bisecting() && bisectInfo.GetStartSha() != "" {
+		// Likewise, when we're bisecting we're on a detached head as well. In
+		// this case we read the branch name from the ".git/BISECT_START" file.
+		return bisectInfo.GetStartSha()
+	}
+
+	// In all other cases, get the branch name by asking git what branch is
+	// checked out. Note that if we're on a detached head (for reasons other
+	// than rebasing or bisecting, i.e. it was explicitly checked out), then
+	// this will return its sha.
+	if branchName, err := self.c.Git().Branch.CurrentBranchName(); err == nil {
+		return branchName
+	}
+
+	// Should never get here unless the working copy is corrupt
+	return ""
 }
 
 func (self *RefreshHelper) refreshCommitsWithLimit() error {
@@ -266,7 +315,9 @@ func (self *RefreshHelper) refreshCommitsWithLimit() error {
 		return err
 	}
 	self.c.Model().Commits = commits
+	self.RefreshAuthors(commits)
 	self.c.Model().WorkingTreeStateAtLastCommitRefresh = self.c.Git().Status.WorkingTreeState()
+	self.c.Model().CheckedOutBranch = self.determineCheckedOutBranchName()
 
 	return self.c.PostRefreshUpdate(self.c.Contexts().LocalCommits)
 }
@@ -287,8 +338,24 @@ func (self *RefreshHelper) refreshSubCommitsWithLimit() error {
 		return err
 	}
 	self.c.Model().SubCommits = commits
+	self.RefreshAuthors(commits)
 
 	return self.c.PostRefreshUpdate(self.c.Contexts().SubCommits)
+}
+
+func (self *RefreshHelper) RefreshAuthors(commits []*models.Commit) {
+	self.c.Mutexes().AuthorsMutex.Lock()
+	defer self.c.Mutexes().AuthorsMutex.Unlock()
+
+	authors := self.c.Model().Authors
+	for _, commit := range commits {
+		if _, ok := authors[commit.AuthorEmail]; !ok {
+			authors[commit.AuthorEmail] = &models.Author{
+				Email: commit.AuthorEmail,
+				Name:  commit.AuthorName,
+			}
+		}
+	}
 }
 
 func (self *RefreshHelper) refreshCommitFilesContext() error {
@@ -369,6 +436,12 @@ func (self *RefreshHelper) refreshBranches() {
 	self.c.Model().Branches = branches
 
 	if err := self.c.PostRefreshUpdate(self.c.Contexts().Branches); err != nil {
+		self.c.Log.Error(err)
+	}
+
+	// Need to re-render the commits view because the visualization of local
+	// branch heads might have changed
+	if err := self.c.Contexts().LocalCommits.HandleRender(); err != nil {
 		self.c.Log.Error(err)
 	}
 
@@ -472,10 +545,6 @@ func (self *RefreshHelper) refreshStateFiles() error {
 	fileTreeViewModel.SetTree()
 	fileTreeViewModel.RWMutex.Unlock()
 
-	if err := self.fileWatcher.AddFilesToFileWatcher(files); err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -557,6 +626,25 @@ func (self *RefreshHelper) refreshRemotes() error {
 	return nil
 }
 
+func (self *RefreshHelper) refreshWorktrees() error {
+	worktrees, err := self.c.Git().Loaders.Worktrees.GetWorktrees()
+	if err != nil {
+		self.c.Log.Error(err)
+		self.c.Model().Worktrees = []*models.Worktree{}
+		return nil
+	}
+
+	self.c.Model().Worktrees = worktrees
+
+	// need to refresh branches because the branches view shows worktrees against
+	// branches
+	if err := self.c.PostRefreshUpdate(self.c.Contexts().Branches); err != nil {
+		return err
+	}
+
+	return self.c.PostRefreshUpdate(self.c.Contexts().Worktrees)
+}
+
 func (self *RefreshHelper) refreshStashEntries() error {
 	self.c.Model().StashEntries = self.c.Git().Loaders.StashLoader.
 		GetStashEntries(self.c.Modes().Filtering.GetPath())
@@ -574,20 +662,13 @@ func (self *RefreshHelper) refreshStatus() {
 		// need to wait for branches to refresh
 		return
 	}
-	status := ""
-
-	if currentBranch.IsRealBranch() {
-		status += presentation.ColoredBranchStatus(currentBranch, self.c.Tr) + " "
-	}
 
 	workingTreeState := self.c.Git().Status.WorkingTreeState()
-	if workingTreeState != enums.REBASE_MODE_NONE {
-		status += style.FgYellow.Sprintf("(%s) ", presentation.FormatWorkingTreeStateLower(self.c.Tr, workingTreeState))
-	}
+	linkedWorktreeName := self.worktreeHelper.GetLinkedWorktreeName()
 
-	name := presentation.GetBranchTextStyle(currentBranch.Name).Sprint(currentBranch.Name)
-	repoName := utils.GetCurrentRepoName()
-	status += fmt.Sprintf("%s → %s ", repoName, name)
+	repoName := self.c.Git().RepoPaths.RepoName()
+
+	status := presentation.FormatStatus(repoName, currentBranch, linkedWorktreeName, workingTreeState, self.c.Tr)
 
 	self.c.SetViewContent(self.c.Views().Status, status)
 }

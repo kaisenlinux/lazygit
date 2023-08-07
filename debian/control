@@ -17,6 +17,5 @@ Architecture: amd64 arm64 i386
 Depends:
  ${shlibs:Depends},
  ${misc:Depends},
- golang-go (>= 1.18),
 Suggests: git
 Description: Simple terminal UI for git commands

@@ -66,6 +66,7 @@ type IGuiCommon interface {
 	IsCurrentContext(Context) bool
 	// TODO: replace the above context-based methods with just using Context() e.g. replace PushContext() with Context().Push()
 	Context() IContextMgr
+	ContextForKey(key ContextKey) Context
 
 	ActivateContext(context Context) error
 
@@ -105,6 +106,9 @@ type IGuiCommon interface {
 
 	// hopefully we can remove this once we've moved all our keybinding stuff out of the gui god struct.
 	GetInitialKeybindingsWithCustomCommands() ([]*Binding, []*gocui.ViewMouseBinding)
+
+	// Returns true if we're in a demo recording/playback
+	InDemo() bool
 }
 
 type IModeMgr interface {
@@ -201,6 +205,7 @@ type Model struct {
 	StashEntries []*models.StashEntry
 	SubCommits   []*models.Commit
 	Remotes      []*models.Remote
+	Worktrees    []*models.Worktree
 
 	// FilteredReflogCommits are the ones that appear in the reflog panel.
 	// when in filtering mode we only include the ones that match the given path
@@ -215,8 +220,14 @@ type Model struct {
 	RemoteBranches                      []*models.RemoteBranch
 	Tags                                []*models.Tag
 
+	// Name of the currently checked out branch. This will be set even when
+	// we're on a detached head because we're rebasing or bisecting.
+	CheckedOutBranch string
+
 	// for displaying suggestions while typing in a file name
 	FilesTrie *patricia.Trie
+
+	Authors map[string]*models.Author
 }
 
 // if you add a new mutex here be sure to instantiate it. We're using pointers to
@@ -228,14 +239,13 @@ type Mutexes struct {
 	SyncMutex               *deadlock.Mutex
 	LocalCommitsMutex       *deadlock.Mutex
 	SubCommitsMutex         *deadlock.Mutex
+	AuthorsMutex            *deadlock.Mutex
 	SubprocessMutex         *deadlock.Mutex
 	PopupMutex              *deadlock.Mutex
 	PtyMutex                *deadlock.Mutex
 }
 
 type IStateAccessor interface {
-	GetIgnoreWhitespaceInDiffView() bool
-	SetIgnoreWhitespaceInDiffView(value bool)
 	GetRepoPathStack() *utils.StringStack
 	GetRepoState() IRepoStateAccessor
 	// tells us whether we're currently updating lazygit
@@ -271,10 +281,6 @@ const (
 	INITIAL StartupStage = iota
 	COMPLETE
 )
-
-type IFileWatcher interface {
-	AddFilesToFileWatcher(files []*models.File) error
-}
 
 // screen sizing determines how much space your selected window takes up (window
 // as in panel, not your terminal's window). Sometimes you want a bit more space

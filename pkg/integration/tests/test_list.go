@@ -11,6 +11,7 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/integration/tests/config"
 	"github.com/jesseduffield/lazygit/pkg/integration/tests/conflicts"
 	"github.com/jesseduffield/lazygit/pkg/integration/tests/custom_commands"
+	"github.com/jesseduffield/lazygit/pkg/integration/tests/demo"
 	"github.com/jesseduffield/lazygit/pkg/integration/tests/diff"
 	"github.com/jesseduffield/lazygit/pkg/integration/tests/file"
 	"github.com/jesseduffield/lazygit/pkg/integration/tests/filter_and_search"
@@ -26,11 +27,14 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/integration/tests/tag"
 	"github.com/jesseduffield/lazygit/pkg/integration/tests/ui"
 	"github.com/jesseduffield/lazygit/pkg/integration/tests/undo"
+	"github.com/jesseduffield/lazygit/pkg/integration/tests/worktree"
 )
 
 var tests = []*components.IntegrationTest{
 	bisect.Basic,
+	bisect.ChooseTerms,
 	bisect.FromOtherBranch,
+	bisect.Skip,
 	branch.CheckoutByName,
 	branch.CreateTag,
 	branch.Delete,
@@ -41,6 +45,7 @@ var tests = []*components.IntegrationTest{
 	branch.RebaseAndDrop,
 	branch.RebaseCancelOnConflict,
 	branch.RebaseDoesNotAutosquash,
+	branch.RebaseFromMarkedBase,
 	branch.Reset,
 	branch.ResetUpstream,
 	branch.SetUpstream,
@@ -84,6 +89,18 @@ var tests = []*components.IntegrationTest{
 	custom_commands.OmitFromHistory,
 	custom_commands.SuggestionsCommand,
 	custom_commands.SuggestionsPreset,
+	demo.AmendOldCommit,
+	demo.Bisect,
+	demo.CherryPick,
+	demo.CommitAndPush,
+	demo.CustomCommand,
+	demo.CustomPatch,
+	demo.Filter,
+	demo.InteractiveRebase,
+	demo.NukeWorkingTree,
+	demo.StageLines,
+	demo.Undo,
+	demo.WorktreeCreateFromBranches,
 	diff.Diff,
 	diff.DiffAndApplyPatch,
 	diff.DiffCommits,
@@ -98,6 +115,7 @@ var tests = []*components.IntegrationTest{
 	file.RememberCommitMessageAfterFail,
 	filter_and_search.FilterCommitFiles,
 	filter_and_search.FilterFiles,
+	filter_and_search.FilterFuzzy,
 	filter_and_search.FilterMenu,
 	filter_and_search.FilterRemoteBranches,
 	filter_and_search.NestedFilter,
@@ -113,7 +131,6 @@ var tests = []*components.IntegrationTest{
 	interactive_rebase.AmendMerge,
 	interactive_rebase.AmendNonHeadCommitDuringRebase,
 	interactive_rebase.DropTodoCommitWithUpdateRef,
-	interactive_rebase.DropTodoCommitWithUpdateRefShowBranchHeads,
 	interactive_rebase.DropWithCustomCommentChar,
 	interactive_rebase.EditFirstCommit,
 	interactive_rebase.EditNonTodoCommitDuringRebase,
@@ -137,12 +154,12 @@ var tests = []*components.IntegrationTest{
 	interactive_rebase.SwapInRebaseWithConflictAndEdit,
 	interactive_rebase.SwapWithConflict,
 	misc.ConfirmOnQuit,
+	misc.CopyToClipboard,
 	misc.InitialOpen,
 	misc.RecentReposOnLaunch,
 	patch_building.Apply,
 	patch_building.ApplyInReverse,
 	patch_building.ApplyInReverseWithConflict,
-	patch_building.CopyPatchToClipboard,
 	patch_building.MoveToEarlierCommit,
 	patch_building.MoveToEarlierCommitNoKeepEmpty,
 	patch_building.MoveToIndex,
@@ -160,6 +177,7 @@ var tests = []*components.IntegrationTest{
 	patch_building.StartNewPatch,
 	reflog.Checkout,
 	reflog.CherryPick,
+	reflog.DoNotShowBranchMarkersInReflogSubcommits,
 	reflog.Patch,
 	reflog.Reset,
 	staging.DiffContextChange,
@@ -206,8 +224,11 @@ var tests = []*components.IntegrationTest{
 	sync.PushWithCredentialPrompt,
 	sync.RenameBranchAndPull,
 	tag.Checkout,
+	tag.CreateWhileCommitting,
 	tag.CrudAnnotated,
 	tag.CrudLightweight,
+	tag.ForceTagAnnotated,
+	tag.ForceTagLightweight,
 	tag.Reset,
 	ui.Accordion,
 	ui.DoublePopup,
@@ -215,4 +236,19 @@ var tests = []*components.IntegrationTest{
 	ui.SwitchTabFromMenu,
 	undo.UndoCheckoutAndDrop,
 	undo.UndoDrop,
+	worktree.AddFromBranch,
+	worktree.AddFromBranchDetached,
+	worktree.AddFromCommit,
+	worktree.AssociateBranchBisect,
+	worktree.AssociateBranchRebase,
+	worktree.BareRepo,
+	worktree.Crud,
+	worktree.CustomCommand,
+	worktree.DetachWorktreeFromBranch,
+	worktree.DotfileBareRepo,
+	worktree.FastForwardWorktreeBranch,
+	worktree.ForceRemoveWorktree,
+	worktree.RemoveWorktreeFromBranch,
+	worktree.ResetWindowTabs,
+	worktree.WorktreeInRepo,
 }

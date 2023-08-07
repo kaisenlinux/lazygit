@@ -7,7 +7,6 @@ import (
 
 	"github.com/fsmiamoto/git-todo-parser/todo"
 	"github.com/go-errors/errors"
-	"github.com/jesseduffield/generics/slices"
 	"github.com/jesseduffield/lazygit/pkg/app/daemon"
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
 	"github.com/jesseduffield/lazygit/pkg/commands/oscommands"
@@ -35,10 +34,10 @@ func NewRebaseCommands(
 	}
 }
 
-func (self *RebaseCommands) RewordCommit(commits []*models.Commit, index int, message string) error {
+func (self *RebaseCommands) RewordCommit(commits []*models.Commit, index int, summary string, description string) error {
 	if models.IsHeadCommit(commits, index) {
 		// we've selected the top commit so no rebase is required
-		return self.commit.RewordLastCommit(message)
+		return self.commit.RewordLastCommit(summary, description)
 	}
 
 	err := self.BeginInteractiveRebaseForCommit(commits, index, false)
@@ -47,7 +46,7 @@ func (self *RebaseCommands) RewordCommit(commits []*models.Commit, index int, me
 	}
 
 	// now the selected commit should be our head so we'll amend it with the new message
-	err = self.commit.RewordLastCommit(message)
+	err = self.commit.RewordLastCommit(summary, description)
 	if err != nil {
 		return err
 	}
@@ -105,7 +104,13 @@ func (self *RebaseCommands) MoveCommitDown(commits []*models.Commit, index int) 
 
 	sha := commits[index].Sha
 
-	self.os.LogCommand(fmt.Sprintf("Moving TODO down: %s", utils.ShortSha(sha)), false)
+	msg := utils.ResolvePlaceholderString(
+		self.Tr.Log.MoveCommitDown,
+		map[string]string{
+			"shortSha": utils.ShortSha(sha),
+		},
+	)
+	self.os.LogCommand(msg, false)
 
 	return self.PrepareInteractiveRebaseCommand(PrepareInteractiveRebaseCommandOpts{
 		baseShaOrRoot:  baseShaOrRoot,
@@ -119,7 +124,13 @@ func (self *RebaseCommands) MoveCommitUp(commits []*models.Commit, index int) er
 
 	sha := commits[index].Sha
 
-	self.os.LogCommand(fmt.Sprintf("Moving TODO up: %s", utils.ShortSha(sha)), false)
+	msg := utils.ResolvePlaceholderString(
+		self.Tr.Log.MoveCommitUp,
+		map[string]string{
+			"shortSha": utils.ShortSha(sha),
+		},
+	)
+	self.os.LogCommand(msg, false)
 
 	return self.PrepareInteractiveRebaseCommand(PrepareInteractiveRebaseCommandOpts{
 		baseShaOrRoot:  baseShaOrRoot,
@@ -150,15 +161,37 @@ func (self *RebaseCommands) InteractiveRebase(commits []*models.Commit, index in
 }
 
 func (self *RebaseCommands) EditRebase(branchRef string) error {
-	self.os.LogCommand(fmt.Sprintf("Beginning interactive rebase at '%s'", branchRef), false)
+	msg := utils.ResolvePlaceholderString(
+		self.Tr.Log.EditRebase,
+		map[string]string{
+			"ref": branchRef,
+		},
+	)
+	self.os.LogCommand(msg, false)
 	return self.PrepareInteractiveRebaseCommand(PrepareInteractiveRebaseCommandOpts{
 		baseShaOrRoot: branchRef,
 		instruction:   daemon.NewInsertBreakInstruction(),
 	}).Run()
 }
 
+func (self *RebaseCommands) EditRebaseFromBaseCommit(targetBranchName string, baseCommit string) error {
+	msg := utils.ResolvePlaceholderString(
+		self.Tr.Log.EditRebaseFromBaseCommit,
+		map[string]string{
+			"baseCommit":       baseCommit,
+			"targetBranchName": targetBranchName,
+		},
+	)
+	self.os.LogCommand(msg, false)
+	return self.PrepareInteractiveRebaseCommand(PrepareInteractiveRebaseCommandOpts{
+		baseShaOrRoot: baseCommit,
+		onto:          targetBranchName,
+		instruction:   daemon.NewInsertBreakInstruction(),
+	}).Run()
+}
+
 func logTodoChanges(changes []daemon.ChangeTodoAction) string {
-	changeTodoStr := strings.Join(slices.Map(changes, func(c daemon.ChangeTodoAction) string {
+	changeTodoStr := strings.Join(lo.Map(changes, func(c daemon.ChangeTodoAction, _ int) string {
 		return fmt.Sprintf("%s:%s", c.Sha, c.NewAction)
 	}), "\n")
 	return fmt.Sprintf("Changing TODO actions: %s", changeTodoStr)
@@ -166,6 +199,7 @@ func logTodoChanges(changes []daemon.ChangeTodoAction) string {
 
 type PrepareInteractiveRebaseCommandOpts struct {
 	baseShaOrRoot              string
+	onto                       string
 	instruction                daemon.Instruction
 	overrideEditor             bool
 	keepCommitsThatBecomeEmpty bool
@@ -184,6 +218,7 @@ func (self *RebaseCommands) PrepareInteractiveRebaseCommand(opts PrepareInteract
 		ArgIf(opts.keepCommitsThatBecomeEmpty && !self.version.IsOlderThan(2, 26, 0), "--empty=keep").
 		Arg("--no-autosquash").
 		ArgIf(!self.version.IsOlderThan(2, 22, 0), "--rebase-merges").
+		ArgIf(opts.onto != "", "--onto", opts.onto).
 		Arg(opts.baseShaOrRoot).
 		ToArgv()
 
@@ -243,18 +278,18 @@ func (self *RebaseCommands) AmendTo(commits []*models.Commit, commitIndex int) e
 // EditRebaseTodo sets the action for a given rebase commit in the git-rebase-todo file
 func (self *RebaseCommands) EditRebaseTodo(commit *models.Commit, action todo.TodoCommand) error {
 	return utils.EditRebaseTodo(
-		filepath.Join(self.dotGitDir, "rebase-merge/git-rebase-todo"), commit.Sha, commit.Action, action, self.config.GetCoreCommentChar())
+		filepath.Join(self.repoPaths.WorktreeGitDirPath(), "rebase-merge/git-rebase-todo"), commit.Sha, commit.Action, action, self.config.GetCoreCommentChar())
 }
 
 // MoveTodoDown moves a rebase todo item down by one position
 func (self *RebaseCommands) MoveTodoDown(commit *models.Commit) error {
-	fileName := filepath.Join(self.dotGitDir, "rebase-merge/git-rebase-todo")
+	fileName := filepath.Join(self.repoPaths.WorktreeGitDirPath(), "rebase-merge/git-rebase-todo")
 	return utils.MoveTodoDown(fileName, commit.Sha, commit.Action, self.config.GetCoreCommentChar())
 }
 
 // MoveTodoDown moves a rebase todo item down by one position
 func (self *RebaseCommands) MoveTodoUp(commit *models.Commit) error {
-	fileName := filepath.Join(self.dotGitDir, "rebase-merge/git-rebase-todo")
+	fileName := filepath.Join(self.repoPaths.WorktreeGitDirPath(), "rebase-merge/git-rebase-todo")
 	return utils.MoveTodoUp(fileName, commit.Sha, commit.Action, self.config.GetCoreCommentChar())
 }
 
@@ -305,6 +340,13 @@ func (self *RebaseCommands) BeginInteractiveRebaseForCommit(
 // RebaseBranch interactive rebases onto a branch
 func (self *RebaseCommands) RebaseBranch(branchName string) error {
 	return self.PrepareInteractiveRebaseCommand(PrepareInteractiveRebaseCommandOpts{baseShaOrRoot: branchName}).Run()
+}
+
+func (self *RebaseCommands) RebaseBranchFromBaseCommit(targetBranchName string, baseCommit string) error {
+	return self.PrepareInteractiveRebaseCommand(PrepareInteractiveRebaseCommandOpts{
+		baseShaOrRoot: baseCommit,
+		onto:          targetBranchName,
+	}).Run()
 }
 
 func (self *RebaseCommands) GenericMergeOrRebaseActionCmdObj(commandType string, command string) oscommands.ICmdObj {
@@ -395,7 +437,13 @@ func (self *RebaseCommands) CherryPickCommits(commits []*models.Commit) error {
 	commitLines := lo.Map(commits, func(commit *models.Commit, _ int) string {
 		return fmt.Sprintf("%s %s", utils.ShortSha(commit.Sha), commit.Name)
 	})
-	self.os.LogCommand(fmt.Sprintf("Cherry-picking commits:\n%s", strings.Join(commitLines, "\n")), false)
+	msg := utils.ResolvePlaceholderString(
+		self.Tr.Log.CherryPickCommits,
+		map[string]string{
+			"commitLines": strings.Join(commitLines, "\n"),
+		},
+	)
+	self.os.LogCommand(msg, false)
 
 	return self.PrepareInteractiveRebaseCommand(PrepareInteractiveRebaseCommandOpts{
 		baseShaOrRoot: "HEAD",

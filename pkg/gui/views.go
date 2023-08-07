@@ -1,11 +1,11 @@
 package gui
 
 import (
-	"github.com/jesseduffield/generics/slices"
 	"github.com/jesseduffield/gocui"
 	"github.com/jesseduffield/lazygit/pkg/gui/keybindings"
 	"github.com/jesseduffield/lazygit/pkg/theme"
 	"github.com/jesseduffield/lazygit/pkg/utils"
+	"github.com/samber/lo"
 )
 
 type viewNameMapping struct {
@@ -14,7 +14,7 @@ type viewNameMapping struct {
 }
 
 func (gui *Gui) orderedViews() []*gocui.View {
-	return slices.Map(gui.orderedViewNameMappings(), func(v viewNameMapping) *gocui.View {
+	return lo.Map(gui.orderedViewNameMappings(), func(v viewNameMapping, _ int) *gocui.View {
 		return *v.viewPtr
 	})
 }
@@ -26,6 +26,7 @@ func (gui *Gui) orderedViewNameMappings() []viewNameMapping {
 		{viewPtr: &gui.Views.Status, name: "status"},
 		{viewPtr: &gui.Views.Snake, name: "snake"},
 		{viewPtr: &gui.Views.Submodules, name: "submodules"},
+		{viewPtr: &gui.Views.Worktrees, name: "worktrees"},
 		{viewPtr: &gui.Views.Files, name: "files"},
 		{viewPtr: &gui.Views.Tags, name: "tags"},
 		{viewPtr: &gui.Views.Remotes, name: "remotes"},
@@ -112,6 +113,8 @@ func (gui *Gui) createAllViews() error {
 	gui.Views.Branches.Title = gui.c.Tr.BranchesTitle
 
 	gui.Views.Remotes.Title = gui.c.Tr.RemotesTitle
+
+	gui.Views.Worktrees.Title = gui.c.Tr.WorktreesTitle
 
 	gui.Views.Tags.Title = gui.c.Tr.TagsTitle
 

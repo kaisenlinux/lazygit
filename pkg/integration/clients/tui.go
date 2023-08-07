@@ -4,22 +4,22 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
-	"github.com/jesseduffield/generics/slices"
 	"github.com/jesseduffield/gocui"
 	"github.com/jesseduffield/lazycore/pkg/utils"
 	"github.com/jesseduffield/lazygit/pkg/gui"
 	"github.com/jesseduffield/lazygit/pkg/gui/style"
 	"github.com/jesseduffield/lazygit/pkg/integration/components"
 	"github.com/jesseduffield/lazygit/pkg/integration/tests"
-	"github.com/jesseduffield/lazygit/pkg/secureexec"
+	"github.com/samber/lo"
 )
 
 // This program lets you run integration tests from a TUI. See pkg/integration/README.md for more info.
 
-var SLOW_KEY_PRESS_DELAY = 300
+var SLOW_KEY_PRESS_DELAY = 600
 
 func RunTUI() {
 	rootDir := utils.GetLazyRootDirectory()
@@ -124,7 +124,7 @@ func RunTUI() {
 			return nil
 		}
 
-		cmd := secureexec.Command("sh", "-c", fmt.Sprintf("code -r pkg/integration/tests/%s.go", currentTest.Name()))
+		cmd := exec.Command("sh", "-c", fmt.Sprintf("code -r pkg/integration/tests/%s.go", currentTest.Name()))
 		if err := cmd.Run(); err != nil {
 			return err
 		}
@@ -140,7 +140,7 @@ func RunTUI() {
 			return nil
 		}
 
-		cmd := secureexec.Command("sh", "-c", fmt.Sprintf("code test/results/%s", currentTest.Name()))
+		cmd := exec.Command("sh", "-c", fmt.Sprintf("code test/results/%s", currentTest.Name()))
 		if err := cmd.Run(); err != nil {
 			return err
 		}
@@ -245,7 +245,7 @@ func (self *app) filterWithString(needle string) {
 	if needle == "" {
 		self.filteredTests = self.allTests
 	} else {
-		self.filteredTests = slices.Filter(self.allTests, func(test *components.IntegrationTest) bool {
+		self.filteredTests = lo.Filter(self.allTests, func(test *components.IntegrationTest, _ int) bool {
 			return strings.Contains(test.Name(), needle)
 		})
 	}

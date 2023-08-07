@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
@@ -17,7 +18,6 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/env"
 	integrationTypes "github.com/jesseduffield/lazygit/pkg/integration/types"
 	"github.com/jesseduffield/lazygit/pkg/logs/tail"
-	"github.com/jesseduffield/lazygit/pkg/secureexec"
 	"github.com/jesseduffield/lazygit/pkg/utils"
 	"github.com/samber/lo"
 	"gopkg.in/yaml.v3"
@@ -63,8 +63,17 @@ func Start(buildInfo *BuildInfo, integrationTest integrationTypes.IntegrationTes
 			log.Fatal(absRepoPath + " is not a valid git repository.")
 		}
 
-		cliArgs.WorkTree = absRepoPath
 		cliArgs.GitDir = filepath.Join(absRepoPath, ".git")
+		err = os.Chdir(absRepoPath)
+		if err != nil {
+			log.Fatalf("Failed to change directory to %s: %v", absRepoPath, err)
+		}
+	} else if cliArgs.WorkTree != "" {
+		env.SetWorkTreeEnv(cliArgs.WorkTree)
+
+		if err := os.Chdir(cliArgs.WorkTree); err != nil {
+			log.Fatalf("Failed to change directory to %s: %v", cliArgs.WorkTree, err)
+		}
 	}
 
 	if cliArgs.CustomConfigFile != "" {
@@ -73,10 +82,6 @@ func Start(buildInfo *BuildInfo, integrationTest integrationTypes.IntegrationTes
 
 	if cliArgs.UseConfigDir != "" {
 		os.Setenv("CONFIG_DIR", cliArgs.UseConfigDir)
-	}
-
-	if cliArgs.WorkTree != "" {
-		env.SetGitWorkTreeEnv(cliArgs.WorkTree)
 	}
 
 	if cliArgs.GitDir != "" {
@@ -113,12 +118,6 @@ func Start(buildInfo *BuildInfo, integrationTest integrationTypes.IntegrationTes
 
 		tail.TailLogs(logPath)
 		os.Exit(0)
-	}
-
-	if cliArgs.WorkTree != "" {
-		if err := os.Chdir(cliArgs.WorkTree); err != nil {
-			log.Fatal(err.Error())
-		}
 	}
 
 	tempDir, err := os.MkdirTemp("", "lazygit-*")
@@ -277,7 +276,7 @@ func mergeBuildInfo(buildInfo *BuildInfo) {
 }
 
 func getGitVersionInfo() string {
-	cmd := secureexec.Command("git", "--version")
+	cmd := exec.Command("git", "--version")
 	stdout, _ := cmd.Output()
 	gitVersion := strings.Trim(strings.TrimPrefix(string(stdout), "git version "), " \r\n")
 	return gitVersion

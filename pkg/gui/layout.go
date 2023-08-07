@@ -1,11 +1,12 @@
 package gui
 
 import (
-	"github.com/jesseduffield/generics/slices"
 	"github.com/jesseduffield/gocui"
 	"github.com/jesseduffield/lazygit/pkg/gui/context"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
 	"github.com/jesseduffield/lazygit/pkg/theme"
+	"github.com/samber/lo"
+	"golang.org/x/exp/slices"
 )
 
 // layout is called for every screen re-render e.g. when the screen is resized
@@ -175,6 +176,10 @@ func (gui *Gui) prepareView(viewName string) (*gocui.View, error) {
 }
 
 func (gui *Gui) onInitialViewsCreationForRepo() error {
+	if err := gui.onRepoViewReset(); err != nil {
+		return err
+	}
+
 	// hide any popup views. This only applies when we've just switched repos
 	for _, viewName := range gui.popupViewNames() {
 		view, err := gui.g.View(viewName)
@@ -192,16 +197,16 @@ func (gui *Gui) onInitialViewsCreationForRepo() error {
 }
 
 func (gui *Gui) popupViewNames() []string {
-	popups := slices.Filter(gui.State.Contexts.Flatten(), func(c types.Context) bool {
+	popups := lo.Filter(gui.State.Contexts.Flatten(), func(c types.Context, _ int) bool {
 		return c.GetKind() == types.PERSISTENT_POPUP || c.GetKind() == types.TEMPORARY_POPUP
 	})
 
-	return slices.Map(popups, func(c types.Context) string {
+	return lo.Map(popups, func(c types.Context, _ int) string {
 		return c.GetViewName()
 	})
 }
 
-func (gui *Gui) onInitialViewsCreation() error {
+func (gui *Gui) onRepoViewReset() error {
 	// now we order the views (in order of bottom first)
 	for _, view := range gui.orderedViews() {
 		if _, err := gui.g.SetViewOnTop(view.Name()); err != nil {
@@ -219,7 +224,7 @@ func (gui *Gui) onInitialViewsCreation() error {
 			})
 
 			if index != -1 {
-				view.Tabs = slices.Map(values, func(tabContext context.TabView) string {
+				view.Tabs = lo.Map(values, func(tabContext context.TabView, _ int) string {
 					return tabContext.Tab
 				})
 				view.TabIndex = index
@@ -228,6 +233,10 @@ func (gui *Gui) onInitialViewsCreation() error {
 	}
 	gui.g.Mutexes.ViewsMutex.Unlock()
 
+	return nil
+}
+
+func (gui *Gui) onInitialViewsCreation() error {
 	if !gui.c.UserConfig.DisableStartupPopups {
 		storedPopupVersion := gui.c.GetAppState().StartupPopupVersion
 		if storedPopupVersion < StartupPopupVersion {
@@ -279,7 +288,7 @@ func (gui *Gui) onViewFocusLost(oldView *gocui.View) error {
 }
 
 func (gui *Gui) transientContexts() []types.Context {
-	return slices.Filter(gui.State.Contexts.Flatten(), func(context types.Context) bool {
+	return lo.Filter(gui.State.Contexts.Flatten(), func(context types.Context, _ int) bool {
 		return context.IsTransient()
 	})
 }

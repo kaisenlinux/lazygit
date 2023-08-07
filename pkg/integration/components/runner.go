@@ -2,14 +2,15 @@ package components
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 
-	"github.com/jesseduffield/lazycore/pkg/utils"
+	lazycoreUtils "github.com/jesseduffield/lazycore/pkg/utils"
 	"github.com/jesseduffield/lazygit/pkg/commands/git_commands"
 	"github.com/jesseduffield/lazygit/pkg/commands/oscommands"
+	"github.com/jesseduffield/lazygit/pkg/utils"
+	"github.com/samber/lo"
 )
 
 const (
@@ -31,7 +32,7 @@ func RunTests(
 	keyPressDelay int,
 	maxAttempts int,
 ) error {
-	projectRootDir := utils.GetLazyRootDirectory()
+	projectRootDir := lazycoreUtils.GetLazyRootDirectory()
 	err := os.Chdir(projectRootDir)
 	if err != nil {
 		return err
@@ -178,8 +179,17 @@ func getLazygitCommand(test *IntegrationTest, paths Paths, rootDir string, sandb
 		return nil, err
 	}
 
-	cmdArgs := []string{tempLazygitPath(), "-debug", "--use-config-dir=" + paths.Config(), "--path=" + paths.ActualRepo()}
-	cmdArgs = append(cmdArgs, test.ExtraCmdArgs()...)
+	cmdArgs := []string{tempLazygitPath(), "-debug", "--use-config-dir=" + paths.Config()}
+	if !test.useCustomPath {
+		cmdArgs = append(cmdArgs, "--path="+paths.ActualRepo())
+	}
+	resolvedExtraArgs := lo.Map(test.ExtraCmdArgs(), func(arg string, _ int) string {
+		return utils.ResolvePlaceholderString(arg, map[string]string{
+			"actualPath":     paths.Actual(),
+			"actualRepoPath": paths.ActualRepo(),
+		})
+	})
+	cmdArgs = append(cmdArgs, resolvedExtraArgs...)
 
 	cmdObj := osCommand.Cmd.New(cmdArgs)
 
@@ -222,7 +232,7 @@ func findOrCreateDir(path string) {
 
 func deleteAndRecreateEmptyDir(path string) {
 	// remove contents of integration test directory
-	dir, err := ioutil.ReadDir(path)
+	dir, err := os.ReadDir(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			err = os.Mkdir(path, 0o777)

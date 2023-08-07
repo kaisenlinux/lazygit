@@ -6,13 +6,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/jesseduffield/gocui"
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
 	"github.com/jesseduffield/lazygit/pkg/config"
 	"github.com/jesseduffield/lazygit/pkg/gui/keybindings"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
 	integrationTypes "github.com/jesseduffield/lazygit/pkg/integration/types"
+	"github.com/stefanhaller/tcell/v2"
 )
 
 // this gives our integration test a way of interacting with the gui for sending keypresses
@@ -42,7 +42,11 @@ func (self *GuiDriver) PressKey(keyStr string) {
 		0,
 	)
 
-	// wait until lazygit is idle (i.e. all processing is done) before continuing
+	self.waitTillIdle()
+}
+
+// wait until lazygit is idle (i.e. all processing is done) before continuing
+func (self *GuiDriver) waitTillIdle() {
 	<-self.isIdleChan
 }
 
@@ -110,4 +114,14 @@ func (self *GuiDriver) View(viewName string) *gocui.View {
 		panic(err)
 	}
 	return view
+}
+
+func (self *GuiDriver) SetCaption(caption string) {
+	self.gui.setCaption(caption)
+	self.waitTillIdle()
+}
+
+func (self *GuiDriver) SetCaptionPrefix(prefix string) {
+	self.gui.setCaptionPrefix(prefix)
+	self.waitTillIdle()
 }

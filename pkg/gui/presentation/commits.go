@@ -39,9 +39,13 @@ type bisectBounds struct {
 func GetCommitListDisplayStrings(
 	common *common.Common,
 	commits []*models.Commit,
+	branches []*models.Branch,
+	currentBranchName string,
+	showBranchMarkerForHeadCommit bool,
 	fullDescription bool,
 	cherryPickedCommitShaSet *set.Set[string],
 	diffName string,
+	markedBaseCommit string,
 	timeFormat string,
 	shortTimeFormat string,
 	now time.Time,
@@ -99,8 +103,33 @@ func GetCommitListDisplayStrings(
 		getGraphLine = func(idx int) string { return "" }
 	}
 
+	// Determine the hashes of the local branches for which we want to show a
+	// branch marker in the commits list. We only want to do this for branches
+	// that are not the current branch, and not any of the main branches. The
+	// goal is to visualize stacks of local branches, so anything that doesn't
+	// contribute to a branch stack shouldn't show a marker.
+	//
+	// If there are other branches pointing to the current head commit, we only
+	// want to show the marker if the rebase.updateRefs config is on.
+	branchHeadsToVisualize := set.NewFromSlice(lo.FilterMap(branches,
+		func(b *models.Branch, index int) (string, bool) {
+			return b.CommitHash,
+				// Don't consider branches that don't have a commit hash. As far
+				// as I can see, this happens for a detached head, so filter
+				// these out
+				b.CommitHash != "" &&
+					// Don't show a marker for the current branch
+					b.Name != currentBranchName &&
+					// Don't show a marker for main branches
+					!lo.Contains(common.UserConfig.Git.MainBranches, b.Name) &&
+					// Don't show a marker for the head commit unless the
+					// rebase.updateRefs config is on
+					(showBranchMarkerForHeadCommit || b.CommitHash != commits[0].Sha)
+		}))
+
 	lines := make([][]string, 0, len(filteredCommits))
 	var bisectStatus BisectStatus
+	willBeRebased := markedBaseCommit == ""
 	for i, commit := range filteredCommits {
 		unfilteredIdx := i + startIdx
 		bisectStatus = getBisectStatus(unfilteredIdx, commit.Sha, bisectInfo, bisectBounds)
@@ -109,10 +138,17 @@ func GetCommitListDisplayStrings(
 			isYouAreHereCommit = true
 			showYouAreHereLabel = false
 		}
+		isMarkedBaseCommit := commit.Sha != "" && commit.Sha == markedBaseCommit
+		if isMarkedBaseCommit {
+			willBeRebased = true
+		}
 		lines = append(lines, displayCommit(
 			common,
 			commit,
+			branchHeadsToVisualize,
 			cherryPickedCommitShaSet,
+			isMarkedBaseCommit,
+			willBeRebased,
 			diffName,
 			timeFormat,
 			shortTimeFormat,
@@ -260,7 +296,10 @@ func getBisectStatusText(bisectStatus BisectStatus, bisectInfo *git_commands.Bis
 func displayCommit(
 	common *common.Common,
 	commit *models.Commit,
+	branchHeadsToVisualize *set.Set[string],
 	cherryPickedCommitShaSet *set.Set[string],
+	isMarkedBaseCommit bool,
+	willBeRebased bool,
 	diffName string,
 	timeFormat string,
 	shortTimeFormat string,
@@ -289,8 +328,11 @@ func displayCommit(
 	} else {
 		if len(commit.Tags) > 0 {
 			tagString = theme.DiffTerminalColor.SetBold().Sprint(strings.Join(commit.Tags, " ")) + " "
-		} else if common.UserConfig.Gui.ExperimentalShowBranchHeads && commit.ExtraInfo != "" {
-			tagString = style.FgMagenta.SetBold().Sprint("(*)") + " "
+		}
+
+		if branchHeadsToVisualize.Includes(commit.Sha) && commit.Status != models.StatusMerged {
+			tagString = style.FgCyan.SetBold().Sprint(
+				lo.Ternary(icons.IsIconEnabled(), icons.BRANCH_ICON, "*") + " " + tagString)
 		}
 	}
 
@@ -303,6 +345,12 @@ func displayCommit(
 		color := lo.Ternary(commit.Action == models.ActionConflict, style.FgRed, style.FgYellow)
 		youAreHere := color.Sprintf("<-- %s ---", common.Tr.YouAreHere)
 		name = fmt.Sprintf("%s %s", youAreHere, name)
+	} else if isMarkedBaseCommit {
+		rebaseFromHere := style.FgYellow.Sprint(common.Tr.MarkedCommitMarker)
+		name = fmt.Sprintf("%s %s", rebaseFromHere, name)
+	} else if !willBeRebased {
+		willBeRebased := style.FgYellow.Sprint("✓")
+		name = fmt.Sprintf("%s %s", willBeRebased, name)
 	}
 
 	authorFunc := authors.ShortAuthor

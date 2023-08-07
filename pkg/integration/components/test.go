@@ -5,12 +5,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jesseduffield/generics/slices"
 	"github.com/jesseduffield/lazygit/pkg/commands/git_commands"
 	"github.com/jesseduffield/lazygit/pkg/config"
-	"github.com/jesseduffield/lazygit/pkg/env"
 	integrationTypes "github.com/jesseduffield/lazygit/pkg/integration/types"
 	"github.com/jesseduffield/lazygit/pkg/utils"
+	"github.com/samber/lo"
 )
 
 // IntegrationTest describes an integration test that will be run against the lazygit gui.
@@ -36,9 +35,11 @@ type IntegrationTest struct {
 		testDriver *TestDriver,
 		keys config.KeybindingConfig,
 	)
-	gitVersion GitVersionRestriction
-	width      int
-	height     int
+	gitVersion    GitVersionRestriction
+	width         int
+	height        int
+	isDemo        bool
+	useCustomPath bool
 }
 
 var _ integrationTypes.IntegrationTest = &IntegrationTest{}
@@ -64,6 +65,12 @@ type NewIntegrationTestArgs struct {
 	// If these are set, the test must be run in headless mode
 	Width  int
 	Height int
+	// If true, this is not a test but a demo to be added to our docs
+	IsDemo bool
+	// If true, the test won't invoke lazygit with the --path arg.
+	// Useful for when we're passing --git-dir and --work-tree (because --path is
+	// incompatible with those args)
+	UseCustomPath bool
 }
 
 type GitVersionRestriction struct {
@@ -103,7 +110,7 @@ func (self GitVersionRestriction) shouldRunOnVersion(version *git_commands.GitVe
 		return version.IsOlderThanVersion(before)
 	}
 	if len(self.includes) != 0 {
-		return slices.Some(self.includes, func(str string) bool {
+		return lo.SomeBy(self.includes, func(str string) bool {
 			v, err := git_commands.ParseGitVersion(str)
 			if err != nil {
 				panic("Invalid git version string: " + str)
@@ -123,17 +130,19 @@ func NewIntegrationTest(args NewIntegrationTestArgs) *IntegrationTest {
 	}
 
 	return &IntegrationTest{
-		name:         name,
-		description:  args.Description,
-		extraCmdArgs: args.ExtraCmdArgs,
-		extraEnvVars: args.ExtraEnvVars,
-		skip:         args.Skip,
-		setupRepo:    args.SetupRepo,
-		setupConfig:  args.SetupConfig,
-		run:          args.Run,
-		gitVersion:   args.GitVersion,
-		width:        args.Width,
-		height:       args.Height,
+		name:          name,
+		description:   args.Description,
+		extraCmdArgs:  args.ExtraCmdArgs,
+		extraEnvVars:  args.ExtraEnvVars,
+		skip:          args.Skip,
+		setupRepo:     args.SetupRepo,
+		setupConfig:   args.SetupConfig,
+		run:           args.Run,
+		gitVersion:    args.GitVersion,
+		width:         args.Width,
+		height:        args.Height,
+		isDemo:        args.IsDemo,
+		useCustomPath: args.UseCustomPath,
 	}
 }
 
@@ -157,6 +166,10 @@ func (self *IntegrationTest) Skip() bool {
 	return self.skip
 }
 
+func (self *IntegrationTest) IsDemo() bool {
+	return self.isDemo
+}
+
 func (self *IntegrationTest) ShouldRunForGitVersion(version *git_commands.GitVersion) bool {
 	return self.gitVersion.shouldRunOnVersion(version)
 }
@@ -170,17 +183,27 @@ func (self *IntegrationTest) SetupRepo(shell *Shell) {
 }
 
 func (self *IntegrationTest) Run(gui integrationTypes.GuiDriver) {
-	// we pass the --pass arg to lazygit when running an integration test, and that
-	// ends up stored in the following env var
-	repoPath := env.GetGitWorkTreeEnv()
+	pwd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
 
-	shell := NewShell(repoPath, func(errorMsg string) { gui.Fail(errorMsg) })
+	shell := NewShell(pwd, func(errorMsg string) { gui.Fail(errorMsg) })
 	keys := gui.Keys()
 	testDriver := NewTestDriver(gui, shell, keys, KeyPressDelay())
+
+	if KeyPressDelay() > 0 {
+		// Setting caption to clear the options menu from whatever it starts with
+		testDriver.SetCaption("")
+		testDriver.SetCaptionPrefix("")
+	}
 
 	self.run(testDriver, keys)
 
 	if KeyPressDelay() > 0 {
+		// Clear whatever caption there was so it doesn't linger
+		testDriver.SetCaption("")
+		testDriver.SetCaptionPrefix("")
 		// the dev would want to see the final state if they're running in slow mode
 		testDriver.Wait(2000)
 	}

@@ -8,7 +8,7 @@ import (
 
 	"github.com/OpenPeeDeeP/xdg"
 	"github.com/jesseduffield/lazygit/pkg/utils/yaml_utils"
-	"gopkg.in/yaml.v3"
+	yaml "github.com/jesseduffield/yaml"
 )
 
 // AppConfig contains the base configuration fields required for lazygit.
@@ -318,8 +318,9 @@ type AppState struct {
 	StartupPopupVersion int
 
 	// these are for custom commands typed in directly, not for custom commands in the lazygit config
-	CustomCommandsHistory []string
-	HideCommandLog        bool
+	CustomCommandsHistory      []string
+	HideCommandLog             bool
+	IgnoreWhitespaceInDiffView bool
 }
 
 func getDefaultAppState() *AppState {
