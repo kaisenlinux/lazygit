@@ -16,7 +16,7 @@ Usage:
 		> go run cmd/integration_test/main.go cli [--slow] [--sandbox] <test1> <test2> ...
 	If you pass no test names, it runs all tests
 	Accepted environment variables:
-	KEY_PRESS_DELAY (e.g. 200): the number of milliseconds to wait between keypresses
+	INPUT_DELAY (e.g. 200): the number of milliseconds to wait between keypresses or mouse clicks
 
 	TUI mode:
 		> go run cmd/integration_test/main.go tui
@@ -25,6 +25,29 @@ Usage:
 	Help:
 		> go run cmd/integration_test/main.go help
 `
+
+type flagInfo struct {
+	name string // name of the flag; can be used with "-" or "--"
+	flag *bool  // a pointer to the variable that should be set to true when this flag is passed
+}
+
+// Takes the args that you want to parse (excluding the program name and any
+// subcommands), and returns the remaining args with the flags removed
+func parseFlags(args []string, flags []flagInfo) []string {
+outer:
+	for len(args) > 0 {
+		for _, f := range flags {
+			if args[0] == "-"+f.name || args[0] == "--"+f.name {
+				*f.flag = true
+				args = args[1:]
+				continue outer
+			}
+		}
+		break
+	}
+
+	return args
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -35,23 +58,26 @@ func main() {
 	case "help":
 		fmt.Println(usage)
 	case "cli":
-		testNames := os.Args[2:]
 		slow := false
 		sandbox := false
-		// get the next arg if it's --slow
-		if len(os.Args) > 2 {
-			if os.Args[2] == "--slow" || os.Args[2] == "-slow" {
-				testNames = os.Args[3:]
-				slow = true
-			} else if os.Args[2] == "--sandbox" || os.Args[2] == "-sandbox" {
-				testNames = os.Args[3:]
-				sandbox = true
-			}
-		}
-
-		clients.RunCLI(testNames, slow, sandbox)
+		waitForDebugger := false
+		raceDetector := false
+		testNames := parseFlags(os.Args[2:], []flagInfo{
+			{"slow", &slow},
+			{"sandbox", &sandbox},
+			{"debug", &waitForDebugger},
+			{"race", &raceDetector},
+		})
+		clients.RunCLI(testNames, slow, sandbox, waitForDebugger, raceDetector)
 	case "tui":
-		clients.RunTUI()
+		raceDetector := false
+		remainingArgs := parseFlags(os.Args[2:], []flagInfo{
+			{"race", &raceDetector},
+		})
+		if len(remainingArgs) > 0 {
+			log.Fatal("tui only supports the -race argument.")
+		}
+		clients.RunTUI(raceDetector)
 	default:
 		log.Fatal(usage)
 	}

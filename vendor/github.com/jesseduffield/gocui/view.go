@@ -13,9 +13,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/go-errors/errors"
 	"github.com/mattn/go-runewidth"
-	"github.com/stefanhaller/tcell/v2"
 )
 
 // Constants for overlapping edges
@@ -41,6 +41,14 @@ type View struct {
 	wx, wy         int      // Write() offsets
 	lines          [][]cell // All the data
 	outMode        OutputMode
+	// The y position of the first line of a range selection.
+	// This is not relative to the view's origin: it is relative to the first line
+	// of the view's content, so you can scroll the view and this value will remain
+	// the same, unlike the view's cy value.
+	// A value of -1 means that there is no range selection.
+	// This value can be greater than the selected line index, in the event that
+	// a user starts a range select and then moves the cursor up.
+	rangeSelectStartY int
 
 	// readBuffer is used for storing unread bytes
 	readBuffer []byte
@@ -121,6 +129,10 @@ type View struct {
 
 	// If Frame is true, Title allows to configure a title for the view.
 	Title string
+
+	// If non-empty, TitlePrefix is prepended to the title of a view regardless on
+	// the the currently selected tab (if any.)
+	TitlePrefix string
 
 	Tabs     []string
 	TabIndex int
@@ -207,10 +219,6 @@ func (v *View) gotoPreviousMatch() error {
 	return v.SelectSearchResult(v.searcher.currentSearchIndex)
 }
 
-func (v *View) SelectCurrentSearchResult() error {
-	return v.SelectSearchResult(v.searcher.currentSearchIndex)
-}
-
 func (v *View) SelectSearchResult(index int) error {
 	itemCount := len(v.searcher.searchPositions)
 	if itemCount == 0 {
@@ -221,11 +229,17 @@ func (v *View) SelectSearchResult(index int) error {
 	}
 
 	y := v.searcher.searchPositions[index].y
+
 	v.FocusPoint(v.ox, y)
 	if v.searcher.onSelectItem != nil {
 		return v.searcher.onSelectItem(y, index, itemCount)
 	}
 	return nil
+}
+
+// Returns <current match index>, <total matches>
+func (v *View) GetSearchStatus() (int, int) {
+	return v.searcher.currentSearchIndex, len(v.searcher.searchPositions)
 }
 
 func (v *View) Search(str string) error {
@@ -273,25 +287,41 @@ func (v *View) FocusPoint(cx int, cy int) {
 		ly = 0
 	}
 
-	// if line is above origin, move origin and set cursor to zero
-	// if line is below origin + height, move origin and set cursor to max
-	// otherwise set cursor to value - origin
-	if ly > lineCount {
-		v.cx = cx
-		v.cy = cy
-		v.oy = 0
-	} else if cy < v.oy {
-		v.cx = cx
-		v.cy = 0
-		v.oy = cy
-	} else if cy > v.oy+ly {
-		v.cx = cx
-		v.cy = ly
-		v.oy = cy - ly
-	} else {
-		v.cx = cx
-		v.cy = cy - v.oy
+	v.oy = calculateNewOrigin(cy, v.oy, lineCount, ly)
+	v.cx = cx
+	v.cy = cy - v.oy
+}
+
+func (v *View) SetRangeSelectStart(rangeSelectStartY int) {
+	v.rangeSelectStartY = rangeSelectStartY
+}
+
+func (v *View) CancelRangeSelect() {
+	v.rangeSelectStartY = -1
+}
+
+func calculateNewOrigin(selectedLine int, oldOrigin int, lineCount int, viewHeight int) int {
+	if viewHeight > lineCount {
+		return 0
+	} else if selectedLine < oldOrigin || selectedLine > oldOrigin+viewHeight {
+		// If the selected line is outside the visible area, scroll the view so
+		// that the selected line is in the middle.
+		newOrigin := selectedLine - viewHeight/2
+
+		// However, take care not to overflow if the total line count is less
+		// than the view height.
+		maxOrigin := lineCount - viewHeight - 1
+		if newOrigin > maxOrigin {
+			newOrigin = maxOrigin
+		}
+		if newOrigin < 0 {
+			newOrigin = 0
+		}
+
+		return newOrigin
 	}
+
+	return oldOrigin
 }
 
 func (s *searcher) search(str string) {
@@ -335,19 +365,20 @@ func (l lineType) String() string {
 // newView returns a new View object.
 func newView(name string, x0, y0, x1, y1 int, mode OutputMode) *View {
 	v := &View{
-		name:     name,
-		x0:       x0,
-		y0:       y0,
-		x1:       x1,
-		y1:       y1,
-		Visible:  true,
-		Frame:    true,
-		Editor:   DefaultEditor,
-		tainted:  true,
-		outMode:  mode,
-		ei:       newEscapeInterpreter(mode),
-		searcher: &searcher{},
-		TextArea: &TextArea{},
+		name:              name,
+		x0:                x0,
+		y0:                y0,
+		x1:                x1,
+		y1:                y1,
+		Visible:           true,
+		Frame:             true,
+		Editor:            DefaultEditor,
+		tainted:           true,
+		outMode:           mode,
+		ei:                newEscapeInterpreter(mode),
+		searcher:          &searcher{},
+		TextArea:          &TextArea{},
+		rangeSelectStartY: -1,
 	}
 
 	v.FgColor, v.BgColor = ColorDefault, ColorDefault
@@ -414,11 +445,17 @@ func (v *View) setRune(x, y int, ch rune, fgColor, bgColor Attribute) error {
 	if x < 0 || x >= maxX || y < 0 || y >= maxY {
 		return ErrInvalidPoint
 	}
-	var (
-		ry, rcy int
-		err     error
-	)
-	if v.Highlight {
+
+	if v.Mask != 0 {
+		fgColor = v.FgColor
+		bgColor = v.BgColor
+		ch = v.Mask
+	} else if v.Highlight {
+		var (
+			ry, rcy int
+			err     error
+		)
+
 		_, ry, err = v.realPosition(x, y)
 		if err != nil {
 			return err
@@ -428,20 +465,28 @@ func (v *View) setRune(x, y int, ch rune, fgColor, bgColor Attribute) error {
 		if err == nil {
 			rcy = rrcy
 		}
-	}
 
-	if v.Mask != 0 {
-		fgColor = v.FgColor
-		bgColor = v.BgColor
-		ch = v.Mask
-	} else if v.Highlight && ry == rcy {
-		// this ensures we use the bright variant of a colour upon highlight
-		fgColorComponent := fgColor & ^AttrAll
-		if fgColorComponent >= AttrIsValidColor && fgColorComponent < AttrIsValidColor+8 {
-			fgColor += 8
+		rangeSelectStart := rcy
+		rangeSelectEnd := rcy
+		if v.rangeSelectStartY != -1 {
+			_, realRangeSelectStart, err := v.realPosition(0, v.rangeSelectStartY-v.oy)
+			if err != nil {
+				return err
+			}
+
+			rangeSelectStart = min(realRangeSelectStart, rcy)
+			rangeSelectEnd = max(realRangeSelectStart, rcy)
 		}
-		fgColor = fgColor | AttrBold
-		bgColor = bgColor | v.SelBgColor
+
+		if ry >= rangeSelectStart && ry <= rangeSelectEnd {
+			// this ensures we use the bright variant of a colour upon highlight
+			fgColorComponent := fgColor & ^AttrAll
+			if fgColorComponent >= AttrIsValidColor && fgColorComponent < AttrIsValidColor+8 {
+				fgColor += 8
+			}
+			fgColor = fgColor | AttrBold
+			bgColor = bgColor | v.SelBgColor
+		}
 	}
 
 	// Don't display NUL characters
@@ -452,6 +497,20 @@ func (v *View) setRune(x, y int, ch rune, fgColor, bgColor Attribute) error {
 	tcellSetCell(v.x0+x+1, v.y0+y+1, ch, fgColor, bgColor, v.outMode)
 
 	return nil
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // SetCursor sets the cursor position of the view at the given point,
@@ -934,11 +993,11 @@ func (v *View) draw() error {
 	v.writeMutex.Lock()
 	defer v.writeMutex.Unlock()
 
-	v.clearRunes()
-
 	if !v.Visible {
 		return nil
 	}
+
+	v.clearRunes()
 
 	v.updateSearchPositions()
 	maxX, maxY := v.Size()
@@ -1340,7 +1399,10 @@ func (v *View) GetClickedTabIndex(x int) int {
 		return 0
 	}
 
-	charX := 1
+	charX := len(v.TitlePrefix) + 1
+	if v.TitlePrefix != "" {
+		charX += 1
+	}
 	if x <= charX {
 		return -1
 	}
@@ -1371,7 +1433,31 @@ func (v *View) SelectedLine() string {
 	if len(v.lines) == 0 {
 		return ""
 	}
-	line := v.lines[v.SelectedLineIdx()]
+
+	return v.lineContentAtIdx(v.SelectedLineIdx())
+}
+
+// expected to only be used in tests
+func (v *View) SelectedLines() []string {
+	v.writeMutex.Lock()
+	defer v.writeMutex.Unlock()
+
+	if len(v.lines) == 0 {
+		return nil
+	}
+
+	startIdx, endIdx := v.SelectedLineRange()
+
+	lines := make([]string, 0, endIdx-startIdx+1)
+	for i := startIdx; i <= endIdx; i++ {
+		lines = append(lines, v.lineContentAtIdx(i))
+	}
+
+	return lines
+}
+
+func (v *View) lineContentAtIdx(idx int) string {
+	line := v.lines[idx]
 	str := lineType(line).String()
 	return strings.Replace(str, "\x00", "", -1)
 }
@@ -1380,6 +1466,25 @@ func (v *View) SelectedPoint() (int, int) {
 	cx, cy := v.Cursor()
 	ox, oy := v.Origin()
 	return cx + ox, cy + oy
+}
+
+func (v *View) SelectedLineRange() (int, int) {
+	_, cy := v.Cursor()
+	_, oy := v.Origin()
+
+	start := cy + oy
+
+	if v.rangeSelectStartY == -1 {
+		return start, start
+	}
+
+	end := v.rangeSelectStartY
+
+	if start > end {
+		return end, start
+	} else {
+		return start, end
+	}
 }
 
 func (v *View) RenderTextArea() {

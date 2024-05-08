@@ -26,7 +26,7 @@ func NewStashContext(
 		},
 	)
 
-	getDisplayStrings := func(startIdx int, length int) [][]string {
+	getDisplayStrings := func(_ int, _ int) [][]string {
 		return presentation.GetStashEntryListDisplayStrings(viewModel.GetItems(), c.Modes().Diffing.Ref)
 	}
 
@@ -40,20 +40,13 @@ func NewStashContext(
 				Kind:       types.SIDE_CONTEXT,
 				Focusable:  true,
 			})),
-			list:              viewModel,
-			getDisplayStrings: getDisplayStrings,
-			c:                 c,
+			ListRenderer: ListRenderer{
+				list:              viewModel,
+				getDisplayStrings: getDisplayStrings,
+			},
+			c: c,
 		},
 	}
-}
-
-func (self *StashContext) GetSelectedItemId() string {
-	item := self.GetSelected()
-	if item == nil {
-		return ""
-	}
-
-	return item.ID()
 }
 
 func (self *StashContext) CanRebase() bool {

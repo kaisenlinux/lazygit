@@ -7,6 +7,7 @@ import (
 	"github.com/jesseduffield/gocui"
 	"github.com/jesseduffield/lazygit/pkg/commands/git_commands"
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
+	"github.com/jesseduffield/lazygit/pkg/gui/context"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
 	"github.com/jesseduffield/lazygit/pkg/utils"
 )
@@ -30,14 +31,18 @@ func NewSyncController(
 func (self *SyncController) GetKeybindings(opts types.KeybindingsOpts) []*types.Binding {
 	bindings := []*types.Binding{
 		{
-			Key:         opts.GetKey(opts.Config.Universal.Push),
-			Handler:     opts.Guards.NoPopupPanel(self.HandlePush),
-			Description: self.c.Tr.Push,
+			Key:               opts.GetKey(opts.Config.Universal.Push),
+			Handler:           opts.Guards.NoPopupPanel(self.HandlePush),
+			GetDisabledReason: self.getDisabledReasonForPushOrPull,
+			Description:       self.c.Tr.Push,
+			Tooltip:           self.c.Tr.PushTooltip,
 		},
 		{
-			Key:         opts.GetKey(opts.Config.Universal.Pull),
-			Handler:     opts.Guards.NoPopupPanel(self.HandlePull),
-			Description: self.c.Tr.Pull,
+			Key:               opts.GetKey(opts.Config.Universal.Pull),
+			Handler:           opts.Guards.NoPopupPanel(self.HandlePull),
+			GetDisabledReason: self.getDisabledReasonForPushOrPull,
+			Description:       self.c.Tr.Pull,
+			Tooltip:           self.c.Tr.PullTooltip,
 		},
 	}
 
@@ -54,6 +59,18 @@ func (self *SyncController) HandlePush() error {
 
 func (self *SyncController) HandlePull() error {
 	return self.branchCheckedOut(self.pull)()
+}
+
+func (self *SyncController) getDisabledReasonForPushOrPull() *types.DisabledReason {
+	currentBranch := self.c.Helpers().Refs.GetCheckedOutRef()
+	if currentBranch != nil {
+		op := self.c.State().GetItemOperation(currentBranch)
+		if op != types.ItemOperationNone {
+			return &types.DisabledReason{Text: self.c.Tr.CantPullOrPushSameBranchTwice}
+		}
+	}
+
+	return nil
 }
 
 func (self *SyncController) branchCheckedOut(f func(*models.Branch) error) func() error {
@@ -73,13 +90,13 @@ func (self *SyncController) push(currentBranch *models.Branch) error {
 	if currentBranch.IsTrackingRemote() {
 		opts := pushOpts{}
 		if currentBranch.HasCommitsToPull() {
-			return self.requestToForcePush(opts)
+			return self.requestToForcePush(currentBranch, opts)
 		} else {
-			return self.pushAux(opts)
+			return self.pushAux(currentBranch, opts)
 		}
 	} else {
 		if self.c.Git().Config.GetPushToCurrent() {
-			return self.pushAux(pushOpts{setUpstream: true})
+			return self.pushAux(currentBranch, pushOpts{setUpstream: true})
 		} else {
 			return self.c.Helpers().Upstream.PromptForUpstreamWithInitialContent(currentBranch, func(upstream string) error {
 				upstreamRemote, upstreamBranch, err := self.c.Helpers().Upstream.ParseUpstream(upstream)
@@ -87,7 +104,7 @@ func (self *SyncController) push(currentBranch *models.Branch) error {
 					return self.c.Error(err)
 				}
 
-				return self.pushAux(pushOpts{
+				return self.pushAux(currentBranch, pushOpts{
 					setUpstream:    true,
 					upstreamRemote: upstreamRemote,
 					upstreamBranch: upstreamBranch,
@@ -107,11 +124,11 @@ func (self *SyncController) pull(currentBranch *models.Branch) error {
 				return self.c.Error(err)
 			}
 
-			return self.PullAux(PullFilesOptions{Action: action})
+			return self.PullAux(currentBranch, PullFilesOptions{Action: action})
 		})
 	}
 
-	return self.PullAux(PullFilesOptions{Action: action})
+	return self.PullAux(currentBranch, PullFilesOptions{Action: action})
 }
 
 func (self *SyncController) setCurrentBranchUpstream(upstream string) error {
@@ -139,8 +156,8 @@ type PullFilesOptions struct {
 	Action          string
 }
 
-func (self *SyncController) PullAux(opts PullFilesOptions) error {
-	return self.c.WithLoaderPanel(self.c.Tr.PullWait, func(task gocui.Task) error {
+func (self *SyncController) PullAux(currentBranch *models.Branch, opts PullFilesOptions) error {
+	return self.c.WithInlineStatus(currentBranch, types.ItemOperationPulling, context.LOCAL_BRANCHES_CONTEXT_KEY, func(task gocui.Task) error {
 		return self.pullWithLock(task, opts)
 	})
 }
@@ -167,8 +184,8 @@ type pushOpts struct {
 	setUpstream    bool
 }
 
-func (self *SyncController) pushAux(opts pushOpts) error {
-	return self.c.WithLoaderPanel(self.c.Tr.PushWait, func(task gocui.Task) error {
+func (self *SyncController) pushAux(currentBranch *models.Branch, opts pushOpts) error {
+	return self.c.WithInlineStatus(currentBranch, types.ItemOperationPushing, context.LOCAL_BRANCHES_CONTEXT_KEY, func(task gocui.Task) error {
 		self.c.LogAction(self.c.Tr.Actions.Push)
 		err := self.c.Git().Sync.Push(
 			task,
@@ -179,31 +196,16 @@ func (self *SyncController) pushAux(opts pushOpts) error {
 				SetUpstream:    opts.setUpstream,
 			})
 		if err != nil {
-			if !opts.force && strings.Contains(err.Error(), "Updates were rejected") {
-				forcePushDisabled := self.c.UserConfig.Git.DisableForcePushing
-				if forcePushDisabled {
-					_ = self.c.ErrorMsg(self.c.Tr.UpdatesRejectedAndForcePushDisabled)
-					return nil
-				}
-				_ = self.c.Confirm(types.ConfirmOpts{
-					Title:  self.c.Tr.ForcePush,
-					Prompt: self.forcePushPrompt(),
-					HandleConfirm: func() error {
-						newOpts := opts
-						newOpts.force = true
-
-						return self.pushAux(newOpts)
-					},
-				})
-				return nil
+			if strings.Contains(err.Error(), "Updates were rejected") {
+				return self.c.ErrorMsg(self.c.Tr.UpdatesRejected)
 			}
-			_ = self.c.Error(err)
+			return err
 		}
 		return self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC})
 	})
 }
 
-func (self *SyncController) requestToForcePush(opts pushOpts) error {
+func (self *SyncController) requestToForcePush(currentBranch *models.Branch, opts pushOpts) error {
 	forcePushDisabled := self.c.UserConfig.Git.DisableForcePushing
 	if forcePushDisabled {
 		return self.c.ErrorMsg(self.c.Tr.ForcePushDisabled)
@@ -214,7 +216,7 @@ func (self *SyncController) requestToForcePush(opts pushOpts) error {
 		Prompt: self.forcePushPrompt(),
 		HandleConfirm: func() error {
 			opts.force = true
-			return self.pushAux(opts)
+			return self.pushAux(currentBranch, opts)
 		},
 	})
 }

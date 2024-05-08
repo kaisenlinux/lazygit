@@ -93,7 +93,7 @@ func TestBranchDeleteBranch(t *testing.T) {
 		t.Run(s.testName, func(t *testing.T) {
 			instance := buildBranchCommands(commonDeps{runner: s.runner})
 
-			s.test(instance.Delete("test", s.force))
+			s.test(instance.LocalDelete("test", s.force))
 			s.runner.CheckForMissingCalls()
 		})
 	}
@@ -126,6 +126,19 @@ func TestBranchMerge(t *testing.T) {
 			opts:       MergeOpts{},
 			branchName: "mybranch",
 			expected:   []string{"merge", "--no-edit", "--merging-args", "mybranch"},
+		},
+		{
+			testName: "multiple merging args",
+			userConfig: &config.UserConfig{
+				Git: config.GitConfig{
+					Merging: config.MergingConfig{
+						Args: "--arg1 --arg2", // it's up to the user what they put here
+					},
+				},
+			},
+			opts:       MergeOpts{},
+			branchName: "mybranch",
+			expected:   []string{"merge", "--no-edit", "--arg1", "--arg2", "mybranch"},
 		},
 		{
 			testName:   "fast forward only",

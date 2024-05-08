@@ -2,23 +2,31 @@ package controllers
 
 import (
 	"github.com/jesseduffield/gocui"
+	"github.com/jesseduffield/lazygit/pkg/commands/models"
 	"github.com/jesseduffield/lazygit/pkg/gui/context"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
 )
 
 type SubCommitsController struct {
 	baseController
+	*ListControllerTrait[*models.Commit]
 	c *ControllerCommon
 }
 
 var _ types.IController = &SubCommitsController{}
 
 func NewSubCommitsController(
-	common *ControllerCommon,
+	c *ControllerCommon,
 ) *SubCommitsController {
 	return &SubCommitsController{
 		baseController: baseController{},
-		c:              common,
+		ListControllerTrait: NewListControllerTrait[*models.Commit](
+			c,
+			c.Contexts().SubCommits,
+			c.Contexts().SubCommits.GetSelected,
+			c.Contexts().SubCommits.GetSelectedItems,
+		),
+		c: c,
 	}
 }
 
@@ -38,7 +46,7 @@ func (self *SubCommitsController) GetOnRenderToMain() func() error {
 			if commit == nil {
 				task = types.NewRenderStringTask("No commits")
 			} else {
-				cmdObj := self.c.Git().Commit.ShowCmdObj(commit.Sha, self.c.Modes().Filtering.GetPath(), self.c.GetAppState().IgnoreWhitespaceInDiffView)
+				cmdObj := self.c.Git().Commit.ShowCmdObj(commit.Sha, self.c.Modes().Filtering.GetPath())
 
 				task = types.NewRunPtyTask(cmdObj.GetCmd())
 			}

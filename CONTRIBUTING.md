@@ -10,6 +10,15 @@ before making a change.
 
 [This video](https://www.youtube.com/watch?v=kNavnhzZHtk) walks through the process of adding a small feature to lazygit. If you have no idea where to start, watching that video is a good first step.
 
+## Codebase guide
+
+[This doc](./docs/dev/Codebase_Guide.md) explains:
+* what the different packages in the codebase are for
+* where important files live
+* important concepts in the code
+* how the event loop works
+* other useful information
+
 ## All code changes happen through Pull Requests
 
 Pull requests are the best way to propose changes to the codebase. We actively
@@ -20,6 +29,8 @@ welcome your pull requests:
 3. If you've added code that need documentation, update the documentation.
 4. Write a [good commit message](http://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html).
 5. Issue that pull request!
+
+Please do not raise pull request from your fork's master branch: make a feature branch instead. Lazygit maintainers will sometimes push changes to your branch when reviewing a PR and we often can't do this if you use your master branch.
 
 If you've never written Go in your life, then join the club! Lazygit was the maintainer's first Go program, and most contributors have never used Go before. Go is widely considered an easy-to-learn language, so if you're looking for an open source project to gain dev experience, you've come to the right place.
 
@@ -96,6 +107,10 @@ To run gofumpt from your terminal go:
 ```
 go install mvdan.cc/gofumpt@latest && gofumpt -l -w .
 ```
+
+## Programming Font
+
+Lazygit supports [Nerd Fonts](https://www.nerdfonts.com) to render certain icons. Sometimes we use some of these icons verbatim in string literals in the code (mainly in tests), so you need to set your development environment to use a nerd font to see these.
 
 ## Internationalisation
 

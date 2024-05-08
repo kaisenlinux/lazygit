@@ -26,7 +26,7 @@ func NewReflogCommitsContext(c *ContextCommon) *ReflogCommitsContext {
 		},
 	)
 
-	getDisplayStrings := func(startIdx int, length int) [][]string {
+	getDisplayStrings := func(_ int, _ int) [][]string {
 		return presentation.GetReflogCommitListDisplayStrings(
 			viewModel.GetItems(),
 			c.State().GetRepoState().GetScreenMode() != types.SCREEN_NORMAL,
@@ -43,26 +43,20 @@ func NewReflogCommitsContext(c *ContextCommon) *ReflogCommitsContext {
 		FilteredListViewModel: viewModel,
 		ListContextTrait: &ListContextTrait{
 			Context: NewSimpleContext(NewBaseContext(NewBaseContextOpts{
-				View:       c.Views().ReflogCommits,
-				WindowName: "commits",
-				Key:        REFLOG_COMMITS_CONTEXT_KEY,
-				Kind:       types.SIDE_CONTEXT,
-				Focusable:  true,
+				View:                       c.Views().ReflogCommits,
+				WindowName:                 "commits",
+				Key:                        REFLOG_COMMITS_CONTEXT_KEY,
+				Kind:                       types.SIDE_CONTEXT,
+				Focusable:                  true,
+				NeedsRerenderOnWidthChange: true,
 			})),
-			list:              viewModel,
-			getDisplayStrings: getDisplayStrings,
-			c:                 c,
+			ListRenderer: ListRenderer{
+				list:              viewModel,
+				getDisplayStrings: getDisplayStrings,
+			},
+			c: c,
 		},
 	}
-}
-
-func (self *ReflogCommitsContext) GetSelectedItemId() string {
-	item := self.GetSelected()
-	if item == nil {
-		return ""
-	}
-
-	return item.ID()
 }
 
 func (self *ReflogCommitsContext) CanRebase() bool {

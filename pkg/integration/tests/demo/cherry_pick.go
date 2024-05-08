@@ -11,7 +11,7 @@ var CherryPick = NewIntegrationTest(NewIntegrationTestArgs{
 	Skip:         false,
 	IsDemo:       true,
 	SetupConfig: func(config *config.AppConfig) {
-		config.UserConfig.Gui.NerdFontsVersion = "3"
+		setDefaultDemoConfig(config)
 	},
 	SetupRepo: func(shell *Shell) {
 		shell.CreateNCommitsWithRandomMessages(50)
@@ -81,11 +81,6 @@ var CherryPick = NewIntegrationTest(NewIntegrationTestArgs{
 				Contains("Integrate support for markdown in user posts"),
 				Contains("Fix bug in timezone conversion."),
 			).
-			Tap(func() {
-				// we need to manually exit out of cherry pick mode
-				t.Views().Information().Content(Contains("2 commits copied"))
-			}).
-			PressEscape().
 			Tap(func() {
 				t.Views().Information().Content(DoesNotContain("commits copied"))
 			})

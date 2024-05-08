@@ -38,6 +38,41 @@ func (self *CommitCommands) SetAuthor(value string) error {
 	return self.cmd.New(cmdArgs).Run()
 }
 
+// Add a commit's coauthor using Github/Gitlab Co-authored-by metadata. Value is expected to be of the form 'Name <Email>'
+func (self *CommitCommands) AddCoAuthor(sha string, author string) error {
+	message, err := self.GetCommitMessage(sha)
+	if err != nil {
+		return err
+	}
+
+	message = AddCoAuthorToMessage(message, author)
+
+	cmdArgs := NewGitCmd("commit").
+		Arg("--allow-empty", "--amend", "--only", "-m", message).
+		ToArgv()
+
+	return self.cmd.New(cmdArgs).Run()
+}
+
+func AddCoAuthorToMessage(message string, author string) string {
+	subject, body, _ := strings.Cut(message, "\n")
+
+	return strings.TrimSpace(subject) + "\n\n" + AddCoAuthorToDescription(strings.TrimSpace(body), author)
+}
+
+func AddCoAuthorToDescription(description string, author string) string {
+	if description != "" {
+		lines := strings.Split(description, "\n")
+		if strings.HasPrefix(lines[len(lines)-1], "Co-authored-by:") {
+			description += "\n"
+		} else {
+			description += "\n\n"
+		}
+	}
+
+	return description + fmt.Sprintf("Co-authored-by: %s", author)
+}
+
 // ResetToCommit reset to commit
 func (self *CommitCommands) ResetToCommit(sha string, strength string, envVars []string) error {
 	cmdArgs := NewGitCmd("reset").Arg("--"+strength, sha).ToArgv()
@@ -66,6 +101,19 @@ func (self *CommitCommands) CommitCmdObj(summary string, description string) osc
 
 func (self *CommitCommands) RewordLastCommitInEditorCmdObj() oscommands.ICmdObj {
 	return self.cmd.New(NewGitCmd("commit").Arg("--allow-empty", "--amend", "--only").ToArgv())
+}
+
+func (self *CommitCommands) RewordLastCommitInEditorWithMessageFileCmdObj(tmpMessageFile string) oscommands.ICmdObj {
+	return self.cmd.New(NewGitCmd("commit").
+		Arg("--allow-empty", "--amend", "--only", "--edit", "--file="+tmpMessageFile).ToArgv())
+}
+
+func (self *CommitCommands) CommitInEditorWithMessageFileCmdObj(tmpMessageFile string) oscommands.ICmdObj {
+	return self.cmd.New(NewGitCmd("commit").
+		Arg("--edit").
+		Arg("--file="+tmpMessageFile).
+		ArgIf(self.signoffFlag() != "", self.signoffFlag()).
+		ToArgv())
 }
 
 // RewordLastCommit rewords the topmost commit with the given message
@@ -108,13 +156,21 @@ func (self *CommitCommands) signoffFlag() string {
 }
 
 func (self *CommitCommands) GetCommitMessage(commitSha string) (string, error) {
-	cmdArgs := NewGitCmd("rev-list").
+	cmdArgs := NewGitCmd("log").
 		Arg("--format=%B", "--max-count=1", commitSha).
 		ToArgv()
 
-	messageWithHeader, err := self.cmd.New(cmdArgs).DontLog().RunWithOutput()
-	message := strings.Join(strings.SplitAfter(messageWithHeader, "\n")[1:], "")
-	return strings.TrimSpace(message), err
+	message, err := self.cmd.New(cmdArgs).DontLog().RunWithOutput()
+	return strings.ReplaceAll(strings.TrimSpace(message), "\r\n", "\n"), err
+}
+
+func (self *CommitCommands) GetCommitSubject(commitSha string) (string, error) {
+	cmdArgs := NewGitCmd("log").
+		Arg("--format=%s", "--max-count=1", commitSha).
+		ToArgv()
+
+	subject, err := self.cmd.New(cmdArgs).DontLog().RunWithOutput()
+	return strings.TrimSpace(subject), err
 }
 
 func (self *CommitCommands) GetCommitDiff(commitSha string) (string, error) {
@@ -161,6 +217,20 @@ func (self *CommitCommands) GetCommitMessagesFirstLine(shas []string) (string, e
 	return self.cmd.New(cmdArgs).DontLog().RunWithOutput()
 }
 
+// Example output:
+//
+//	cd50c79ae Preserve the commit message correctly even if the description has blank lines
+//	3ebba5f32 Add test demonstrating a bug with preserving the commit message
+//	9a423c388 Remove unused function
+func (self *CommitCommands) GetShasAndCommitMessagesFirstLine(shas []string) (string, error) {
+	cmdArgs := NewGitCmd("show").
+		Arg("--no-patch", "--pretty=format:%h %s").
+		Arg(shas...).
+		ToArgv()
+
+	return self.cmd.New(cmdArgs).DontLog().RunWithOutput()
+}
+
 func (self *CommitCommands) GetCommitsOneline(shas []string) (string, error) {
 	cmdArgs := NewGitCmd("show").
 		Arg("--no-patch", "--oneline").
@@ -183,10 +253,14 @@ func (self *CommitCommands) AmendHeadCmdObj() oscommands.ICmdObj {
 	return self.cmd.New(cmdArgs)
 }
 
-func (self *CommitCommands) ShowCmdObj(sha string, filterPath string, ignoreWhitespace bool) oscommands.ICmdObj {
-	contextSize := self.UserConfig.Git.DiffContextSize
+func (self *CommitCommands) ShowCmdObj(sha string, filterPath string) oscommands.ICmdObj {
+	contextSize := self.AppState.DiffContextSize
 
+	extDiffCmd := self.UserConfig.Git.Paging.ExternalDiffCommand
 	cmdArgs := NewGitCmd("show").
+		Config("diff.noprefix=false").
+		ConfigIf(extDiffCmd != "", "diff.external="+extDiffCmd).
+		ArgIfElse(extDiffCmd != "", "--ext-diff", "--no-ext-diff").
 		Arg("--submodule").
 		Arg("--color="+self.UserConfig.Git.Paging.ColorArg).
 		Arg(fmt.Sprintf("--unified=%d", contextSize)).
@@ -194,8 +268,9 @@ func (self *CommitCommands) ShowCmdObj(sha string, filterPath string, ignoreWhit
 		Arg("--decorate").
 		Arg("-p").
 		Arg(sha).
-		ArgIf(ignoreWhitespace, "--ignore-all-space").
+		ArgIf(self.AppState.IgnoreWhitespaceInDiffView, "--ignore-all-space").
 		ArgIf(filterPath != "", "--", filterPath).
+		Dir(self.repoPaths.worktreePath).
 		ToArgv()
 
 	return self.cmd.New(cmdArgs).DontLog()
@@ -218,6 +293,21 @@ func (self *CommitCommands) RevertMerge(sha string, parentNumber int) error {
 // CreateFixupCommit creates a commit that fixes up a previous commit
 func (self *CommitCommands) CreateFixupCommit(sha string) error {
 	cmdArgs := NewGitCmd("commit").Arg("--fixup=" + sha).ToArgv()
+
+	return self.cmd.New(cmdArgs).Run()
+}
+
+// CreateAmendCommit creates a commit that changes the commit message of a previous commit
+func (self *CommitCommands) CreateAmendCommit(originalSubject, newSubject, newDescription string, includeFileChanges bool) error {
+	description := newSubject
+	if newDescription != "" {
+		description += "\n\n" + newDescription
+	}
+	cmdArgs := NewGitCmd("commit").
+		Arg("-m", "amend! "+originalSubject).
+		Arg("-m", description).
+		ArgIf(!includeFileChanges, "--only", "--allow-empty").
+		ToArgv()
 
 	return self.cmd.New(cmdArgs).Run()
 }

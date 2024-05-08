@@ -18,23 +18,38 @@ func (self *OptionsMenuAction) Call() error {
 		return nil
 	}
 
-	bindings := self.getBindings(ctx)
+	local, global, navigation := self.getBindings(ctx)
 
-	menuItems := lo.Map(bindings, func(binding *types.Binding, _ int) *types.MenuItem {
-		return &types.MenuItem{
-			OpensMenu: binding.OpensMenu,
-			Label:     binding.Description,
-			OnPress: func() error {
-				if binding.Handler == nil {
-					return nil
+	menuItems := []*types.MenuItem{}
+
+	appendBindings := func(bindings []*types.Binding, section *types.MenuSection) {
+		menuItems = append(menuItems,
+			lo.Map(bindings, func(binding *types.Binding, _ int) *types.MenuItem {
+				var disabledReason *types.DisabledReason
+				if binding.GetDisabledReason != nil {
+					disabledReason = binding.GetDisabledReason()
 				}
+				return &types.MenuItem{
+					OpensMenu: binding.OpensMenu,
+					Label:     binding.Description,
+					OnPress: func() error {
+						if binding.Handler == nil {
+							return nil
+						}
 
-				return binding.Handler()
-			},
-			Key:     binding.Key,
-			Tooltip: binding.Tooltip,
-		}
-	})
+						return self.c.IGuiCommon.CallKeybindingHandler(binding)
+					},
+					Key:            binding.Key,
+					Tooltip:        binding.Tooltip,
+					DisabledReason: disabledReason,
+					Section:        section,
+				}
+			})...)
+	}
+
+	appendBindings(local, &types.MenuSection{Title: self.c.Tr.KeybindingsMenuSectionLocal, Column: 1})
+	appendBindings(global, &types.MenuSection{Title: self.c.Tr.KeybindingsMenuSectionGlobal, Column: 1})
+	appendBindings(navigation, &types.MenuSection{Title: self.c.Tr.KeybindingsMenuSectionNavigation, Column: 1})
 
 	return self.c.Menu(types.CreateMenuOptions{
 		Title:           self.c.Tr.Keybindings,
@@ -44,7 +59,8 @@ func (self *OptionsMenuAction) Call() error {
 	})
 }
 
-func (self *OptionsMenuAction) getBindings(context types.Context) []*types.Binding {
+// Returns three slices of bindings: local, global, and navigation
+func (self *OptionsMenuAction) getBindings(context types.Context) ([]*types.Binding, []*types.Binding, []*types.Binding) {
 	var bindingsGlobal, bindingsPanel, bindingsNavigation []*types.Binding
 
 	bindings, _ := self.c.GetInitialKeybindingsWithCustomCommands()
@@ -53,22 +69,17 @@ func (self *OptionsMenuAction) getBindings(context types.Context) []*types.Bindi
 		if keybindings.LabelFromKey(binding.Key) != "" && binding.Description != "" {
 			if binding.ViewName == "" {
 				bindingsGlobal = append(bindingsGlobal, binding)
-			} else if binding.Tag == "navigation" {
-				bindingsNavigation = append(bindingsNavigation, binding)
 			} else if binding.ViewName == context.GetViewName() {
-				bindingsPanel = append(bindingsPanel, binding)
+				if binding.Tag == "navigation" {
+					bindingsNavigation = append(bindingsNavigation, binding)
+				} else {
+					bindingsPanel = append(bindingsPanel, binding)
+				}
 			}
 		}
 	}
 
-	resultBindings := []*types.Binding{}
-	resultBindings = append(resultBindings, uniqueBindings(bindingsPanel)...)
-	// adding a separator between the panel-specific bindings and the other bindings
-	resultBindings = append(resultBindings, &types.Binding{})
-	resultBindings = append(resultBindings, uniqueBindings(bindingsGlobal)...)
-	resultBindings = append(resultBindings, uniqueBindings(bindingsNavigation)...)
-
-	return resultBindings
+	return uniqueBindings(bindingsPanel), uniqueBindings(bindingsGlobal), uniqueBindings(bindingsNavigation)
 }
 
 // We shouldn't really need to do this. We should define alternative keys for the same

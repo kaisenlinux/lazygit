@@ -36,7 +36,7 @@ func (self *SyncCommands) PushCmdObj(task gocui.Task, opts PushOpts) (oscommands
 		ArgIf(opts.UpstreamBranch != "", opts.UpstreamBranch).
 		ToArgv()
 
-	cmdObj := self.cmd.New(cmdArgs).PromptOnCredentialRequest(task).WithMutex(self.syncMutex)
+	cmdObj := self.cmd.New(cmdArgs).PromptOnCredentialRequest(task)
 	return cmdObj, nil
 }
 
@@ -49,10 +49,16 @@ func (self *SyncCommands) Push(task gocui.Task, opts PushOpts) error {
 	return cmdObj.Run()
 }
 
+func (self *SyncCommands) fetchCommandBuilder(fetchAll bool) *GitCommandBuilder {
+	return NewGitCmd("fetch").
+		ArgIf(fetchAll, "--all").
+		// avoid writing to .git/FETCH_HEAD; this allows running a pull
+		// concurrently without getting errors
+		ArgIf(self.version.IsAtLeast(2, 29, 0), "--no-write-fetch-head")
+}
+
 func (self *SyncCommands) FetchCmdObj(task gocui.Task) oscommands.ICmdObj {
-	cmdArgs := NewGitCmd("fetch").
-		ArgIf(self.UserConfig.Git.FetchAll, "--all").
-		ToArgv()
+	cmdArgs := self.fetchCommandBuilder(self.UserConfig.Git.FetchAll).ToArgv()
 
 	cmdObj := self.cmd.New(cmdArgs)
 	cmdObj.PromptOnCredentialRequest(task)
@@ -64,13 +70,10 @@ func (self *SyncCommands) Fetch(task gocui.Task) error {
 }
 
 func (self *SyncCommands) FetchBackgroundCmdObj() oscommands.ICmdObj {
-	cmdArgs := NewGitCmd("fetch").
-		ArgIf(self.UserConfig.Git.FetchAll, "--all").
-		ToArgv()
+	cmdArgs := self.fetchCommandBuilder(self.UserConfig.Git.FetchAll).ToArgv()
 
 	cmdObj := self.cmd.New(cmdArgs)
 	cmdObj.DontLog().FailOnCredentialRequest()
-	cmdObj.WithMutex(self.syncMutex)
 	return cmdObj
 }
 
@@ -96,7 +99,7 @@ func (self *SyncCommands) Pull(task gocui.Task, opts PullOptions) error {
 
 	// setting GIT_SEQUENCE_EDITOR to ':' as a way of skipping it, in case the user
 	// has 'pull.rebase = interactive' configured.
-	return self.cmd.New(cmdArgs).AddEnvVars("GIT_SEQUENCE_EDITOR=:").PromptOnCredentialRequest(task).WithMutex(self.syncMutex).Run()
+	return self.cmd.New(cmdArgs).AddEnvVars("GIT_SEQUENCE_EDITOR=:").PromptOnCredentialRequest(task).Run()
 }
 
 func (self *SyncCommands) FastForward(
@@ -105,18 +108,18 @@ func (self *SyncCommands) FastForward(
 	remoteName string,
 	remoteBranchName string,
 ) error {
-	cmdArgs := NewGitCmd("fetch").
+	cmdArgs := self.fetchCommandBuilder(false).
 		Arg(remoteName).
 		Arg(remoteBranchName + ":" + branchName).
 		ToArgv()
 
-	return self.cmd.New(cmdArgs).PromptOnCredentialRequest(task).WithMutex(self.syncMutex).Run()
+	return self.cmd.New(cmdArgs).PromptOnCredentialRequest(task).Run()
 }
 
 func (self *SyncCommands) FetchRemote(task gocui.Task, remoteName string) error {
-	cmdArgs := NewGitCmd("fetch").
+	cmdArgs := self.fetchCommandBuilder(false).
 		Arg(remoteName).
 		ToArgv()
 
-	return self.cmd.New(cmdArgs).PromptOnCredentialRequest(task).WithMutex(self.syncMutex).Run()
+	return self.cmd.New(cmdArgs).PromptOnCredentialRequest(task).Run()
 }

@@ -38,13 +38,9 @@ func (gui *Gui) moveMainContextToTop(context types.Context) {
 
 	view := context.GetView()
 
-	topView := gui.helpers.Window.TopViewInWindow(context.GetWindowName())
-	if topView == nil {
-		gui.Log.Error("unexpected: topView is nil")
-		return
-	}
+	topView := gui.helpers.Window.TopViewInWindow(context.GetWindowName(), true)
 
-	if topView != view {
+	if topView != nil && topView != view {
 		// We need to copy the content to avoid a flicker effect: If we're flicking
 		// through files in the files panel, we use a different view to render the
 		// files vs the directories, and if you select dir A, then file B, then dir

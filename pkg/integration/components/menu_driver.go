@@ -18,10 +18,12 @@ func (self *MenuDriver) Title(expected *TextMatcher) *MenuDriver {
 	return self
 }
 
-func (self *MenuDriver) Confirm() {
+func (self *MenuDriver) Confirm() *MenuDriver {
 	self.checkNecessaryChecksCompleted()
 
 	self.getViewDriver().PressEnter()
+
+	return self
 }
 
 func (self *MenuDriver) Cancel() {
@@ -63,6 +65,17 @@ func (self *MenuDriver) LineCount(matcher *IntMatcher) *MenuDriver {
 func (self *MenuDriver) Wait(milliseconds int) *MenuDriver {
 	self.getViewDriver().Wait(milliseconds)
 
+	return self
+}
+
+func (self *MenuDriver) Tooltip(option *TextMatcher) *MenuDriver {
+	self.t.Views().Tooltip().Content(option)
+
+	return self
+}
+
+func (self *MenuDriver) Tap(f func()) *MenuDriver {
+	self.getViewDriver().Tap(f)
 	return self
 }
 

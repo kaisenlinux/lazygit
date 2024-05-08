@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/go-errors/errors"
 	"github.com/mattn/go-runewidth"
-	"github.com/stefanhaller/tcell/v2"
 )
 
 // OutputMode represents an output mode, which determines how colors
@@ -103,8 +103,9 @@ type GuiMutexes struct {
 }
 
 type replayedEvents struct {
-	Keys    chan *TcellKeyEventWrapper
-	Resizes chan *TcellResizeEventWrapper
+	Keys        chan *TcellKeyEventWrapper
+	Resizes     chan *TcellResizeEventWrapper
+	MouseEvents chan *TcellMouseEventWrapper
 }
 
 type RecordingConfig struct {
@@ -225,8 +226,9 @@ func NewGui(opts NewGuiOpts) (*Gui, error) {
 
 	if opts.PlayRecording {
 		g.ReplayedEvents = replayedEvents{
-			Keys:    make(chan *TcellKeyEventWrapper),
-			Resizes: make(chan *TcellResizeEventWrapper),
+			Keys:        make(chan *TcellKeyEventWrapper),
+			Resizes:     make(chan *TcellResizeEventWrapper),
+			MouseEvents: make(chan *TcellMouseEventWrapper),
 		}
 	}
 
@@ -858,7 +860,7 @@ func (g *Gui) drawFrameEdges(v *View, fgColor, bgColor Attribute) error {
 			}
 		}
 		if v.x1 > -1 && v.x1 < g.maxX {
-			runeToPrint := calcScrollbarRune(showScrollbar, realScrollbarStart, realScrollbarEnd, v.y0+1, v.y1-1, y, runeV)
+			runeToPrint := calcScrollbarRune(showScrollbar, realScrollbarStart, realScrollbarEnd, y, runeV)
 
 			if err := g.SetRune(v.x1, y, runeToPrint, fgColor, bgColor); err != nil {
 				return err
@@ -868,18 +870,11 @@ func (g *Gui) drawFrameEdges(v *View, fgColor, bgColor Attribute) error {
 	return nil
 }
 
-func calcScrollbarRune(showScrollbar bool, scrollbarStart int, scrollbarEnd int, rangeStart int, rangeEnd int, position int, runeV rune) rune {
-	if !showScrollbar {
-		return runeV
-	} else if position == rangeStart {
-		return '▲'
-	} else if position == rangeEnd {
-		return '▼'
-	} else if position > scrollbarStart && position < scrollbarEnd {
-		return '█'
-	} else if position > rangeStart && position < rangeEnd {
-		// keeping this as a separate branch in case we later want to render something different here.
-		return runeV
+func calcScrollbarRune(
+	showScrollbar bool, scrollbarStart int, scrollbarEnd int, position int, runeV rune,
+) rune {
+	if showScrollbar && (position >= scrollbarStart && position <= scrollbarEnd) {
+		return '▐'
 	} else {
 		return runeV
 	}
@@ -1018,6 +1013,14 @@ func (g *Gui) drawTitle(v *View, fgColor, bgColor Attribute) error {
 	}
 
 	tabs := v.Tabs
+	prefix := v.TitlePrefix
+	if prefix != "" {
+		if len(v.FrameRunes) > 0 {
+			prefix += string(v.FrameRunes[0])
+		} else {
+			prefix += "─"
+		}
+	}
 	separator := " - "
 	charIndex := 0
 	currentTabStart := -1
@@ -1041,6 +1044,12 @@ func (g *Gui) drawTitle(v *View, fgColor, bgColor Attribute) error {
 	str := strings.Join(tabs, separator)
 
 	x := v.x0 + 2
+	for _, ch := range prefix {
+		if err := g.SetRune(x, v.y0, ch, fgColor, bgColor); err != nil {
+			return err
+		}
+		x += runewidth.RuneWidth(ch)
+	}
 	for i, ch := range str {
 		if x < 0 {
 			continue
@@ -1142,6 +1151,29 @@ func (g *Gui) flush() error {
 	}
 	for _, v := range g.views {
 		if err := g.draw(v); err != nil {
+			return err
+		}
+	}
+
+	Screen.Show()
+	return nil
+}
+
+func (g *Gui) ForceLayoutAndRedraw() error {
+	return g.flush()
+}
+
+// force redrawing one or more views outside of the normal main loop. Useful during longer
+// operations that block the main thread, to update a spinner in a status view.
+func (g *Gui) ForceRedrawViews(views ...*View) error {
+	for _, m := range g.managers {
+		if err := m.Layout(g); err != nil {
+			return err
+		}
+	}
+
+	for _, v := range views {
+		if err := v.draw(); err != nil {
 			return err
 		}
 	}

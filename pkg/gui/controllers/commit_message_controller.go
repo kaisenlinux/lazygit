@@ -3,6 +3,7 @@ package controllers
 import (
 	"github.com/jesseduffield/lazygit/pkg/commands/git_commands"
 	"github.com/jesseduffield/lazygit/pkg/gui/context"
+	"github.com/jesseduffield/lazygit/pkg/gui/controllers/helpers"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
 )
 
@@ -14,16 +15,14 @@ type CommitMessageController struct {
 var _ types.IController = &CommitMessageController{}
 
 func NewCommitMessageController(
-	common *ControllerCommon,
+	c *ControllerCommon,
 ) *CommitMessageController {
 	return &CommitMessageController{
 		baseController: baseController{},
-		c:              common,
+		c:              c,
 	}
 }
 
-// TODO: merge that commit panel PR because we're not currently showing how to add a newline as it's
-// handled by the editor func rather than by the controller here.
 func (self *CommitMessageController) GetKeybindings(opts types.KeybindingsOpts) []*types.Binding {
 	bindings := []*types.Binding{
 		{
@@ -47,6 +46,10 @@ func (self *CommitMessageController) GetKeybindings(opts types.KeybindingsOpts) 
 		{
 			Key:     opts.GetKey(opts.Config.Universal.TogglePanel),
 			Handler: self.switchToCommitDescription,
+		},
+		{
+			Key:     opts.GetKey(opts.Config.CommitMessage.CommitMenu),
+			Handler: self.openCommitMenu,
 		},
 	}
 
@@ -94,7 +97,7 @@ func (self *CommitMessageController) handleCommitIndexChange(value int) error {
 		self.c.Helpers().Commits.SetMessageAndDescriptionInView(self.context().GetHistoryMessage())
 		return nil
 	} else if currentIndex == context.NoCommitIndex {
-		self.context().SetHistoryMessage(self.c.Helpers().Commits.JoinCommitMessageAndDescription())
+		self.context().SetHistoryMessage(self.c.Helpers().Commits.JoinCommitMessageAndUnwrappedDescription())
 	}
 
 	validCommit, err := self.setCommitMessageAtIndex(newIndex)
@@ -113,6 +116,9 @@ func (self *CommitMessageController) setCommitMessageAtIndex(index int) (bool, e
 		}
 		return false, self.c.ErrorMsg(self.c.Tr.CommitWithoutMessageErr)
 	}
+	if self.c.UserConfig.Git.Commit.AutoWrapCommitMessage {
+		commitMessage = helpers.TryRemoveHardLineBreaks(commitMessage, self.c.UserConfig.Git.Commit.AutoWrapWidth)
+	}
 	self.c.Helpers().Commits.UpdateCommitPanelView(commitMessage)
 	return true, nil
 }
@@ -123,4 +129,9 @@ func (self *CommitMessageController) confirm() error {
 
 func (self *CommitMessageController) close() error {
 	return self.c.Helpers().Commits.CloseCommitMessagePanel()
+}
+
+func (self *CommitMessageController) openCommitMenu() error {
+	authorSuggestion := self.c.Helpers().Suggestions.GetAuthorsSuggestionsFunc()
+	return self.c.Helpers().Commits.OpenCommitMenu(authorSuggestion)
 }

@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/jesseduffield/lazygit/pkg/gui/context"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
@@ -30,11 +31,11 @@ type ContextLinesController struct {
 var _ types.IController = &ContextLinesController{}
 
 func NewContextLinesController(
-	common *ControllerCommon,
+	c *ControllerCommon,
 ) *ContextLinesController {
 	return &ContextLinesController{
 		baseController: baseController{},
-		c:              common,
+		c:              c,
 	}
 }
 
@@ -44,11 +45,13 @@ func (self *ContextLinesController) GetKeybindings(opts types.KeybindingsOpts) [
 			Key:         opts.GetKey(opts.Config.Universal.IncreaseContextInDiffView),
 			Handler:     self.Increase,
 			Description: self.c.Tr.IncreaseContextInDiffView,
+			Tooltip:     self.c.Tr.IncreaseContextInDiffViewTooltip,
 		},
 		{
 			Key:         opts.GetKey(opts.Config.Universal.DecreaseContextInDiffView),
 			Handler:     self.Decrease,
 			Description: self.c.Tr.DecreaseContextInDiffView,
+			Tooltip:     self.c.Tr.DecreaseContextInDiffViewTooltip,
 		},
 	}
 
@@ -65,7 +68,7 @@ func (self *ContextLinesController) Increase() error {
 			return self.c.Error(err)
 		}
 
-		self.c.UserConfig.Git.DiffContextSize = self.c.UserConfig.Git.DiffContextSize + 1
+		self.c.AppState.DiffContextSize++
 		return self.applyChange()
 	}
 
@@ -73,14 +76,14 @@ func (self *ContextLinesController) Increase() error {
 }
 
 func (self *ContextLinesController) Decrease() error {
-	old_size := self.c.UserConfig.Git.DiffContextSize
+	old_size := self.c.AppState.DiffContextSize
 
 	if self.isShowingDiff() && old_size > 1 {
 		if err := self.checkCanChangeContext(); err != nil {
 			return self.c.Error(err)
 		}
 
-		self.c.UserConfig.Git.DiffContextSize = old_size - 1
+		self.c.AppState.DiffContextSize = old_size - 1
 		return self.applyChange()
 	}
 
@@ -88,6 +91,9 @@ func (self *ContextLinesController) Decrease() error {
 }
 
 func (self *ContextLinesController) applyChange() error {
+	self.c.Toast(fmt.Sprintf(self.c.Tr.DiffContextSizeChanged, self.c.AppState.DiffContextSize))
+	self.c.SaveAppStateAndLogError()
+
 	currentContext := self.c.CurrentStaticContext()
 	switch currentContext.GetKey() {
 	// we make an exception for our staging and patch building contexts because they actually need to refresh their state afterwards.

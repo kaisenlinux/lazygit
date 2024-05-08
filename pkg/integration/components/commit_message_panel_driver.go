@@ -38,12 +38,6 @@ func (self *CommitMessagePanelDriver) SwitchToDescription() *CommitDescriptionPa
 	return &CommitDescriptionPanelDriver{t: self.t}
 }
 
-func (self *CommitMessagePanelDriver) AddNewline() *CommitMessagePanelDriver {
-	self.t.press(self.t.keys.Universal.Confirm)
-
-	return self
-}
-
 func (self *CommitMessagePanelDriver) Clear() *CommitMessagePanelDriver {
 	// clearing multiple times in case there's multiple lines
 	//  (the clear button only clears a single line at a time)
@@ -74,6 +68,13 @@ func (self *CommitMessagePanelDriver) Cancel() {
 	self.getViewDriver().PressEscape()
 }
 
+func (self *CommitMessagePanelDriver) SwitchToEditor() {
+	self.OpenCommitMenu()
+	self.t.ExpectPopup().Menu().Title(Equals("Commit Menu")).
+		Select(Contains("Open in editor")).
+		Confirm()
+}
+
 func (self *CommitMessagePanelDriver) SelectPreviousMessage() *CommitMessagePanelDriver {
 	self.getViewDriver().SelectPreviousItem()
 	return self
@@ -81,5 +82,10 @@ func (self *CommitMessagePanelDriver) SelectPreviousMessage() *CommitMessagePane
 
 func (self *CommitMessagePanelDriver) SelectNextMessage() *CommitMessagePanelDriver {
 	self.getViewDriver().SelectNextItem()
+	return self
+}
+
+func (self *CommitMessagePanelDriver) OpenCommitMenu() *CommitMessagePanelDriver {
+	self.t.press(self.t.keys.CommitMessage.CommitMenu)
 	return self
 }

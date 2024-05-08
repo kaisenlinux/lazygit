@@ -6,6 +6,11 @@ import (
 	"github.com/samber/lo"
 )
 
+type IconProperties struct {
+	Icon  string
+	Color uint8
+}
+
 var isIconEnabled = false
 
 func IsIconEnabled() bool {
@@ -13,14 +18,18 @@ func IsIconEnabled() bool {
 }
 
 func SetNerdFontsVersion(version string) {
-	if !lo.Contains([]string{"2", "3"}, version) {
-		log.Fatalf("Unsupported nerdFontVersion %s", version)
-	}
+	if version == "" {
+		isIconEnabled = false
+	} else {
+		if !lo.Contains([]string{"2", "3"}, version) {
+			log.Fatalf("Unsupported nerdFontVersion %s", version)
+		}
 
-	if version == "2" {
-		patchGitIconsForNerdFontsV2()
-		patchFileIconsForNerdFontsV2()
-	}
+		if version == "2" {
+			patchGitIconsForNerdFontsV2()
+			patchFileIconsForNerdFontsV2()
+		}
 
-	isIconEnabled = true
+		isIconEnabled = true
+	}
 }

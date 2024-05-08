@@ -41,7 +41,7 @@ func (self *TagCommands) HasTag(tagName string) bool {
 	return self.cmd.New(cmdArgs).Run() == nil
 }
 
-func (self *TagCommands) Delete(tagName string) error {
+func (self *TagCommands) LocalDelete(tagName string) error {
 	cmdArgs := NewGitCmd("tag").Arg("-d", tagName).
 		ToArgv()
 
@@ -52,5 +52,5 @@ func (self *TagCommands) Push(task gocui.Task, remoteName string, tagName string
 	cmdArgs := NewGitCmd("push").Arg(remoteName, "tag", tagName).
 		ToArgv()
 
-	return self.cmd.New(cmdArgs).PromptOnCredentialRequest(task).WithMutex(self.syncMutex).Run()
+	return self.cmd.New(cmdArgs).PromptOnCredentialRequest(task).Run()
 }

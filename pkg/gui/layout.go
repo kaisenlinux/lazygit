@@ -4,7 +4,6 @@ import (
 	"github.com/jesseduffield/gocui"
 	"github.com/jesseduffield/lazygit/pkg/gui/context"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
-	"github.com/jesseduffield/lazygit/pkg/theme"
 	"github.com/samber/lo"
 	"golang.org/x/exp/slices"
 )
@@ -44,8 +43,13 @@ func (gui *Gui) layout(g *gocui.Gui) error {
 		}
 	}
 
+	contextsToRerender := []types.Context{}
+
 	// we assume that the view has already been created.
-	setViewFromDimensions := func(viewName string, windowName string) (*gocui.View, error) {
+	setViewFromDimensions := func(context types.Context) (*gocui.View, error) {
+		viewName := context.GetViewName()
+		windowName := context.GetWindowName()
+
 		dimensionsObj, ok := viewDimensions[windowName]
 
 		view, err := g.View(viewName)
@@ -67,6 +71,16 @@ func (gui *Gui) layout(g *gocui.Gui) error {
 		if view.Frame {
 			frameOffset = 0
 		}
+
+		if context.NeedsRerenderOnWidthChange() {
+			// view.Width() returns the width -1 for some reason
+			oldWidth := view.Width() + 1
+			newWidth := dimensionsObj.X1 - dimensionsObj.X0 + 2*frameOffset
+			if oldWidth != newWidth {
+				contextsToRerender = append(contextsToRerender, context)
+			}
+		}
+
 		_, err = g.SetView(
 			viewName,
 			dimensionsObj.X0-frameOffset,
@@ -85,7 +99,7 @@ func (gui *Gui) layout(g *gocui.Gui) error {
 			continue
 		}
 
-		_, err := setViewFromDimensions(context.GetViewName(), context.GetWindowName())
+		_, err := setViewFromDimensions(context)
 		if err != nil && !gocui.IsUnknownView(err) {
 			return err
 		}
@@ -128,20 +142,17 @@ func (gui *Gui) layout(g *gocui.Gui) error {
 		gui.State.ViewsSetup = true
 	}
 
-	for _, listContext := range gui.c.Context().AllList() {
-		view, err := gui.g.View(listContext.GetViewName())
-		if err != nil {
-			continue
-		}
-
-		view.SelBgColor = theme.GocuiSelectedLineBgColor
-	}
-
 	mainViewWidth, mainViewHeight := gui.Views.Main.Size()
 	if mainViewWidth != gui.PrevLayout.MainWidth || mainViewHeight != gui.PrevLayout.MainHeight {
 		gui.PrevLayout.MainWidth = mainViewWidth
 		gui.PrevLayout.MainHeight = mainViewHeight
 		if err := gui.onResize(); err != nil {
+			return err
+		}
+	}
+
+	for _, context := range contextsToRerender {
+		if err := context.HandleRender(); err != nil {
 			return err
 		}
 	}
@@ -153,6 +164,8 @@ func (gui *Gui) layout(g *gocui.Gui) error {
 	if err := gui.helpers.Confirmation.ResizeCurrentPopupPanel(); err != nil {
 		return err
 	}
+
+	gui.renderContextOptionsMap()
 
 outer:
 	for {
@@ -241,8 +254,13 @@ func (gui *Gui) onInitialViewsCreation() error {
 		storedPopupVersion := gui.c.GetAppState().StartupPopupVersion
 		if storedPopupVersion < StartupPopupVersion {
 			gui.showIntroPopupMessage()
+		} else {
+			gui.showBreakingChangesMessage()
 		}
 	}
+
+	gui.c.GetAppState().LastVersion = gui.Config.GetVersion()
+	gui.c.SaveAppStateAndLogError()
 
 	if gui.showRecentRepos {
 		if err := gui.helpers.Repos.CreateRecentReposMenu(); err != nil {

@@ -5,8 +5,8 @@
 package gocui
 
 import (
+	"github.com/gdamore/tcell/v2"
 	"github.com/mattn/go-runewidth"
-	"github.com/stefanhaller/tcell/v2"
 )
 
 // We probably don't want this being a global variable for YOLO for now
@@ -217,6 +217,29 @@ func (wrapper TcellKeyEventWrapper) toTcellEvent() tcell.Event {
 	return tcell.NewEventKey(wrapper.Key, wrapper.Ch, wrapper.Mod)
 }
 
+type TcellMouseEventWrapper struct {
+	Timestamp  int64
+	X          int
+	Y          int
+	ButtonMask tcell.ButtonMask
+	ModMask    tcell.ModMask
+}
+
+func NewTcellMouseEventWrapper(event *tcell.EventMouse, timestamp int64) *TcellMouseEventWrapper {
+	x, y := event.Position()
+	return &TcellMouseEventWrapper{
+		Timestamp:  timestamp,
+		X:          x,
+		Y:          y,
+		ButtonMask: event.Buttons(),
+		ModMask:    event.Modifiers(),
+	}
+}
+
+func (wrapper TcellMouseEventWrapper) toTcellEvent() tcell.Event {
+	return tcell.NewEventMouse(wrapper.X, wrapper.Y, wrapper.ButtonMask, wrapper.ModMask)
+}
+
 type TcellResizeEventWrapper struct {
 	Timestamp int64
 	Width     int
@@ -245,6 +268,8 @@ func (g *Gui) pollEvent() GocuiEvent {
 		case ev := <-g.ReplayedEvents.Keys:
 			tev = (ev).toTcellEvent()
 		case ev := <-g.ReplayedEvents.Resizes:
+			tev = (ev).toTcellEvent()
+		case ev := <-g.ReplayedEvents.MouseEvents:
 			tev = (ev).toTcellEvent()
 		}
 	} else {
@@ -275,6 +300,14 @@ func (g *Gui) pollEvent() GocuiEvent {
 			mod = 0
 			ch = rune(0)
 			k = tcell.KeyCtrlSpace
+		} else if mod == tcell.ModShift && k == tcell.KeyUp {
+			mod = 0
+			ch = rune(0)
+			k = tcell.KeyF62
+		} else if mod == tcell.ModShift && k == tcell.KeyDown {
+			mod = 0
+			ch = rune(0)
+			k = tcell.KeyF63
 		} else if mod == tcell.ModCtrl || mod == tcell.ModShift {
 			// remove Ctrl or Shift if specified
 			// - shift - will be translated to the final code of rune

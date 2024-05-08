@@ -1,7 +1,13 @@
 package helpers
 
+import (
+	"path/filepath"
+
+	"github.com/samber/lo"
+)
+
 type IFilesHelper interface {
-	EditFile(filename string) error
+	EditFiles(filenames []string) error
 	EditFileAtLine(filename string, lineNumber int) error
 	OpenFile(filename string) error
 }
@@ -18,34 +24,52 @@ func NewFilesHelper(c *HelperCommon) *FilesHelper {
 
 var _ IFilesHelper = &FilesHelper{}
 
-func (self *FilesHelper) EditFile(filename string) error {
-	cmdStr, editInTerminal := self.c.Git().File.GetEditCmdStr(filename)
-	return self.callEditor(cmdStr, editInTerminal)
+func (self *FilesHelper) EditFiles(filenames []string) error {
+	absPaths := lo.Map(filenames, func(filename string, _ int) string {
+		absPath, err := filepath.Abs(filename)
+		if err != nil {
+			return filename
+		}
+		return absPath
+	})
+	cmdStr, suspend := self.c.Git().File.GetEditCmdStr(absPaths)
+	return self.callEditor(cmdStr, suspend)
 }
 
 func (self *FilesHelper) EditFileAtLine(filename string, lineNumber int) error {
-	cmdStr, editInTerminal := self.c.Git().File.GetEditAtLineCmdStr(filename, lineNumber)
-	return self.callEditor(cmdStr, editInTerminal)
+	absPath, err := filepath.Abs(filename)
+	if err != nil {
+		return err
+	}
+	cmdStr, suspend := self.c.Git().File.GetEditAtLineCmdStr(absPath, lineNumber)
+	return self.callEditor(cmdStr, suspend)
 }
 
 func (self *FilesHelper) EditFileAtLineAndWait(filename string, lineNumber int) error {
-	cmdStr := self.c.Git().File.GetEditAtLineAndWaitCmdStr(filename, lineNumber)
+	absPath, err := filepath.Abs(filename)
+	if err != nil {
+		return err
+	}
+	cmdStr := self.c.Git().File.GetEditAtLineAndWaitCmdStr(absPath, lineNumber)
 
-	// Always suspend, regardless of the value of the editInTerminal config,
+	// Always suspend, regardless of the value of the suspend config,
 	// since we want to prevent interacting with the UI until the editor
 	// returns, even if the editor doesn't use the terminal
 	return self.callEditor(cmdStr, true)
 }
 
 func (self *FilesHelper) OpenDirInEditor(path string) error {
-	cmdStr := self.c.Git().File.GetOpenDirInEditorCmdStr(path)
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+	cmdStr, suspend := self.c.Git().File.GetOpenDirInEditorCmdStr(absPath)
 
-	// Not editing in terminal because surely that's not a thing.
-	return self.callEditor(cmdStr, false)
+	return self.callEditor(cmdStr, suspend)
 }
 
-func (self *FilesHelper) callEditor(cmdStr string, editInTerminal bool) error {
-	if editInTerminal {
+func (self *FilesHelper) callEditor(cmdStr string, suspend bool) error {
+	if suspend {
 		return self.c.RunSubprocessAndRefresh(
 			self.c.OS().Cmd.NewShell(cmdStr),
 		)
@@ -55,8 +79,12 @@ func (self *FilesHelper) callEditor(cmdStr string, editInTerminal bool) error {
 }
 
 func (self *FilesHelper) OpenFile(filename string) error {
+	absPath, err := filepath.Abs(filename)
+	if err != nil {
+		return err
+	}
 	self.c.LogAction(self.c.Tr.Actions.OpenFile)
-	if err := self.c.OS().OpenFile(filename); err != nil {
+	if err := self.c.OS().OpenFile(absPath); err != nil {
 		return self.c.Error(err)
 	}
 	return nil

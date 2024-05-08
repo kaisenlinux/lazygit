@@ -73,6 +73,7 @@ type IGuiCommon interface {
 	GetConfig() config.AppConfigurer
 	GetAppState() *config.AppState
 	SaveAppState() error
+	SaveAppStateAndLogError()
 
 	// Runs the given function on the UI thread (this is for things like showing a popup asking a user for input).
 	// Only necessary to call if you're not already on the UI thread i.e. you're inside a goroutine.
@@ -85,6 +86,12 @@ type IGuiCommon interface {
 	// For example, you may want a view's line to be focused only after that view is
 	// resized, if in accordion mode.
 	AfterLayout(f func() error)
+
+	// Wraps a function, attaching the given operation to the given item while
+	// the function is executing, and also causes the given context to be
+	// redrawn periodically. This allows the operation to be visualized with a
+	// spinning loader animation (e.g. when a branch is being pushed).
+	WithInlineStatus(item HasUrn, operation ItemOperation, contextKey ContextKey, f func(gocui.Task) error) error
 
 	// returns the gocui Gui struct. There is a good chance you don't actually want to use
 	// this struct and instead want to use another method above
@@ -103,9 +110,13 @@ type IGuiCommon interface {
 	State() IStateAccessor
 
 	KeybindingsOpts() KeybindingsOpts
+	CallKeybindingHandler(binding *Binding) error
 
 	// hopefully we can remove this once we've moved all our keybinding stuff out of the gui god struct.
 	GetInitialKeybindingsWithCustomCommands() ([]*Binding, []*gocui.ViewMouseBinding)
+
+	// Returns true if we're running an integration test
+	RunningIntegrationTest() bool
 
 	// Returns true if we're in a demo recording/playback
 	InDemo() bool
@@ -129,12 +140,21 @@ type IPopupHandler interface {
 	Confirm(opts ConfirmOpts) error
 	// Shows a popup prompting the user for input.
 	Prompt(opts PromptOpts) error
-	WithLoaderPanel(message string, f func(gocui.Task) error) error
 	WithWaitingStatus(message string, f func(gocui.Task) error) error
+	WithWaitingStatusSync(message string, f func() error) error
 	Menu(opts CreateMenuOptions) error
 	Toast(message string)
+	ErrorToast(message string)
+	SetToastFunc(func(string, ToastKind))
 	GetPromptInput() string
 }
+
+type ToastKind int
+
+const (
+	ToastKindStatus ToastKind = iota
+	ToastKindError
+)
 
 type CreateMenuOptions struct {
 	Title           string
@@ -161,7 +181,6 @@ type ConfirmOpts struct {
 	Prompt              string
 	HandleConfirm       func() error
 	HandleClose         func() error
-	HasLoader           bool
 	FindSuggestionsFunc func(string) []*Suggestion
 	Editable            bool
 	Mask                bool
@@ -175,6 +194,21 @@ type PromptOpts struct {
 	// CAPTURE THIS
 	HandleClose func() error
 	Mask        bool
+}
+
+type MenuSection struct {
+	Title  string
+	Column int // The column that this section title should be aligned with
+}
+
+type DisabledReason struct {
+	Text string
+
+	// When trying to invoke a disabled key binding or menu item, we normally
+	// show the disabled reason as a toast; setting this to true shows it as an
+	// error panel instead. This is useful if the text is very long, or if it is
+	// important enough to show it more prominently, or both.
+	ShowErrorInPanel bool
 }
 
 type MenuItem struct {
@@ -194,6 +228,24 @@ type MenuItem struct {
 
 	// The tooltip will be displayed upon highlighting the menu item
 	Tooltip string
+
+	// If non-nil, show this in a tooltip, style the menu item as disabled,
+	// and refuse to invoke the command
+	DisabledReason *DisabledReason
+
+	// Can be used to group menu items into sections with headers. MenuItems
+	// with the same Section should be contiguous, and will automatically get a
+	// section header. If nil, the item is not part of a section.
+	// Note that pointer comparison is used to determine whether two menu items
+	// belong to the same section, so make sure all your items in a given
+	// section point to the same MenuSection instance.
+	Section *MenuSection
+}
+
+// Defining this for the sake of conforming to the HasID interface, which is used
+// in list contexts.
+func (self *MenuItem) ID() string {
+	return self.Label
 }
 
 type Model struct {
@@ -236,13 +288,32 @@ type Mutexes struct {
 	RefreshingFilesMutex    *deadlock.Mutex
 	RefreshingBranchesMutex *deadlock.Mutex
 	RefreshingStatusMutex   *deadlock.Mutex
-	SyncMutex               *deadlock.Mutex
 	LocalCommitsMutex       *deadlock.Mutex
 	SubCommitsMutex         *deadlock.Mutex
 	AuthorsMutex            *deadlock.Mutex
 	SubprocessMutex         *deadlock.Mutex
 	PopupMutex              *deadlock.Mutex
 	PtyMutex                *deadlock.Mutex
+}
+
+// A long-running operation associated with an item. For example, we'll show
+// that a branch is being pushed from so that there's visual feedback about
+// what's happening and so that you can see multiple branches' concurrent
+// operations
+type ItemOperation int
+
+const (
+	ItemOperationNone ItemOperation = iota
+	ItemOperationPushing
+	ItemOperationPulling
+	ItemOperationFastForwarding
+	ItemOperationDeleting
+	ItemOperationFetching
+	ItemOperationCheckingOut
+)
+
+type HasUrn interface {
+	URN() string
 }
 
 type IStateAccessor interface {
@@ -257,6 +328,9 @@ type IStateAccessor interface {
 	SetShowExtrasWindow(bool)
 	GetRetainOriginalDir() bool
 	SetRetainOriginalDir(bool)
+	GetItemOperation(item HasUrn) ItemOperation
+	SetItemOperation(item HasUrn, operation ItemOperation)
+	ClearItemOperation(item HasUrn)
 }
 
 type IRepoStateAccessor interface {

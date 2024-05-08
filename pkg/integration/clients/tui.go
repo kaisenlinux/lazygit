@@ -19,9 +19,9 @@ import (
 
 // This program lets you run integration tests from a TUI. See pkg/integration/README.md for more info.
 
-var SLOW_KEY_PRESS_DELAY = 600
+var SLOW_INPUT_DELAY = 600
 
-func RunTUI() {
+func RunTUI(raceDetector bool) {
 	rootDir := utils.GetLazyRootDirectory()
 	testDir := filepath.Join(rootDir, "test", "integration")
 
@@ -85,7 +85,7 @@ func RunTUI() {
 			return nil
 		}
 
-		suspendAndRunTest(currentTest, true, 0)
+		suspendAndRunTest(currentTest, true, false, raceDetector, 0)
 
 		return nil
 	}); err != nil {
@@ -98,7 +98,7 @@ func RunTUI() {
 			return nil
 		}
 
-		suspendAndRunTest(currentTest, false, 0)
+		suspendAndRunTest(currentTest, false, false, raceDetector, 0)
 
 		return nil
 	}); err != nil {
@@ -111,7 +111,20 @@ func RunTUI() {
 			return nil
 		}
 
-		suspendAndRunTest(currentTest, false, SLOW_KEY_PRESS_DELAY)
+		suspendAndRunTest(currentTest, false, false, raceDetector, SLOW_INPUT_DELAY)
+
+		return nil
+	}); err != nil {
+		log.Panicln(err)
+	}
+
+	if err := g.SetKeybinding("list", 'd', gocui.ModNone, func(*gocui.Gui, *gocui.View) error {
+		currentTest := app.getCurrentTest()
+		if currentTest == nil {
+			return nil
+		}
+
+		suspendAndRunTest(currentTest, false, true, raceDetector, 0)
 
 		return nil
 	}); err != nil {
@@ -140,7 +153,7 @@ func RunTUI() {
 			return nil
 		}
 
-		cmd := exec.Command("sh", "-c", fmt.Sprintf("code test/results/%s", currentTest.Name()))
+		cmd := exec.Command("sh", "-c", fmt.Sprintf("code test/_results/%s", currentTest.Name()))
 		if err := cmd.Run(); err != nil {
 			return err
 		}
@@ -220,7 +233,7 @@ type app struct {
 }
 
 func newApp(testDir string) *app {
-	return &app{testDir: testDir, allTests: tests.GetTests()}
+	return &app{testDir: testDir, allTests: tests.GetTests(utils.GetLazyRootDirectory())}
 }
 
 func (self *app) getCurrentTest() *components.IntegrationTest {
@@ -271,12 +284,12 @@ func (self *app) wrapEditor(f func(v *gocui.View, key gocui.Key, ch rune, mod go
 	}
 }
 
-func suspendAndRunTest(test *components.IntegrationTest, sandbox bool, keyPressDelay int) {
+func suspendAndRunTest(test *components.IntegrationTest, sandbox bool, waitForDebugger bool, raceDetector bool, inputDelay int) {
 	if err := gocui.Screen.Suspend(); err != nil {
 		panic(err)
 	}
 
-	runTuiTest(test, sandbox, keyPressDelay)
+	runTuiTest(test, sandbox, waitForDebugger, raceDetector, inputDelay)
 
 	fmt.Fprintf(os.Stdout, "\n%s", style.FgGreen.Sprint("press enter to return"))
 	fmt.Scanln() // wait for enter press
@@ -337,7 +350,7 @@ func (self *app) layout(g *gocui.Gui) error {
 		keybindingsView.Title = "Keybindings"
 		keybindingsView.Wrap = true
 		keybindingsView.FgColor = gocui.ColorDefault
-		fmt.Fprintln(keybindingsView, "up/down: navigate, enter: run test, t: run test slow, s: sandbox, o: open test file, shift+o: open test snapshot directory, forward-slash: filter")
+		fmt.Fprintln(keybindingsView, "up/down: navigate, enter: run test, t: run test slow, s: sandbox, d: debug test, o: open test file, shift+o: open test snapshot directory, forward-slash: filter")
 	}
 
 	editorView, err := g.SetViewBeneath("editor", "keybindings", editorViewHeight)
@@ -371,16 +384,19 @@ func quit(g *gocui.Gui, v *gocui.View) error {
 	return gocui.ErrQuit
 }
 
-func runTuiTest(test *components.IntegrationTest, sandbox bool, keyPressDelay int) {
-	err := components.RunTests(
-		[]*components.IntegrationTest{test},
-		log.Printf,
-		runCmdInTerminal,
-		runAndPrintError,
-		sandbox,
-		keyPressDelay,
-		1,
-	)
+func runTuiTest(test *components.IntegrationTest, sandbox bool, waitForDebugger bool, raceDetector bool, inputDelay int) {
+	err := components.RunTests(components.RunTestArgs{
+		Tests:           []*components.IntegrationTest{test},
+		Logf:            log.Printf,
+		RunCmd:          runCmdInTerminal,
+		TestWrapper:     runAndPrintError,
+		Sandbox:         sandbox,
+		WaitForDebugger: waitForDebugger,
+		RaceDetector:    raceDetector,
+		CodeCoverageDir: "",
+		InputDelay:      inputDelay,
+		MaxAttempts:     1,
+	})
 	if err != nil {
 		log.Println(err.Error())
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
 	"github.com/jesseduffield/lazygit/pkg/commands/oscommands"
 	"github.com/jesseduffield/lazygit/pkg/commands/types/enums"
+	"github.com/jesseduffield/lazygit/pkg/config"
 	"github.com/jesseduffield/lazygit/pkg/utils"
 	"github.com/stretchr/testify/assert"
 )
@@ -42,10 +43,10 @@ func TestGetCommits(t *testing.T) {
 			testName:   "should return no commits if there are none",
 			logOrder:   "topo-order",
 			rebaseMode: enums.REBASE_MODE_NONE,
-			opts:       GetCommitsOptions{RefName: "HEAD", IncludeRebaseCommits: false},
+			opts:       GetCommitsOptions{RefName: "HEAD", RefForPushedStatus: "mybranch", IncludeRebaseCommits: false},
 			runner: oscommands.NewFakeRunner(t).
-				ExpectGitArgs([]string{"merge-base", "HEAD", "HEAD@{u}"}, "b21997d6b4cbdf84b149d8e6a2c4d06a8e9ec164", nil).
-				ExpectGitArgs([]string{"log", "HEAD", "--topo-order", "--oneline", "--pretty=format:%H%x00%at%x00%aN%x00%ae%x00%D%x00%p%x00%s", "--abbrev=40", "--no-show-signature", "--"}, "", nil),
+				ExpectGitArgs([]string{"merge-base", "mybranch", "mybranch@{u}"}, "b21997d6b4cbdf84b149d8e6a2c4d06a8e9ec164", nil).
+				ExpectGitArgs([]string{"log", "HEAD", "--topo-order", "--oneline", "--pretty=format:%H%x00%at%x00%aN%x00%ae%x00%D%x00%p%x00%s%x00%m", "--abbrev=40", "--no-show-signature", "--"}, "", nil),
 
 			expectedCommits: []*models.Commit{},
 			expectedError:   nil,
@@ -54,10 +55,10 @@ func TestGetCommits(t *testing.T) {
 			testName:   "should use proper upstream name for branch",
 			logOrder:   "topo-order",
 			rebaseMode: enums.REBASE_MODE_NONE,
-			opts:       GetCommitsOptions{RefName: "refs/heads/mybranch", IncludeRebaseCommits: false},
+			opts:       GetCommitsOptions{RefName: "refs/heads/mybranch", RefForPushedStatus: "refs/heads/mybranch", IncludeRebaseCommits: false},
 			runner: oscommands.NewFakeRunner(t).
 				ExpectGitArgs([]string{"merge-base", "refs/heads/mybranch", "mybranch@{u}"}, "b21997d6b4cbdf84b149d8e6a2c4d06a8e9ec164", nil).
-				ExpectGitArgs([]string{"log", "refs/heads/mybranch", "--topo-order", "--oneline", "--pretty=format:%H%x00%at%x00%aN%x00%ae%x00%D%x00%p%x00%s", "--abbrev=40", "--no-show-signature", "--"}, "", nil),
+				ExpectGitArgs([]string{"log", "refs/heads/mybranch", "--topo-order", "--oneline", "--pretty=format:%H%x00%at%x00%aN%x00%ae%x00%D%x00%p%x00%s%x00%m", "--abbrev=40", "--no-show-signature", "--"}, "", nil),
 
 			expectedCommits: []*models.Commit{},
 			expectedError:   nil,
@@ -66,13 +67,13 @@ func TestGetCommits(t *testing.T) {
 			testName:     "should return commits if they are present",
 			logOrder:     "topo-order",
 			rebaseMode:   enums.REBASE_MODE_NONE,
-			opts:         GetCommitsOptions{RefName: "HEAD", IncludeRebaseCommits: false},
+			opts:         GetCommitsOptions{RefName: "HEAD", RefForPushedStatus: "mybranch", IncludeRebaseCommits: false},
 			mainBranches: []string{"master", "main", "develop"},
 			runner: oscommands.NewFakeRunner(t).
 				// here it's seeing which commits are yet to be pushed
-				ExpectGitArgs([]string{"merge-base", "HEAD", "HEAD@{u}"}, "b21997d6b4cbdf84b149d8e6a2c4d06a8e9ec164", nil).
+				ExpectGitArgs([]string{"merge-base", "mybranch", "mybranch@{u}"}, "b21997d6b4cbdf84b149d8e6a2c4d06a8e9ec164", nil).
 				// here it's actually getting all the commits in a formatted form, one per line
-				ExpectGitArgs([]string{"log", "HEAD", "--topo-order", "--oneline", "--pretty=format:%H%x00%at%x00%aN%x00%ae%x00%D%x00%p%x00%s", "--abbrev=40", "--no-show-signature", "--"}, commitsOutput, nil).
+				ExpectGitArgs([]string{"log", "HEAD", "--topo-order", "--oneline", "--pretty=format:%H%x00%at%x00%aN%x00%ae%x00%D%x00%p%x00%s%x00%m", "--abbrev=40", "--no-show-signature", "--"}, commitsOutput, nil).
 				// here it's testing which of the configured main branches have an upstream
 				ExpectGitArgs([]string{"rev-parse", "--symbolic-full-name", "master@{u}"}, "refs/remotes/origin/master", nil).       // this one does
 				ExpectGitArgs([]string{"rev-parse", "--symbolic-full-name", "main@{u}"}, "", errors.New("error")).                   // this one doesn't, so it checks origin instead
@@ -203,13 +204,13 @@ func TestGetCommits(t *testing.T) {
 			testName:     "should not call merge-base for mainBranches if none exist",
 			logOrder:     "topo-order",
 			rebaseMode:   enums.REBASE_MODE_NONE,
-			opts:         GetCommitsOptions{RefName: "HEAD", IncludeRebaseCommits: false},
+			opts:         GetCommitsOptions{RefName: "HEAD", RefForPushedStatus: "mybranch", IncludeRebaseCommits: false},
 			mainBranches: []string{"master", "main"},
 			runner: oscommands.NewFakeRunner(t).
 				// here it's seeing which commits are yet to be pushed
-				ExpectGitArgs([]string{"merge-base", "HEAD", "HEAD@{u}"}, "b21997d6b4cbdf84b149d8e6a2c4d06a8e9ec164", nil).
+				ExpectGitArgs([]string{"merge-base", "mybranch", "mybranch@{u}"}, "b21997d6b4cbdf84b149d8e6a2c4d06a8e9ec164", nil).
 				// here it's actually getting all the commits in a formatted form, one per line
-				ExpectGitArgs([]string{"log", "HEAD", "--topo-order", "--oneline", "--pretty=format:%H%x00%at%x00%aN%x00%ae%x00%D%x00%p%x00%s", "--abbrev=40", "--no-show-signature", "--"}, singleCommitOutput, nil).
+				ExpectGitArgs([]string{"log", "HEAD", "--topo-order", "--oneline", "--pretty=format:%H%x00%at%x00%aN%x00%ae%x00%D%x00%p%x00%s%x00%m", "--abbrev=40", "--no-show-signature", "--"}, singleCommitOutput, nil).
 				// here it's testing which of the configured main branches exist; neither does
 				ExpectGitArgs([]string{"rev-parse", "--symbolic-full-name", "master@{u}"}, "", errors.New("error")).
 				ExpectGitArgs([]string{"rev-parse", "--verify", "--quiet", "refs/remotes/origin/master"}, "", errors.New("error")).
@@ -240,13 +241,13 @@ func TestGetCommits(t *testing.T) {
 			testName:     "should call merge-base for all main branches that exist",
 			logOrder:     "topo-order",
 			rebaseMode:   enums.REBASE_MODE_NONE,
-			opts:         GetCommitsOptions{RefName: "HEAD", IncludeRebaseCommits: false},
+			opts:         GetCommitsOptions{RefName: "HEAD", RefForPushedStatus: "mybranch", IncludeRebaseCommits: false},
 			mainBranches: []string{"master", "main", "develop", "1.0-hotfixes"},
 			runner: oscommands.NewFakeRunner(t).
 				// here it's seeing which commits are yet to be pushed
-				ExpectGitArgs([]string{"merge-base", "HEAD", "HEAD@{u}"}, "b21997d6b4cbdf84b149d8e6a2c4d06a8e9ec164", nil).
+				ExpectGitArgs([]string{"merge-base", "mybranch", "mybranch@{u}"}, "b21997d6b4cbdf84b149d8e6a2c4d06a8e9ec164", nil).
 				// here it's actually getting all the commits in a formatted form, one per line
-				ExpectGitArgs([]string{"log", "HEAD", "--topo-order", "--oneline", "--pretty=format:%H%x00%at%x00%aN%x00%ae%x00%D%x00%p%x00%s", "--abbrev=40", "--no-show-signature", "--"}, singleCommitOutput, nil).
+				ExpectGitArgs([]string{"log", "HEAD", "--topo-order", "--oneline", "--pretty=format:%H%x00%at%x00%aN%x00%ae%x00%D%x00%p%x00%s%x00%m", "--abbrev=40", "--no-show-signature", "--"}, singleCommitOutput, nil).
 				// here it's testing which of the configured main branches exist
 				ExpectGitArgs([]string{"rev-parse", "--symbolic-full-name", "master@{u}"}, "refs/remotes/origin/master", nil).
 				ExpectGitArgs([]string{"rev-parse", "--symbolic-full-name", "main@{u}"}, "", errors.New("error")).
@@ -279,10 +280,10 @@ func TestGetCommits(t *testing.T) {
 			testName:   "should not specify order if `log.order` is `default`",
 			logOrder:   "default",
 			rebaseMode: enums.REBASE_MODE_NONE,
-			opts:       GetCommitsOptions{RefName: "HEAD", IncludeRebaseCommits: false},
+			opts:       GetCommitsOptions{RefName: "HEAD", RefForPushedStatus: "mybranch", IncludeRebaseCommits: false},
 			runner: oscommands.NewFakeRunner(t).
-				ExpectGitArgs([]string{"merge-base", "HEAD", "HEAD@{u}"}, "b21997d6b4cbdf84b149d8e6a2c4d06a8e9ec164", nil).
-				ExpectGitArgs([]string{"log", "HEAD", "--oneline", "--pretty=format:%H%x00%at%x00%aN%x00%ae%x00%D%x00%p%x00%s", "--abbrev=40", "--no-show-signature", "--"}, "", nil),
+				ExpectGitArgs([]string{"merge-base", "mybranch", "mybranch@{u}"}, "b21997d6b4cbdf84b149d8e6a2c4d06a8e9ec164", nil).
+				ExpectGitArgs([]string{"log", "HEAD", "--oneline", "--pretty=format:%H%x00%at%x00%aN%x00%ae%x00%D%x00%p%x00%s%x00%m", "--abbrev=40", "--no-show-signature", "--"}, "", nil),
 
 			expectedCommits: []*models.Commit{},
 			expectedError:   nil,
@@ -291,10 +292,10 @@ func TestGetCommits(t *testing.T) {
 			testName:   "should set filter path",
 			logOrder:   "default",
 			rebaseMode: enums.REBASE_MODE_NONE,
-			opts:       GetCommitsOptions{RefName: "HEAD", FilterPath: "src"},
+			opts:       GetCommitsOptions{RefName: "HEAD", RefForPushedStatus: "mybranch", FilterPath: "src"},
 			runner: oscommands.NewFakeRunner(t).
-				ExpectGitArgs([]string{"merge-base", "HEAD", "HEAD@{u}"}, "b21997d6b4cbdf84b149d8e6a2c4d06a8e9ec164", nil).
-				ExpectGitArgs([]string{"log", "HEAD", "--oneline", "--pretty=format:%H%x00%at%x00%aN%x00%ae%x00%D%x00%p%x00%s", "--abbrev=40", "--follow", "--no-show-signature", "--", "src"}, "", nil),
+				ExpectGitArgs([]string{"merge-base", "mybranch", "mybranch@{u}"}, "b21997d6b4cbdf84b149d8e6a2c4d06a8e9ec164", nil).
+				ExpectGitArgs([]string{"log", "HEAD", "--oneline", "--pretty=format:%H%x00%at%x00%aN%x00%ae%x00%D%x00%p%x00%s%x00%m", "--abbrev=40", "--follow", "--no-show-signature", "--", "src"}, "", nil),
 
 			expectedCommits: []*models.Commit{},
 			expectedError:   nil,
@@ -305,7 +306,8 @@ func TestGetCommits(t *testing.T) {
 		scenario := scenario
 		t.Run(scenario.testName, func(t *testing.T) {
 			common := utils.NewDummyCommon()
-			common.UserConfig.Git.Log.Order = scenario.logOrder
+			common.AppState = &config.AppState{}
+			common.AppState.GitLogOrder = scenario.logOrder
 
 			builder := &CommitLoader{
 				Common:        common,
@@ -548,7 +550,8 @@ func TestCommitLoader_setCommitMergedStatuses(t *testing.T) {
 
 	for _, scenario := range scenarios {
 		t.Run(scenario.testName, func(t *testing.T) {
-			expectedCommits := setCommitMergedStatuses(scenario.ancestor, scenario.commits)
+			expectedCommits := scenario.commits
+			setCommitMergedStatuses(scenario.ancestor, expectedCommits)
 			assert.Equal(t, scenario.expectedCommits, expectedCommits)
 		})
 	}

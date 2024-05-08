@@ -26,8 +26,11 @@ func NewTagsContext(
 		},
 	)
 
-	getDisplayStrings := func(startIdx int, length int) [][]string {
-		return presentation.GetTagListDisplayStrings(viewModel.GetItems(), c.Modes().Diffing.Ref)
+	getDisplayStrings := func(_ int, _ int) [][]string {
+		return presentation.GetTagListDisplayStrings(
+			viewModel.GetItems(),
+			c.State().GetItemOperation,
+			c.Modes().Diffing.Ref, c.Tr)
 	}
 
 	return &TagsContext{
@@ -40,20 +43,13 @@ func NewTagsContext(
 				Kind:       types.SIDE_CONTEXT,
 				Focusable:  true,
 			})),
-			list:              viewModel,
-			getDisplayStrings: getDisplayStrings,
-			c:                 c,
+			ListRenderer: ListRenderer{
+				list:              viewModel,
+				getDisplayStrings: getDisplayStrings,
+			},
+			c: c,
 		},
 	}
-}
-
-func (self *TagsContext) GetSelectedItemId() string {
-	item := self.GetSelected()
-	if item == nil {
-		return ""
-	}
-
-	return item.ID()
 }
 
 func (self *TagsContext) GetSelectedRef() types.Ref {

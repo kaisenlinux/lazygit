@@ -89,14 +89,14 @@ func (self *Gui) GetInitialKeybindings() ([]*types.Binding, []*gocui.ViewMouseBi
 			Key:         opts.GetKey(opts.Config.Universal.ScrollUpMain),
 			Handler:     self.scrollUpMain,
 			Alternative: "fn+up/shift+k",
-			Description: self.c.Tr.ScrollUpMainPanel,
+			Description: self.c.Tr.ScrollUpMainWindow,
 		},
 		{
 			ViewName:    "",
 			Key:         opts.GetKey(opts.Config.Universal.ScrollDownMain),
 			Handler:     self.scrollDownMain,
 			Alternative: "fn+down/shift+j",
-			Description: self.c.Tr.ScrollDownMainPanel,
+			Description: self.c.Tr.ScrollDownMainWindow,
 		},
 		{
 			ViewName: "",
@@ -123,28 +123,32 @@ func (self *Gui) GetInitialKeybindings() ([]*types.Binding, []*gocui.ViewMouseBi
 			Handler:  self.scrollDownMain,
 		},
 		{
-			ViewName:    "files",
-			Key:         opts.GetKey(opts.Config.Universal.CopyToClipboard),
-			Handler:     self.handleCopySelectedSideContextItemToClipboard,
-			Description: self.c.Tr.CopyFileNameToClipboard,
+			ViewName:          "files",
+			Key:               opts.GetKey(opts.Config.Universal.CopyToClipboard),
+			Handler:           self.handleCopySelectedSideContextItemToClipboard,
+			GetDisabledReason: self.getCopySelectedSideContextItemToClipboardDisabledReason,
+			Description:       self.c.Tr.CopyPathToClipboard,
 		},
 		{
-			ViewName:    "localBranches",
-			Key:         opts.GetKey(opts.Config.Universal.CopyToClipboard),
-			Handler:     self.handleCopySelectedSideContextItemToClipboard,
-			Description: self.c.Tr.CopyBranchNameToClipboard,
+			ViewName:          "localBranches",
+			Key:               opts.GetKey(opts.Config.Universal.CopyToClipboard),
+			Handler:           self.handleCopySelectedSideContextItemToClipboard,
+			GetDisabledReason: self.getCopySelectedSideContextItemToClipboardDisabledReason,
+			Description:       self.c.Tr.CopyBranchNameToClipboard,
 		},
 		{
-			ViewName:    "remoteBranches",
-			Key:         opts.GetKey(opts.Config.Universal.CopyToClipboard),
-			Handler:     self.handleCopySelectedSideContextItemToClipboard,
-			Description: self.c.Tr.CopyBranchNameToClipboard,
+			ViewName:          "remoteBranches",
+			Key:               opts.GetKey(opts.Config.Universal.CopyToClipboard),
+			Handler:           self.handleCopySelectedSideContextItemToClipboard,
+			GetDisabledReason: self.getCopySelectedSideContextItemToClipboardDisabledReason,
+			Description:       self.c.Tr.CopyBranchNameToClipboard,
 		},
 		{
-			ViewName:    "commits",
-			Key:         opts.GetKey(opts.Config.Universal.CopyToClipboard),
-			Handler:     self.handleCopySelectedSideContextItemToClipboard,
-			Description: self.c.Tr.CopyCommitShaToClipboard,
+			ViewName:          "commits",
+			Key:               opts.GetKey(opts.Config.Universal.CopyToClipboard),
+			Handler:           self.handleCopySelectedSideContextItemCommitHashToClipboard,
+			GetDisabledReason: self.getCopySelectedSideContextItemToClipboardDisabledReason,
+			Description:       self.c.Tr.CopyCommitShaToClipboard,
 		},
 		{
 			ViewName:    "commits",
@@ -153,16 +157,18 @@ func (self *Gui) GetInitialKeybindings() ([]*types.Binding, []*gocui.ViewMouseBi
 			Description: self.c.Tr.ResetCherryPick,
 		},
 		{
-			ViewName:    "reflogCommits",
-			Key:         opts.GetKey(opts.Config.Universal.CopyToClipboard),
-			Handler:     self.handleCopySelectedSideContextItemToClipboard,
-			Description: self.c.Tr.CopyCommitShaToClipboard,
+			ViewName:          "reflogCommits",
+			Key:               opts.GetKey(opts.Config.Universal.CopyToClipboard),
+			Handler:           self.handleCopySelectedSideContextItemToClipboard,
+			GetDisabledReason: self.getCopySelectedSideContextItemToClipboardDisabledReason,
+			Description:       self.c.Tr.CopyCommitShaToClipboard,
 		},
 		{
-			ViewName:    "subCommits",
-			Key:         opts.GetKey(opts.Config.Universal.CopyToClipboard),
-			Handler:     self.handleCopySelectedSideContextItemToClipboard,
-			Description: self.c.Tr.CopyCommitShaToClipboard,
+			ViewName:          "subCommits",
+			Key:               opts.GetKey(opts.Config.Universal.CopyToClipboard),
+			Handler:           self.handleCopySelectedSideContextItemCommitHashToClipboard,
+			GetDisabledReason: self.getCopySelectedSideContextItemToClipboardDisabledReason,
+			Description:       self.c.Tr.CopyCommitShaToClipboard,
 		},
 		{
 			ViewName: "information",
@@ -171,16 +177,18 @@ func (self *Gui) GetInitialKeybindings() ([]*types.Binding, []*gocui.ViewMouseBi
 			Handler:  self.handleInfoClick,
 		},
 		{
-			ViewName:    "commitFiles",
-			Key:         opts.GetKey(opts.Config.Universal.CopyToClipboard),
-			Handler:     self.handleCopySelectedSideContextItemToClipboard,
-			Description: self.c.Tr.CopyCommitFileNameToClipboard,
+			ViewName:          "commitFiles",
+			Key:               opts.GetKey(opts.Config.Universal.CopyToClipboard),
+			Handler:           self.handleCopySelectedSideContextItemToClipboard,
+			GetDisabledReason: self.getCopySelectedSideContextItemToClipboardDisabledReason,
+			Description:       self.c.Tr.CopyPathToClipboard,
 		},
 		{
 			ViewName:    "",
 			Key:         opts.GetKey(opts.Config.Universal.ExtrasMenu),
 			Handler:     self.handleCreateExtrasMenuPanel,
-			Description: self.c.Tr.OpenExtrasMenu,
+			Description: self.c.Tr.OpenCommandLogMenu,
+			Tooltip:     self.c.Tr.OpenCommandLogMenuTooltip,
 			OpensMenu:   true,
 		},
 		{
@@ -240,10 +248,21 @@ func (self *Gui) GetInitialKeybindings() ([]*types.Binding, []*gocui.ViewMouseBi
 			Handler:  self.scrollDownConfirmationPanel,
 		},
 		{
-			ViewName:    "submodules",
-			Key:         opts.GetKey(opts.Config.Universal.CopyToClipboard),
-			Handler:     self.handleCopySelectedSideContextItemToClipboard,
-			Description: self.c.Tr.CopySubmoduleNameToClipboard,
+			ViewName: "confirmation",
+			Key:      gocui.MouseWheelUp,
+			Handler:  self.scrollUpConfirmationPanel,
+		},
+		{
+			ViewName: "confirmation",
+			Key:      gocui.MouseWheelDown,
+			Handler:  self.scrollDownConfirmationPanel,
+		},
+		{
+			ViewName:          "submodules",
+			Key:               opts.GetKey(opts.Config.Universal.CopyToClipboard),
+			Handler:           self.handleCopySelectedSideContextItemToClipboard,
+			GetDisabledReason: self.getCopySelectedSideContextItemToClipboardDisabledReason,
+			Description:       self.c.Tr.CopySubmoduleNameToClipboard,
 		},
 		{
 			ViewName: "extras",
@@ -375,7 +394,10 @@ func (gui *Gui) wrappedHandler(f func() error) func(g *gocui.Gui, v *gocui.View)
 }
 
 func (gui *Gui) SetKeybinding(binding *types.Binding) error {
-	handler := binding.Handler
+	handler := func() error {
+		return gui.callKeybindingHandler(binding)
+	}
+
 	// TODO: move all mouse-ey stuff into new mouse approach
 	if gocui.IsMouseKey(binding.Key) {
 		handler = func() error {
@@ -405,4 +427,20 @@ func (gui *Gui) SetMouseKeybinding(binding *gocui.ViewMouseBinding) error {
 	binding.Handler = newHandler
 
 	return gui.g.SetViewClickBinding(binding)
+}
+
+func (gui *Gui) callKeybindingHandler(binding *types.Binding) error {
+	var disabledReason *types.DisabledReason
+	if binding.GetDisabledReason != nil {
+		disabledReason = binding.GetDisabledReason()
+	}
+	if disabledReason != nil {
+		if disabledReason.ShowErrorInPanel {
+			return gui.c.ErrorMsg(disabledReason.Text)
+		}
+
+		gui.c.ErrorToast(gui.Tr.DisabledMenuItemPrefix + disabledReason.Text)
+		return nil
+	}
+	return binding.Handler()
 }

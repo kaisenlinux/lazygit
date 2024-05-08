@@ -44,10 +44,26 @@ func (self *GitCommandBuilder) Config(value string) *GitCommandBuilder {
 	return self
 }
 
+func (self *GitCommandBuilder) ConfigIf(condition bool, ifTrue string) *GitCommandBuilder {
+	if condition {
+		self.Config(ifTrue)
+	}
+
+	return self
+}
+
 // the -C arg will make git do a `cd` to the directory before doing anything else
 func (self *GitCommandBuilder) Dir(path string) *GitCommandBuilder {
 	// repo path comes before the command
 	self.args = append([]string{"-C", path}, self.args...)
+
+	return self
+}
+
+func (self *GitCommandBuilder) DirIf(condition bool, path string) *GitCommandBuilder {
+	if condition {
+		return self.Dir(path)
+	}
 
 	return self
 }

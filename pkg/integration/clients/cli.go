@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jesseduffield/lazycore/pkg/utils"
 	"github.com/jesseduffield/lazygit/pkg/integration/components"
 	"github.com/jesseduffield/lazygit/pkg/integration/tests"
 	"github.com/samber/lo"
@@ -23,21 +24,24 @@ import (
 
 // If invoked directly, you can specify tests to run by passing their names as positional arguments
 
-func RunCLI(testNames []string, slow bool, sandbox bool) {
-	keyPressDelay := tryConvert(os.Getenv("KEY_PRESS_DELAY"), 0)
+func RunCLI(testNames []string, slow bool, sandbox bool, waitForDebugger bool, raceDetector bool) {
+	inputDelay := tryConvert(os.Getenv("INPUT_DELAY"), 0)
 	if slow {
-		keyPressDelay = SLOW_KEY_PRESS_DELAY
+		inputDelay = SLOW_INPUT_DELAY
 	}
 
-	err := components.RunTests(
-		getTestsToRun(testNames),
-		log.Printf,
-		runCmdInTerminal,
-		runAndPrintFatalError,
-		sandbox,
-		keyPressDelay,
-		1,
-	)
+	err := components.RunTests(components.RunTestArgs{
+		Tests:           getTestsToRun(testNames),
+		Logf:            log.Printf,
+		RunCmd:          runCmdInTerminal,
+		TestWrapper:     runAndPrintFatalError,
+		Sandbox:         sandbox,
+		WaitForDebugger: waitForDebugger,
+		RaceDetector:    raceDetector,
+		CodeCoverageDir: "",
+		InputDelay:      inputDelay,
+		MaxAttempts:     1,
+	})
 	if err != nil {
 		log.Print(err.Error())
 	}
@@ -50,7 +54,7 @@ func runAndPrintFatalError(test *components.IntegrationTest, f func() error) {
 }
 
 func getTestsToRun(testNames []string) []*components.IntegrationTest {
-	allIntegrationTests := tests.GetTests()
+	allIntegrationTests := tests.GetTests(utils.GetLazyRootDirectory())
 	var testsToRun []*components.IntegrationTest
 
 	if len(testNames) == 0 {
@@ -86,12 +90,15 @@ outer:
 	return testsToRun
 }
 
-func runCmdInTerminal(cmd *exec.Cmd) error {
+func runCmdInTerminal(cmd *exec.Cmd) (int, error) {
 	cmd.Stdout = os.Stdout
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
 
-	return cmd.Run()
+	if err := cmd.Start(); err != nil {
+		return -1, err
+	}
+	return cmd.Process.Pid, cmd.Wait()
 }
 
 func tryConvert(numStr string, defaultVal int) int {

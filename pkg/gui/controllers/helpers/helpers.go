@@ -22,6 +22,7 @@ type Helpers struct {
 	Suggestions    *SuggestionsHelper
 	Files          *FilesHelper
 	WorkingTree    *WorkingTreeHelper
+	BranchesHelper *BranchesHelper
 	Tags           *TagsHelper
 	MergeAndRebase *MergeAndRebaseHelper
 	MergeConflicts *MergeConflictsHelper
@@ -32,6 +33,7 @@ type Helpers struct {
 	GPG            *GpgHelper
 	Upstream       *UpstreamHelper
 	AmendHelper    *AmendHelper
+	FixupHelper    *FixupHelper
 	Commits        *CommitsHelper
 	Snake          *SnakeHelper
 	// lives in context package because our contexts need it to render to main
@@ -45,9 +47,11 @@ type Helpers struct {
 	Confirmation      *ConfirmationHelper
 	Mode              *ModeHelper
 	AppStatus         *AppStatusHelper
+	InlineStatus      *InlineStatusHelper
 	WindowArrangement *WindowArrangementHelper
 	Search            *SearchHelper
 	Worktree          *WorktreeHelper
+	SubCommits        *SubCommitsHelper
 }
 
 func NewStubHelpers() *Helpers {
@@ -67,6 +71,7 @@ func NewStubHelpers() *Helpers {
 		GPG:               &GpgHelper{},
 		Upstream:          &UpstreamHelper{},
 		AmendHelper:       &AmendHelper{},
+		FixupHelper:       &FixupHelper{},
 		Commits:           &CommitsHelper{},
 		Snake:             &SnakeHelper{},
 		Diff:              &DiffHelper{},
@@ -79,8 +84,10 @@ func NewStubHelpers() *Helpers {
 		Confirmation:      &ConfirmationHelper{},
 		Mode:              &ModeHelper{},
 		AppStatus:         &AppStatusHelper{},
+		InlineStatus:      &InlineStatusHelper{},
 		WindowArrangement: &WindowArrangementHelper{},
 		Search:            &SearchHelper{},
 		Worktree:          &WorktreeHelper{},
+		SubCommits:        &SubCommitsHelper{},
 	}
 }

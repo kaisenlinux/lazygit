@@ -9,6 +9,8 @@ import (
 )
 
 type TextMatcher struct {
+	// If you add or change a field here, be sure to update the copy
+	// code in checkIsSelected()
 	*Matcher[string]
 }
 
@@ -33,6 +35,18 @@ func (self *TextMatcher) DoesNotContain(target string) *TextMatcher {
 		name: fmt.Sprintf("does not contain '%s'", target),
 		testFn: func(value string) (bool, string) {
 			return !strings.Contains(value, target), fmt.Sprintf("Expected '%s' to NOT be found in '%s'", target, value)
+		},
+	})
+
+	return self
+}
+
+func (self *TextMatcher) DoesNotContainAnyOf(targets []string) *TextMatcher {
+	self.appendRule(matcherRule[string]{
+		name: fmt.Sprintf("does not contain any of '%s'", targets),
+		testFn: func(value string) (bool, string) {
+			return lo.NoneBy(targets, func(target string) bool { return strings.Contains(value, target) }),
+				fmt.Sprintf("Expected none of '%s' to be found in '%s'", targets, value)
 		},
 	})
 
@@ -83,8 +97,8 @@ func (self *TextMatcher) IsSelected() *TextMatcher {
 // if the matcher has an `IsSelected` rule, it returns true, along with the matcher after that rule has been removed
 func (self *TextMatcher) checkIsSelected() (bool, *TextMatcher) {
 	// copying into a new matcher in case we want to re-use the original later
-	newMatcher := &TextMatcher{}
-	*newMatcher = *self
+	newMatcher := &TextMatcher{Matcher: &Matcher[string]{}}
+	*newMatcher.Matcher = *self.Matcher
 
 	check := lo.ContainsBy(newMatcher.rules, func(rule matcherRule[string]) bool { return rule.name == IS_SELECTED_RULE_NAME })
 
@@ -105,6 +119,10 @@ func Contains(target string) *TextMatcher {
 
 func DoesNotContain(target string) *TextMatcher {
 	return AnyString().DoesNotContain(target)
+}
+
+func DoesNotContainAnyOf(targets ...string) *TextMatcher {
+	return AnyString().DoesNotContainAnyOf(targets)
 }
 
 func MatchesRegexp(target string) *TextMatcher {

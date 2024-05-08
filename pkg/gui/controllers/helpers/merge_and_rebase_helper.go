@@ -2,6 +2,8 @@ package helpers
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/jesseduffield/gocui"
@@ -80,6 +82,19 @@ func (self *MergeAndRebaseHelper) genericMergeCommand(command string) error {
 	}
 
 	self.c.LogAction(fmt.Sprintf("Merge/Rebase: %s", command))
+	if status == enums.REBASE_MODE_REBASING {
+		todoFile, err := os.ReadFile(
+			filepath.Join(self.c.Git().RepoPaths.WorktreeGitDirPath(), "rebase-merge/git-rebase-todo"),
+		)
+
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return err
+			}
+		} else {
+			self.c.LogCommand(string(todoFile), false)
+		}
+	}
 
 	commandType := ""
 	switch status {
@@ -125,8 +140,8 @@ func isMergeConflictErr(errStr string) bool {
 	return false
 }
 
-func (self *MergeAndRebaseHelper) CheckMergeOrRebase(result error) error {
-	if err := self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC}); err != nil {
+func (self *MergeAndRebaseHelper) CheckMergeOrRebaseWithRefreshOptions(result error, refreshOptions types.RefreshOptions) error {
+	if err := self.c.Refresh(refreshOptions); err != nil {
 		return err
 	}
 	if result == nil {
@@ -141,6 +156,10 @@ func (self *MergeAndRebaseHelper) CheckMergeOrRebase(result error) error {
 	} else {
 		return self.CheckForConflicts(result)
 	}
+}
+
+func (self *MergeAndRebaseHelper) CheckMergeOrRebase(result error) error {
+	return self.CheckMergeOrRebaseWithRefreshOptions(result, types.RefreshOptions{Mode: types.ASYNC})
 }
 
 func (self *MergeAndRebaseHelper) CheckForConflicts(result error) error {
@@ -165,7 +184,6 @@ func (self *MergeAndRebaseHelper) PromptForConflictHandling() error {
 				OnPress: func() error {
 					return self.c.PushContext(self.c.Contexts().Files)
 				},
-				Key: 'v',
 			},
 			{
 				Label: fmt.Sprintf(self.c.Tr.AbortMenuItem, mode),
@@ -216,9 +234,6 @@ func (self *MergeAndRebaseHelper) PromptToContinueRebase() error {
 
 func (self *MergeAndRebaseHelper) RebaseOntoRef(ref string) error {
 	checkedOutBranch := self.refsHelper.GetCheckedOutRef().Name
-	if ref == checkedOutBranch {
-		return self.c.ErrorMsg(self.c.Tr.CantRebaseOntoSelf)
-	}
 	menuItems := []*types.MenuItem{
 		{
 			Label: self.c.Tr.SimpleRebase,
@@ -235,7 +250,7 @@ func (self *MergeAndRebaseHelper) RebaseOntoRef(ref string) error {
 					}
 					err = self.CheckMergeOrRebase(err)
 					if err == nil {
-						self.c.Modes().MarkedBaseCommit.Reset()
+						return self.ResetMarkedBaseCommit()
 					}
 					return err
 				})
@@ -257,7 +272,9 @@ func (self *MergeAndRebaseHelper) RebaseOntoRef(ref string) error {
 				if err = self.CheckMergeOrRebase(err); err != nil {
 					return err
 				}
-				self.c.Modes().MarkedBaseCommit.Reset()
+				if err = self.ResetMarkedBaseCommit(); err != nil {
+					return err
+				}
 				return self.c.PushContext(self.c.Contexts().LocalCommits)
 			},
 		},

@@ -1,12 +1,19 @@
-# github.com/OpenPeeDeeP/xdg v1.0.0
-## explicit
-github.com/OpenPeeDeeP/xdg
+# github.com/adrg/xdg v0.4.0
+## explicit; go 1.14
+github.com/adrg/xdg
+github.com/adrg/xdg/internal/pathutil
 # github.com/atotto/clipboard v0.1.4
 ## explicit
 github.com/atotto/clipboard
 # github.com/aybabtme/humanlog v0.4.1
 ## explicit; go 1.13
 github.com/aybabtme/humanlog
+# github.com/bahlo/generic-list-go v0.2.0
+## explicit; go 1.18
+github.com/bahlo/generic-list-go
+# github.com/buger/jsonparser v1.1.1
+## explicit; go 1.13
+github.com/buger/jsonparser
 # github.com/cloudfoundry/jibber_jabber v0.0.0-20151120183258-bcc4c8345a21
 ## explicit
 github.com/cloudfoundry/jibber_jabber
@@ -33,7 +40,46 @@ github.com/fsmiamoto/git-todo-parser/todo
 # github.com/gdamore/encoding v1.0.0
 ## explicit; go 1.9
 github.com/gdamore/encoding
-# github.com/go-errors/errors v1.4.2
+# github.com/gdamore/tcell/v2 v2.7.4
+## explicit; go 1.12
+github.com/gdamore/tcell/v2
+github.com/gdamore/tcell/v2/terminfo
+github.com/gdamore/tcell/v2/terminfo/a/aixterm
+github.com/gdamore/tcell/v2/terminfo/a/alacritty
+github.com/gdamore/tcell/v2/terminfo/a/ansi
+github.com/gdamore/tcell/v2/terminfo/b/beterm
+github.com/gdamore/tcell/v2/terminfo/base
+github.com/gdamore/tcell/v2/terminfo/c/cygwin
+github.com/gdamore/tcell/v2/terminfo/d/dtterm
+github.com/gdamore/tcell/v2/terminfo/dynamic
+github.com/gdamore/tcell/v2/terminfo/e/emacs
+github.com/gdamore/tcell/v2/terminfo/extended
+github.com/gdamore/tcell/v2/terminfo/f/foot
+github.com/gdamore/tcell/v2/terminfo/g/gnome
+github.com/gdamore/tcell/v2/terminfo/h/hpterm
+github.com/gdamore/tcell/v2/terminfo/k/konsole
+github.com/gdamore/tcell/v2/terminfo/k/kterm
+github.com/gdamore/tcell/v2/terminfo/l/linux
+github.com/gdamore/tcell/v2/terminfo/p/pcansi
+github.com/gdamore/tcell/v2/terminfo/r/rxvt
+github.com/gdamore/tcell/v2/terminfo/s/screen
+github.com/gdamore/tcell/v2/terminfo/s/simpleterm
+github.com/gdamore/tcell/v2/terminfo/s/sun
+github.com/gdamore/tcell/v2/terminfo/t/tmux
+github.com/gdamore/tcell/v2/terminfo/v/vt100
+github.com/gdamore/tcell/v2/terminfo/v/vt102
+github.com/gdamore/tcell/v2/terminfo/v/vt220
+github.com/gdamore/tcell/v2/terminfo/v/vt320
+github.com/gdamore/tcell/v2/terminfo/v/vt400
+github.com/gdamore/tcell/v2/terminfo/v/vt420
+github.com/gdamore/tcell/v2/terminfo/v/vt52
+github.com/gdamore/tcell/v2/terminfo/w/wy50
+github.com/gdamore/tcell/v2/terminfo/w/wy60
+github.com/gdamore/tcell/v2/terminfo/w/wy99_ansi
+github.com/gdamore/tcell/v2/terminfo/x/xfce
+github.com/gdamore/tcell/v2/terminfo/x/xterm
+github.com/gdamore/tcell/v2/terminfo/x/xterm_kitty
+# github.com/go-errors/errors v1.5.1
 ## explicit; go 1.14
 github.com/go-errors/errors
 # github.com/go-git/gcfg v1.5.0
@@ -73,6 +119,8 @@ github.com/imdario/mergo
 # github.com/integrii/flaggy v1.4.0
 ## explicit; go 1.12
 github.com/integrii/flaggy
+# github.com/invopop/jsonschema v0.10.0
+## explicit; go 1.18
 # github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99
 ## explicit
 github.com/jbenet/go-context/io
@@ -124,7 +172,7 @@ github.com/jesseduffield/go-git/v5/utils/merkletrie/filesystem
 github.com/jesseduffield/go-git/v5/utils/merkletrie/index
 github.com/jesseduffield/go-git/v5/utils/merkletrie/internal/frame
 github.com/jesseduffield/go-git/v5/utils/merkletrie/noder
-# github.com/jesseduffield/gocui v0.3.1-0.20230806095321-ac7b03108825
+# github.com/jesseduffield/gocui v0.3.1-0.20240309085756-86e0d5a312de
 ## explicit; go 1.12
 github.com/jesseduffield/gocui
 # github.com/jesseduffield/kill v0.0.0-20220618033138-bfbe04675d10
@@ -143,6 +191,9 @@ github.com/jesseduffield/yaml
 # github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0
 ## explicit
 github.com/kardianos/osext
+# github.com/karimkhaleel/jsonschema v0.0.0-20231001195015-d933f0d94ea3
+## explicit; go 1.18
+github.com/karimkhaleel/jsonschema
 # github.com/kevinburke/ssh_config v0.0.0-20190725054713-01f96b0aa0cd
 ## explicit
 github.com/kevinburke/ssh_config
@@ -160,6 +211,10 @@ github.com/kyokomi/emoji/v2
 # github.com/lucasb-eyer/go-colorful v1.2.0
 ## explicit; go 1.12
 github.com/lucasb-eyer/go-colorful
+# github.com/mailru/easyjson v0.7.7
+## explicit; go 1.12
+github.com/mailru/easyjson/buffer
+github.com/mailru/easyjson/jwriter
 # github.com/mattn/go-colorable v0.1.11
 ## explicit; go 1.13
 github.com/mattn/go-colorable
@@ -175,6 +230,9 @@ github.com/mgutz/str
 # github.com/mitchellh/go-homedir v1.1.0
 ## explicit
 github.com/mitchellh/go-homedir
+# github.com/mitchellh/go-ps v1.0.0
+## explicit; go 1.13
+github.com/mitchellh/go-ps
 # github.com/onsi/ginkgo v1.10.3
 ## explicit
 # github.com/onsi/gomega v1.7.1
@@ -185,7 +243,7 @@ github.com/petermattis/goid
 # github.com/pmezard/go-difflib v1.0.0
 ## explicit
 github.com/pmezard/go-difflib/difflib
-# github.com/rivo/uniseg v0.4.4
+# github.com/rivo/uniseg v0.4.7
 ## explicit; go 1.18
 github.com/rivo/uniseg
 # github.com/sahilm/fuzzy v0.1.0
@@ -214,50 +272,12 @@ github.com/spf13/afero/mem
 # github.com/spkg/bom v0.0.0-20160624110644-59b7046e48ad
 ## explicit
 github.com/spkg/bom
-# github.com/stefanhaller/tcell/v2 v2.6.2-0.20230806061358-2dfa11eddb68
-## explicit; go 1.12
-github.com/stefanhaller/tcell/v2
-github.com/stefanhaller/tcell/v2/terminfo
-github.com/stefanhaller/tcell/v2/terminfo/a/aixterm
-github.com/stefanhaller/tcell/v2/terminfo/a/alacritty
-github.com/stefanhaller/tcell/v2/terminfo/a/ansi
-github.com/stefanhaller/tcell/v2/terminfo/b/beterm
-github.com/stefanhaller/tcell/v2/terminfo/base
-github.com/stefanhaller/tcell/v2/terminfo/c/cygwin
-github.com/stefanhaller/tcell/v2/terminfo/d/dtterm
-github.com/stefanhaller/tcell/v2/terminfo/dynamic
-github.com/stefanhaller/tcell/v2/terminfo/e/emacs
-github.com/stefanhaller/tcell/v2/terminfo/extended
-github.com/stefanhaller/tcell/v2/terminfo/f/foot
-github.com/stefanhaller/tcell/v2/terminfo/g/gnome
-github.com/stefanhaller/tcell/v2/terminfo/h/hpterm
-github.com/stefanhaller/tcell/v2/terminfo/k/konsole
-github.com/stefanhaller/tcell/v2/terminfo/k/kterm
-github.com/stefanhaller/tcell/v2/terminfo/l/linux
-github.com/stefanhaller/tcell/v2/terminfo/p/pcansi
-github.com/stefanhaller/tcell/v2/terminfo/r/rxvt
-github.com/stefanhaller/tcell/v2/terminfo/s/screen
-github.com/stefanhaller/tcell/v2/terminfo/s/simpleterm
-github.com/stefanhaller/tcell/v2/terminfo/s/sun
-github.com/stefanhaller/tcell/v2/terminfo/t/termite
-github.com/stefanhaller/tcell/v2/terminfo/t/tmux
-github.com/stefanhaller/tcell/v2/terminfo/v/vt100
-github.com/stefanhaller/tcell/v2/terminfo/v/vt102
-github.com/stefanhaller/tcell/v2/terminfo/v/vt220
-github.com/stefanhaller/tcell/v2/terminfo/v/vt320
-github.com/stefanhaller/tcell/v2/terminfo/v/vt400
-github.com/stefanhaller/tcell/v2/terminfo/v/vt420
-github.com/stefanhaller/tcell/v2/terminfo/v/vt52
-github.com/stefanhaller/tcell/v2/terminfo/w/wy50
-github.com/stefanhaller/tcell/v2/terminfo/w/wy60
-github.com/stefanhaller/tcell/v2/terminfo/w/wy99_ansi
-github.com/stefanhaller/tcell/v2/terminfo/x/xfce
-github.com/stefanhaller/tcell/v2/terminfo/x/xterm
-github.com/stefanhaller/tcell/v2/terminfo/x/xterm_kitty
-github.com/stefanhaller/tcell/v2/terminfo/x/xterm_termite
-# github.com/stretchr/testify v1.8.0
+# github.com/stretchr/testify v1.8.1
 ## explicit; go 1.13
 github.com/stretchr/testify/assert
+# github.com/wk8/go-ordered-map/v2 v2.1.8
+## explicit; go 1.18
+github.com/wk8/go-ordered-map/v2
 # github.com/xanzy/ssh-agent v0.2.1
 ## explicit
 github.com/xanzy/ssh-agent
@@ -293,18 +313,17 @@ golang.org/x/exp/slices
 golang.org/x/net/context
 golang.org/x/net/internal/socks
 golang.org/x/net/proxy
-# golang.org/x/sys v0.11.0
-## explicit; go 1.17
+# golang.org/x/sys v0.18.0
+## explicit; go 1.18
 golang.org/x/sys/cpu
-golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
-# golang.org/x/term v0.11.0
-## explicit; go 1.17
+# golang.org/x/term v0.18.0
+## explicit; go 1.18
 golang.org/x/term
-# golang.org/x/text v0.12.0
-## explicit; go 1.17
+# golang.org/x/text v0.14.0
+## explicit; go 1.18
 golang.org/x/text/encoding
 golang.org/x/text/encoding/internal/identifier
 golang.org/x/text/runes

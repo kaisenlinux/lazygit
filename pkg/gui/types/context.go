@@ -4,6 +4,7 @@ import (
 	"github.com/jesseduffield/gocui"
 	"github.com/jesseduffield/lazygit/pkg/config"
 	"github.com/jesseduffield/lazygit/pkg/gui/patch_exploring"
+	"github.com/jesseduffield/lazygit/pkg/utils"
 	"github.com/sasha-s/go-deadlock"
 )
 
@@ -59,6 +60,9 @@ type IBaseContext interface {
 	// determined independently.
 	HasControlledBounds() bool
 
+	// true if the view needs to be rerendered when its width changes
+	NeedsRerenderOnWidthChange() bool
+
 	// returns the desired title for the view upon activation. If there is no desired title (returns empty string), then
 	// no title will be set
 	Title() string
@@ -87,25 +91,35 @@ type Context interface {
 	HandleRenderToMain() error
 }
 
+type ISearchHistoryContext interface {
+	Context
+
+	GetSearchHistory() *utils.HistoryBuffer[string]
+}
+
 type IFilterableContext interface {
 	Context
 	IListPanelState
+	ISearchHistoryContext
 
-	SetFilter(string)
+	SetFilter(string, bool)
 	GetFilter() string
 	ClearFilter()
+	ReApplyFilter(bool)
 	IsFiltering() bool
 	IsFilterableContext()
 }
 
 type ISearchableContext interface {
 	Context
+	ISearchHistoryContext
 
 	SetSearchString(string)
 	GetSearchString() string
 	ClearSearchString()
 	IsSearching() bool
 	IsSearchableContext()
+	RenderSearchStatus(int, int)
 }
 
 type DiffableContext interface {
@@ -122,11 +136,16 @@ type IListContext interface {
 	Context
 
 	GetSelectedItemId() string
+	GetSelectedItemIds() ([]string, int, int)
+	IsItemVisible(item HasUrn) bool
 
 	GetList() IList
+	ViewIndexToModelIndex(int) int
+	ModelIndexToViewIndex(int) int
 
 	FocusLine()
 	IsListContext() // used for type switch
+	RangeSelectEnabled() bool
 }
 
 type IPatchExplorerContext interface {
@@ -146,6 +165,8 @@ type IPatchExplorerContext interface {
 
 type IViewTrait interface {
 	FocusPoint(yIdx int)
+	SetRangeSelectStart(yIdx int)
+	CancelRangeSelect()
 	SetViewPortContent(content string)
 	SetContent(content string)
 	SetFooter(value string)
@@ -199,17 +220,27 @@ type IController interface {
 type IList interface {
 	IListCursor
 	Len() int
+	GetItem(index int) HasUrn
 }
 
 type IListCursor interface {
 	GetSelectedLineIdx() int
 	SetSelectedLineIdx(value int)
+	SetSelection(value int)
 	MoveSelectedLine(delta int)
-	RefreshSelectedIdx()
+	ClampSelection()
+	CancelRangeSelect()
+	GetRangeStartIdx() (int, bool)
+	GetSelectionRange() (int, int)
+	IsSelectingRange() bool
+	AreMultipleItemsSelected() bool
+	ToggleStickyRange()
+	ExpandNonStickyRange(int)
 }
 
 type IListPanelState interface {
 	SetSelectedLineIdx(int)
+	SetSelection(int)
 	GetSelectedLineIdx() int
 }
 

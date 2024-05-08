@@ -1,15 +1,17 @@
 package context
 
-type FilteredListViewModel[T any] struct {
+type FilteredListViewModel[T HasID] struct {
 	*FilteredList[T]
 	*ListViewModel[T]
+	*SearchHistory
 }
 
-func NewFilteredListViewModel[T any](getList func() []T, getFilterFields func(T) []string) *FilteredListViewModel[T] {
+func NewFilteredListViewModel[T HasID](getList func() []T, getFilterFields func(T) []string) *FilteredListViewModel[T] {
 	filteredList := NewFilteredList(getList, getFilterFields)
 
 	self := &FilteredListViewModel[T]{
-		FilteredList: filteredList,
+		FilteredList:  filteredList,
+		SearchHistory: NewSearchHistory(),
 	}
 
 	listViewModel := NewListViewModel(filteredList.GetFilteredList)
@@ -29,5 +31,5 @@ func (self *FilteredListViewModel[T]) ClearFilter() {
 
 	self.FilteredList.ClearFilter()
 
-	self.SetSelectedLineIdx(unfilteredIndex)
+	self.SetSelection(unfilteredIndex)
 }

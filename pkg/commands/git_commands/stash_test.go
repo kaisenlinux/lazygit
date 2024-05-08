@@ -112,21 +112,21 @@ func TestStashStashEntryCmdObj(t *testing.T) {
 			index:            5,
 			contextSize:      3,
 			ignoreWhitespace: false,
-			expected:         []string{"git", "stash", "show", "-p", "--stat", "--color=always", "--unified=3", "stash@{5}"},
+			expected:         []string{"git", "-C", "/path/to/worktree", "stash", "show", "-p", "--stat", "--color=always", "--unified=3", "stash@{5}"},
 		},
 		{
 			testName:         "Show diff with custom context size",
 			index:            5,
 			contextSize:      77,
 			ignoreWhitespace: false,
-			expected:         []string{"git", "stash", "show", "-p", "--stat", "--color=always", "--unified=77", "stash@{5}"},
+			expected:         []string{"git", "-C", "/path/to/worktree", "stash", "show", "-p", "--stat", "--color=always", "--unified=77", "stash@{5}"},
 		},
 		{
 			testName:         "Default case",
 			index:            5,
 			contextSize:      3,
 			ignoreWhitespace: true,
-			expected:         []string{"git", "stash", "show", "-p", "--stat", "--color=always", "--unified=3", "--ignore-all-space", "stash@{5}"},
+			expected:         []string{"git", "-C", "/path/to/worktree", "stash", "show", "-p", "--stat", "--color=always", "--unified=3", "--ignore-all-space", "stash@{5}"},
 		},
 	}
 
@@ -134,10 +134,15 @@ func TestStashStashEntryCmdObj(t *testing.T) {
 		s := s
 		t.Run(s.testName, func(t *testing.T) {
 			userConfig := config.GetDefaultConfig()
-			userConfig.Git.DiffContextSize = s.contextSize
-			instance := buildStashCommands(commonDeps{userConfig: userConfig})
+			appState := &config.AppState{}
+			appState.IgnoreWhitespaceInDiffView = s.ignoreWhitespace
+			appState.DiffContextSize = s.contextSize
+			repoPaths := RepoPaths{
+				worktreePath: "/path/to/worktree",
+			}
+			instance := buildStashCommands(commonDeps{userConfig: userConfig, appState: appState, repoPaths: &repoPaths})
 
-			cmdStr := instance.ShowStashEntryCmdObj(s.index, s.ignoreWhitespace).Args()
+			cmdStr := instance.ShowStashEntryCmdObj(s.index).Args()
 			assert.Equal(t, s.expected, cmdStr)
 		})
 	}

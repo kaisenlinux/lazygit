@@ -3,12 +3,14 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/jesseduffield/lazygit/pkg/app"
 	"github.com/jesseduffield/lazygit/pkg/app/daemon"
 	"github.com/jesseduffield/lazygit/pkg/integration/components"
 	"github.com/jesseduffield/lazygit/pkg/integration/tests"
 	integrationTypes "github.com/jesseduffield/lazygit/pkg/integration/types"
+	"github.com/mitchellh/go-ps"
 )
 
 // The purpose of this program is to run lazygit with an integration test passed in.
@@ -29,6 +31,15 @@ func main() {
 
 	integrationTest := getIntegrationTest()
 
+	if os.Getenv(components.WAIT_FOR_DEBUGGER_ENV_VAR) != "" {
+		println("Waiting for debugger to attach...")
+		for !isDebuggerAttached() {
+			time.Sleep(time.Millisecond * 100)
+		}
+
+		println("Debugger attached, continuing")
+	}
+
 	app.Start(dummyBuildInfo, integrationTest)
 }
 
@@ -47,7 +58,8 @@ func getIntegrationTest() integrationTypes.IntegrationTest {
 		))
 	}
 
-	allTests := tests.GetTests()
+	lazygitRootDir := os.Getenv(components.LAZYGIT_ROOT_DIR)
+	allTests := tests.GetTests(lazygitRootDir)
 	for _, candidateTest := range allTests {
 		if candidateTest.Name() == integrationTestName {
 			return candidateTest
@@ -55,4 +67,22 @@ func getIntegrationTest() integrationTypes.IntegrationTest {
 	}
 
 	panic("Could not find integration test with name: " + integrationTestName)
+}
+
+// Returns whether we are running under a debugger. It uses a heuristic to find
+// out: when using dlv, it starts a debugserver executable (which is part of
+// lldb), and the debuggee becomes a child process of that. So if the name of
+// our parent process is "debugserver", we run under a debugger. This works even
+// if the parent process used to be the shell and you then attach to the running
+// executable.
+//
+// On Mac this works with VS Code, with the Jetbrains Goland IDE, and when using
+// dlv attach in a terminal. I have not been able to verify that it works on
+// other platforms, it may have to be adapted there.
+func isDebuggerAttached() bool {
+	process, err := ps.FindProcess(os.Getppid())
+	if err != nil {
+		return false
+	}
+	return process.Executable() == "debugserver"
 }

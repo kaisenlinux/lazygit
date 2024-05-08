@@ -8,7 +8,7 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
 	"github.com/jesseduffield/lazygit/pkg/gui/presentation"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
-	"github.com/jesseduffield/lazygit/pkg/utils"
+	"github.com/samber/lo"
 )
 
 type SubCommitsContext struct {
@@ -36,7 +36,7 @@ func NewSubCommitsContext(
 		limitCommits: true,
 	}
 
-	getDisplayStrings := func(startIdx int, length int) [][]string {
+	getDisplayStrings := func(startIdx int, endIdx int) [][]string {
 		// This can happen if a sub-commits view is asked to be rerendered while
 		// it is invisble; for example when switching screen modes, which
 		// rerenders all views.
@@ -55,13 +55,13 @@ func NewSubCommitsContext(
 		if viewModel.GetShowBranchHeads() {
 			branches = c.Model().Branches
 		}
-		showBranchMarkerForHeadCommit := c.Git().Config.GetRebaseUpdateRefs()
+		hasRebaseUpdateRefsConfig := c.Git().Config.GetRebaseUpdateRefs()
 		return presentation.GetCommitListDisplayStrings(
 			c.Common,
 			c.Model().SubCommits,
 			branches,
 			viewModel.GetRef().RefName(),
-			showBranchMarkerForHeadCommit,
+			hasRebaseUpdateRefsConfig,
 			c.State().GetRepoState().GetScreenMode() != types.SCREEN_NORMAL,
 			c.Modes().CherryPicking.SelectedShaSet(),
 			c.Modes().Diffing.Ref,
@@ -72,11 +72,40 @@ func NewSubCommitsContext(
 			c.UserConfig.Git.ParseEmoji,
 			selectedCommitSha,
 			startIdx,
-			length,
-			shouldShowGraph(c),
+			endIdx,
+			// Don't show the graph in the left/right view; we'd like to, but
+			// it's too complicated:
+			shouldShowGraph(c) && viewModel.GetRefToShowDivergenceFrom() == "",
 			git_commands.NewNullBisectInfo(),
 			false,
 		)
+	}
+
+	getNonModelItems := func() []*NonModelItem {
+		result := []*NonModelItem{}
+		if viewModel.GetRefToShowDivergenceFrom() != "" {
+			_, upstreamIdx, found := lo.FindIndexOf(
+				c.Model().SubCommits, func(c *models.Commit) bool { return c.Divergence == models.DivergenceRight })
+			if !found {
+				upstreamIdx = 0
+			}
+			result = append(result, &NonModelItem{
+				Index:   upstreamIdx,
+				Content: fmt.Sprintf("--- %s ---", c.Tr.DivergenceSectionHeaderRemote),
+			})
+
+			_, localIdx, found := lo.FindIndexOf(
+				c.Model().SubCommits, func(c *models.Commit) bool { return c.Divergence == models.DivergenceLeft })
+			if !found {
+				localIdx = len(c.Model().SubCommits)
+			}
+			result = append(result, &NonModelItem{
+				Index:   localIdx,
+				Content: fmt.Sprintf("--- %s ---", c.Tr.DivergenceSectionHeaderLocal),
+			})
+		}
+
+		return result
 	}
 
 	ctx := &SubCommitsContext{
@@ -86,22 +115,26 @@ func NewSubCommitsContext(
 		DynamicTitleBuilder: NewDynamicTitleBuilder(c.Tr.SubCommitsDynamicTitle),
 		ListContextTrait: &ListContextTrait{
 			Context: NewSimpleContext(NewBaseContext(NewBaseContextOpts{
-				View:       c.Views().SubCommits,
-				WindowName: "branches",
-				Key:        SUB_COMMITS_CONTEXT_KEY,
-				Kind:       types.SIDE_CONTEXT,
-				Focusable:  true,
-				Transient:  true,
+				View:                       c.Views().SubCommits,
+				WindowName:                 "branches",
+				Key:                        SUB_COMMITS_CONTEXT_KEY,
+				Kind:                       types.SIDE_CONTEXT,
+				Focusable:                  true,
+				Transient:                  true,
+				NeedsRerenderOnWidthChange: true,
 			})),
-			list:                    viewModel,
-			getDisplayStrings:       getDisplayStrings,
+			ListRenderer: ListRenderer{
+				list:              viewModel,
+				getDisplayStrings: getDisplayStrings,
+				getNonModelItems:  getNonModelItems,
+			},
 			c:                       c,
 			refreshViewportOnChange: true,
 		},
 	}
 
 	ctx.GetView().SetOnSelectItem(ctx.SearchTrait.onSelectItemWrapper(func(selectedLineIdx int) error {
-		ctx.GetList().SetSelectedLineIdx(selectedLineIdx)
+		ctx.GetList().SetSelection(selectedLineIdx)
 		return ctx.HandleFocus(types.OnFocusOpts{})
 	}))
 
@@ -110,7 +143,8 @@ func NewSubCommitsContext(
 
 type SubCommitsViewModel struct {
 	// name of the ref that the sub-commits are shown for
-	ref types.Ref
+	ref                     types.Ref
+	refToShowDivergenceFrom string
 	*ListViewModel[*models.Commit]
 
 	limitCommits    bool
@@ -125,21 +159,20 @@ func (self *SubCommitsViewModel) GetRef() types.Ref {
 	return self.ref
 }
 
+func (self *SubCommitsViewModel) SetRefToShowDivergenceFrom(ref string) {
+	self.refToShowDivergenceFrom = ref
+}
+
+func (self *SubCommitsViewModel) GetRefToShowDivergenceFrom() string {
+	return self.refToShowDivergenceFrom
+}
+
 func (self *SubCommitsViewModel) SetShowBranchHeads(value bool) {
 	self.showBranchHeads = value
 }
 
 func (self *SubCommitsViewModel) GetShowBranchHeads() bool {
 	return self.showBranchHeads
-}
-
-func (self *SubCommitsContext) GetSelectedItemId() string {
-	item := self.GetSelected()
-	if item == nil {
-		return ""
-	}
-
-	return item.ID()
 }
 
 func (self *SubCommitsContext) CanRebase() bool {
@@ -156,10 +189,6 @@ func (self *SubCommitsContext) GetSelectedRef() types.Ref {
 
 func (self *SubCommitsContext) GetCommits() []*models.Commit {
 	return self.getModel()
-}
-
-func (self *SubCommitsContext) Title() string {
-	return fmt.Sprintf(self.c.Tr.SubCommitsDynamicTitle, utils.TruncateWithEllipsis(self.ref.RefName(), 50))
 }
 
 func (self *SubCommitsContext) SetLimitCommits(value bool) {

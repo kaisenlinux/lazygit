@@ -48,7 +48,7 @@ func (self *ReposHelper) EnterSubmodule(submodule *models.SubmoduleConfig) error
 	}
 	self.c.State().GetRepoPathStack().Push(wd)
 
-	return self.DispatchSwitchToRepo(submodule.Path, context.NO_CONTEXT)
+	return self.DispatchSwitchToRepo(submodule.FullPath(), context.NO_CONTEXT)
 }
 
 func (self *ReposHelper) getCurrentBranch(path string) string {
@@ -172,11 +172,6 @@ func (self *ReposHelper) DispatchSwitchTo(path string, errMsg string, contextKey
 		if err := self.recordDirectoryHelper.RecordCurrentDirectory(); err != nil {
 			return err
 		}
-
-		// these two mutexes are used by our background goroutines (triggered via `self.goEvery`. We don't want to
-		// switch to a repo while one of these goroutines is in the process of updating something
-		self.c.Mutexes().SyncMutex.Lock()
-		defer self.c.Mutexes().SyncMutex.Unlock()
 
 		self.c.Mutexes().RefreshingFilesMutex.Lock()
 		defer self.c.Mutexes().RefreshingFilesMutex.Unlock()

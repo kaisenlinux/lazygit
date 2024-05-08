@@ -4,17 +4,13 @@ import (
 	"fmt"
 
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
-	"github.com/jesseduffield/lazygit/pkg/utils"
 )
 
 type ListContextTrait struct {
 	types.Context
+	ListRenderer
 
-	c                 *ContextCommon
-	list              types.IList
-	getDisplayStrings func(startIdx int, length int) [][]string
-	// Alignment for each column. If nil, the default is left alignment
-	getColumnAlignments func() []utils.Alignment
+	c *ContextCommon
 	// Some contexts, like the commit context, will highlight the path from the selected commit
 	// to its parents, because it's ambiguous otherwise. For these, we need to refresh the viewport
 	// so that we show the highlighted path.
@@ -26,16 +22,32 @@ type ListContextTrait struct {
 
 func (self *ListContextTrait) IsListContext() {}
 
-func (self *ListContextTrait) GetList() types.IList {
-	return self.list
-}
-
 func (self *ListContextTrait) FocusLine() {
 	// Doing this at the end of the layout function because we need the view to be
 	// resized before we focus the line, otherwise if we're in accordion mode
 	// the view could be squashed and won't how to adjust the cursor/origin
 	self.c.AfterLayout(func() error {
-		self.GetViewTrait().FocusPoint(self.list.GetSelectedLineIdx())
+		oldOrigin, _ := self.GetViewTrait().ViewPortYBounds()
+
+		self.GetViewTrait().FocusPoint(
+			self.ModelIndexToViewIndex(self.list.GetSelectedLineIdx()))
+
+		selectRangeIndex, isSelectingRange := self.list.GetRangeStartIdx()
+		if isSelectingRange {
+			selectRangeIndex = self.ModelIndexToViewIndex(selectRangeIndex)
+			self.GetViewTrait().SetRangeSelectStart(selectRangeIndex)
+		} else {
+			self.GetViewTrait().CancelRangeSelect()
+		}
+
+		// If FocusPoint() caused the view to scroll (because the selected line
+		// was out of view before), we need to rerender the view port again.
+		// This can happen when pressing , or . to scroll by pages, or < or > to
+		// jump to the top or bottom.
+		newOrigin, _ := self.GetViewTrait().ViewPortYBounds()
+		if self.refreshViewportOnChange && oldOrigin != newOrigin {
+			self.refreshViewport()
+		}
 		return nil
 	})
 
@@ -48,8 +60,7 @@ func (self *ListContextTrait) FocusLine() {
 
 func (self *ListContextTrait) refreshViewport() {
 	startIdx, length := self.GetViewTrait().ViewPortYBounds()
-	displayStrings := self.getDisplayStrings(startIdx, length)
-	content := utils.RenderDisplayStrings(displayStrings, nil)
+	content := self.renderLines(startIdx, startIdx+length)
 	self.GetViewTrait().SetViewPortContent(content)
 }
 
@@ -81,15 +92,8 @@ func (self *ListContextTrait) HandleFocusLost(opts types.OnFocusLostOpts) error 
 
 // OnFocus assumes that the content of the context has already been rendered to the view. OnRender is the function which actually renders the content to the view
 func (self *ListContextTrait) HandleRender() error {
-	self.list.RefreshSelectedIdx()
-	var columnAlignments []utils.Alignment
-	if self.getColumnAlignments != nil {
-		columnAlignments = self.getColumnAlignments()
-	}
-	content := utils.RenderDisplayStrings(
-		self.getDisplayStrings(0, self.list.Len()),
-		columnAlignments,
-	)
+	self.list.ClampSelection()
+	content := self.renderLines(-1, -1)
 	self.GetViewTrait().SetContent(content)
 	self.c.Render()
 	self.setFooter()
@@ -98,6 +102,24 @@ func (self *ListContextTrait) HandleRender() error {
 }
 
 func (self *ListContextTrait) OnSearchSelect(selectedLineIdx int) error {
-	self.GetList().SetSelectedLineIdx(selectedLineIdx)
+	self.GetList().SetSelection(selectedLineIdx)
 	return self.HandleFocus(types.OnFocusOpts{})
+}
+
+func (self *ListContextTrait) IsItemVisible(item types.HasUrn) bool {
+	startIdx, length := self.GetViewTrait().ViewPortYBounds()
+	selectionStart := self.ViewIndexToModelIndex(startIdx)
+	selectionEnd := self.ViewIndexToModelIndex(startIdx + length)
+	for i := selectionStart; i < selectionEnd; i++ {
+		iterItem := self.GetList().GetItem(i)
+		if iterItem != nil && iterItem.URN() == item.URN() {
+			return true
+		}
+	}
+	return false
+}
+
+// By default, list contexts supporta range select
+func (self *ListContextTrait) RangeSelectEnabled() bool {
+	return true
 }

@@ -19,6 +19,7 @@ type ModeHelper struct {
 	cherryPickHelper     *CherryPickHelper
 	mergeAndRebaseHelper *MergeAndRebaseHelper
 	bisectHelper         *BisectHelper
+	suppressRebasingMode bool
 }
 
 func NewModeHelper(
@@ -71,11 +72,12 @@ func (self *ModeHelper) Statuses() []ModeStatus {
 		{
 			IsActive: self.c.Modes().Filtering.Active,
 			Description: func() string {
+				filterContent := lo.Ternary(self.c.Modes().Filtering.GetPath() != "", self.c.Modes().Filtering.GetPath(), self.c.Modes().Filtering.GetAuthor())
 				return self.withResetButton(
 					fmt.Sprintf(
 						"%s '%s'",
 						self.c.Tr.FilteringBy,
-						self.c.Modes().Filtering.GetPath(),
+						filterContent,
 					),
 					style.FgRed,
 				)
@@ -114,7 +116,7 @@ func (self *ModeHelper) Statuses() []ModeStatus {
 		},
 		{
 			IsActive: func() bool {
-				return self.c.Git().Status.WorkingTreeState() != enums.REBASE_MODE_NONE
+				return !self.suppressRebasingMode && self.c.Git().Status.WorkingTreeState() != enums.REBASE_MODE_NONE
 			},
 			Description: func() string {
 				workingTreeState := self.c.Git().Status.WorkingTreeState()
@@ -167,4 +169,8 @@ func (self *ModeHelper) ClearFiltering() error {
 	}
 
 	return self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.COMMITS}})
+}
+
+func (self *ModeHelper) SetSuppressRebasingMode(value bool) {
+	self.suppressRebasingMode = value
 }

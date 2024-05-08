@@ -1,6 +1,8 @@
 package filetree
 
 import (
+	"path"
+
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
 	"github.com/samber/lo"
@@ -37,6 +39,10 @@ var _ types.ListItem = &Node[models.File]{}
 
 func (self *Node[T]) IsFile() bool {
 	return self.File != nil
+}
+
+func (self *Node[T]) GetFile() *T {
+	return self.File
 }
 
 func (self *Node[T]) GetPath() string {
@@ -299,4 +305,8 @@ func (self *Node[T]) ID() string {
 
 func (self *Node[T]) Description() string {
 	return self.GetPath()
+}
+
+func (self *Node[T]) Name() string {
+	return path.Base(self.Path)
 }

@@ -13,46 +13,61 @@ import (
 
 type WorktreesController struct {
 	baseController
+	*ListControllerTrait[*models.Worktree]
 	c *ControllerCommon
 }
 
 var _ types.IController = &WorktreesController{}
 
 func NewWorktreesController(
-	common *ControllerCommon,
+	c *ControllerCommon,
 ) *WorktreesController {
 	return &WorktreesController{
 		baseController: baseController{},
-		c:              common,
+		ListControllerTrait: NewListControllerTrait[*models.Worktree](
+			c,
+			c.Contexts().Worktrees,
+			c.Contexts().Worktrees.GetSelected,
+			c.Contexts().Worktrees.GetSelectedItems,
+		),
+		c: c,
 	}
 }
 
 func (self *WorktreesController) GetKeybindings(opts types.KeybindingsOpts) []*types.Binding {
 	bindings := []*types.Binding{
 		{
-			Key:         opts.GetKey(opts.Config.Universal.New),
-			Handler:     self.add,
-			Description: self.c.Tr.CreateWorktree,
+			Key:             opts.GetKey(opts.Config.Universal.New),
+			Handler:         self.add,
+			Description:     self.c.Tr.NewWorktree,
+			DisplayOnScreen: true,
 		},
 		{
-			Key:         opts.GetKey(opts.Config.Universal.Select),
-			Handler:     self.checkSelected(self.enter),
-			Description: self.c.Tr.SwitchToWorktree,
+			Key:               opts.GetKey(opts.Config.Universal.Select),
+			Handler:           self.withItem(self.enter),
+			GetDisabledReason: self.require(self.singleItemSelected()),
+			Description:       self.c.Tr.Switch,
+			Tooltip:           self.c.Tr.SwitchToWorktreeTooltip,
+			DisplayOnScreen:   true,
 		},
 		{
-			Key:         opts.GetKey(opts.Config.Universal.Confirm),
-			Handler:     self.checkSelected(self.enter),
-			Description: self.c.Tr.SwitchToWorktree,
+			Key:               opts.GetKey(opts.Config.Universal.Confirm),
+			Handler:           self.withItem(self.enter),
+			GetDisabledReason: self.require(self.singleItemSelected()),
 		},
 		{
-			Key:         opts.GetKey(opts.Config.Universal.OpenFile),
-			Handler:     self.checkSelected(self.open),
-			Description: self.c.Tr.OpenInEditor,
+			Key:               opts.GetKey(opts.Config.Universal.OpenFile),
+			Handler:           self.withItem(self.open),
+			GetDisabledReason: self.require(self.singleItemSelected()),
+			Description:       self.c.Tr.OpenInEditor,
 		},
 		{
-			Key:         opts.GetKey(opts.Config.Universal.Remove),
-			Handler:     self.checkSelected(self.remove),
-			Description: self.c.Tr.RemoveWorktree,
+			Key:               opts.GetKey(opts.Config.Universal.Remove),
+			Handler:           self.withItem(self.remove),
+			GetDisabledReason: self.require(self.singleItemSelected()),
+			Description:       self.c.Tr.Remove,
+			Tooltip:           self.c.Tr.RemoveWorktreeTooltip,
+			DisplayOnScreen:   true,
 		},
 	}
 
@@ -113,7 +128,7 @@ func (self *WorktreesController) remove(worktree *models.Worktree) error {
 }
 
 func (self *WorktreesController) GetOnClick() func() error {
-	return self.checkSelected(self.enter)
+	return self.withItemGraceful(self.enter)
 }
 
 func (self *WorktreesController) enter(worktree *models.Worktree) error {
@@ -122,21 +137,6 @@ func (self *WorktreesController) enter(worktree *models.Worktree) error {
 
 func (self *WorktreesController) open(worktree *models.Worktree) error {
 	return self.c.Helpers().Files.OpenDirInEditor(worktree.Path)
-}
-
-func (self *WorktreesController) checkSelected(callback func(worktree *models.Worktree) error) func() error {
-	return func() error {
-		worktree := self.context().GetSelected()
-		if worktree == nil {
-			return nil
-		}
-
-		return callback(worktree)
-	}
-}
-
-func (self *WorktreesController) Context() types.Context {
-	return self.context()
 }
 
 func (self *WorktreesController) context() *context.WorktreesContext {

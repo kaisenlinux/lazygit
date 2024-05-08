@@ -57,6 +57,18 @@ func (self *PatchExplorerController) GetKeybindings(opts types.KeybindingsOpts) 
 			Handler: self.withRenderAndFocus(self.HandleNextLine),
 		},
 		{
+			Tag:         "navigation",
+			Key:         opts.GetKey(opts.Config.Universal.RangeSelectUp),
+			Handler:     self.withRenderAndFocus(self.HandlePrevLineRange),
+			Description: self.c.Tr.RangeSelectUp,
+		},
+		{
+			Tag:         "navigation",
+			Key:         opts.GetKey(opts.Config.Universal.RangeSelectDown),
+			Handler:     self.withRenderAndFocus(self.HandleNextLineRange),
+			Description: self.c.Tr.RangeSelectDown,
+		},
+		{
 			Key:         opts.GetKey(opts.Config.Universal.PrevBlock),
 			Handler:     self.withRenderAndFocus(self.HandlePrevHunk),
 			Description: self.c.Tr.PrevHunk,
@@ -75,19 +87,16 @@ func (self *PatchExplorerController) GetKeybindings(opts types.KeybindingsOpts) 
 			Handler: self.withRenderAndFocus(self.HandleNextHunk),
 		},
 		{
-			Key:         opts.GetKey(opts.Config.Main.ToggleDragSelect),
+			Key:         opts.GetKey(opts.Config.Universal.ToggleRangeSelect),
 			Handler:     self.withRenderAndFocus(self.HandleToggleSelectRange),
-			Description: self.c.Tr.ToggleDragSelect,
+			Description: self.c.Tr.ToggleRangeSelect,
 		},
 		{
-			Key:         opts.GetKey(opts.Config.Main.ToggleDragSelectAlt),
-			Handler:     self.withRenderAndFocus(self.HandleToggleSelectRange),
-			Description: self.c.Tr.ToggleDragSelect,
-		},
-		{
-			Key:         opts.GetKey(opts.Config.Main.ToggleSelectHunk),
-			Handler:     self.withRenderAndFocus(self.HandleToggleSelectHunk),
-			Description: self.c.Tr.ToggleSelectHunk,
+			Key:             opts.GetKey(opts.Config.Main.ToggleSelectHunk),
+			Handler:         self.withRenderAndFocus(self.HandleToggleSelectHunk),
+			Description:     self.c.Tr.ToggleSelectHunk,
+			Tooltip:         self.c.Tr.ToggleSelectHunkTooltip,
+			DisplayOnScreen: true,
 		},
 		{
 			Tag:         "navigation",
@@ -126,7 +135,7 @@ func (self *PatchExplorerController) GetKeybindings(opts types.KeybindingsOpts) 
 		{
 			Key:         opts.GetKey(opts.Config.Universal.CopyToClipboard),
 			Handler:     self.withLock(self.CopySelectedToClipboard),
-			Description: self.c.Tr.CopySelectedTexToClipboard,
+			Description: self.c.Tr.CopySelectedTextToClipboard,
 		},
 	}
 }
@@ -159,13 +168,41 @@ func (self *PatchExplorerController) GetMouseKeybindings(opts types.KeybindingsO
 }
 
 func (self *PatchExplorerController) HandlePrevLine() error {
+	before := self.context.GetState().GetSelectedLineIdx()
 	self.context.GetState().CycleSelection(false)
+	after := self.context.GetState().GetSelectedLineIdx()
+
+	if self.context.GetState().SelectingLine() {
+		checkScrollUp(self.context.GetViewTrait(), self.c.UserConfig, before, after)
+	}
 
 	return nil
 }
 
 func (self *PatchExplorerController) HandleNextLine() error {
+	before := self.context.GetState().GetSelectedLineIdx()
 	self.context.GetState().CycleSelection(true)
+	after := self.context.GetState().GetSelectedLineIdx()
+
+	if self.context.GetState().SelectingLine() {
+		checkScrollDown(self.context.GetViewTrait(), self.c.UserConfig, before, after)
+	}
+
+	return nil
+}
+
+func (self *PatchExplorerController) HandlePrevLineRange() error {
+	s := self.context.GetState()
+
+	s.CycleRange(false)
+
+	return nil
+}
+
+func (self *PatchExplorerController) HandleNextLineRange() error {
+	s := self.context.GetState()
+
+	s.CycleRange(true)
 
 	return nil
 }
@@ -183,7 +220,7 @@ func (self *PatchExplorerController) HandleNextHunk() error {
 }
 
 func (self *PatchExplorerController) HandleToggleSelectRange() error {
-	self.context.GetState().ToggleSelectRange()
+	self.context.GetState().ToggleStickySelectRange()
 
 	return nil
 }
@@ -239,7 +276,7 @@ func (self *PatchExplorerController) HandleMouseDown() error {
 }
 
 func (self *PatchExplorerController) HandleMouseDrag() error {
-	self.context.GetState().SelectLine(self.context.GetViewTrait().SelectedLineIdx())
+	self.context.GetState().DragSelectLine(self.context.GetViewTrait().SelectedLineIdx())
 
 	return nil
 }

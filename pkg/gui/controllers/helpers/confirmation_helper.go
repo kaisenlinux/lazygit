@@ -141,13 +141,8 @@ func (self *ConfirmationHelper) getPopupPanelWidth() int {
 }
 
 func (self *ConfirmationHelper) prepareConfirmationPanel(
-	ctx goContext.Context,
 	opts types.ConfirmOpts,
 ) error {
-	self.c.Views().Confirmation.HasLoader = opts.HasLoader
-	if opts.HasLoader {
-		self.c.GocuiGui().StartTicking(ctx)
-	}
 	self.c.Views().Confirmation.Title = opts.Title
 	// for now we do not support wrapping in our editor
 	self.c.Views().Confirmation.Wrap = !opts.Editable
@@ -181,7 +176,7 @@ func (self *ConfirmationHelper) CreatePopupPanel(ctx goContext.Context, opts typ
 	self.c.Mutexes().PopupMutex.Lock()
 	defer self.c.Mutexes().PopupMutex.Unlock()
 
-	ctx, cancel := goContext.WithCancel(ctx)
+	_, cancel := goContext.WithCancel(ctx)
 
 	// we don't allow interruptions of non-loader popups in case we get stuck somehow
 	// e.g. a credentials popup never gets its required user input so a process hangs
@@ -198,11 +193,9 @@ func (self *ConfirmationHelper) CreatePopupPanel(ctx goContext.Context, opts typ
 	self.clearConfirmationViewKeyBindings()
 
 	err := self.prepareConfirmationPanel(
-		ctx,
 		types.ConfirmOpts{
 			Title:               opts.Title,
 			Prompt:              opts.Prompt,
-			HasLoader:           opts.HasLoader,
 			FindSuggestionsFunc: opts.FindSuggestionsFunc,
 			Editable:            opts.Editable,
 			Mask:                opts.Mask,
@@ -333,7 +326,7 @@ func (self *ConfirmationHelper) resizeMenu() {
 	tooltip := ""
 	selectedItem := self.c.Contexts().Menu.GetSelected()
 	if selectedItem != nil {
-		tooltip = selectedItem.Tooltip
+		tooltip = self.TooltipForMenuItem(selectedItem)
 	}
 	tooltipHeight := getMessageHeight(true, tooltip, panelWidth) + 2 // plus 2 for the frame
 	_, _ = self.c.GocuiGui().SetView(self.c.Views().Tooltip.Name(), x0, tooltipTop, x1, tooltipTop+tooltipHeight-1, 0)
@@ -381,4 +374,15 @@ func (self *ConfirmationHelper) IsPopupPanel(viewName string) bool {
 
 func (self *ConfirmationHelper) IsPopupPanelFocused() bool {
 	return self.IsPopupPanel(self.c.CurrentContext().GetViewName())
+}
+
+func (self *ConfirmationHelper) TooltipForMenuItem(menuItem *types.MenuItem) string {
+	tooltip := menuItem.Tooltip
+	if menuItem.DisabledReason != nil {
+		if tooltip != "" {
+			tooltip += "\n\n"
+		}
+		tooltip += style.FgRed.Sprintf(self.c.Tr.DisabledMenuItemPrefix) + menuItem.DisabledReason.Text
+	}
+	return tooltip
 }

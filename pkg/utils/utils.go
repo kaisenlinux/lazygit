@@ -24,12 +24,14 @@ func GetProjectRoot() string {
 	return strings.Split(dir, "lazygit")[0] + "lazygit"
 }
 
+// The duration between two frames of the loader animation in milliseconds
+const LoaderAnimationInterval = 50
+
 // Loader dumps a string to be displayed as a loader
-func Loader() string {
+func Loader(now time.Time) string {
 	characters := "|/-\\"
-	now := time.Now()
-	nanos := now.UnixNano()
-	index := nanos / 50000000 % int64(len(characters))
+	milliseconds := now.UnixMilli()
+	index := milliseconds / LoaderAnimationInterval % int64(len(characters))
 	return characters[index : index+1]
 }
 
@@ -46,6 +48,13 @@ func Max(x, y int) int {
 		return x
 	}
 	return y
+}
+
+func SortRange(x int, y int) (int, int) {
+	if x < y {
+		return x, y
+	}
+	return y, x
 }
 
 func Clamp(x int, min int, max int) int {

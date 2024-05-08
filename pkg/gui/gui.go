@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 
@@ -40,6 +41,7 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/theme"
 	"github.com/jesseduffield/lazygit/pkg/updates"
 	"github.com/jesseduffield/lazygit/pkg/utils"
+	"github.com/samber/lo"
 	"github.com/sasha-s/go-deadlock"
 	"gopkg.in/ozeidan/fuzzy-patricia.v3/patricia"
 )
@@ -110,6 +112,12 @@ type Gui struct {
 	// lazygit was opened in, or if we'll retain the one we're currently in.
 	RetainOriginalDir bool
 
+	// stores long-running operations associated with items (e.g. when a branch
+	// is being pushed). At the moment the rule is to use an item operation when
+	// we need to talk to the remote.
+	itemOperations      map[string]types.ItemOperation
+	itemOperationsMutex *deadlock.Mutex
+
 	PrevLayout PrevLayout
 
 	// this is the initial dir we are in upon opening lazygit. We hold onto this
@@ -178,6 +186,27 @@ func (self *StateAccessor) GetRetainOriginalDir() bool {
 
 func (self *StateAccessor) SetRetainOriginalDir(value bool) {
 	self.gui.RetainOriginalDir = value
+}
+
+func (self *StateAccessor) GetItemOperation(item types.HasUrn) types.ItemOperation {
+	self.gui.itemOperationsMutex.Lock()
+	defer self.gui.itemOperationsMutex.Unlock()
+
+	return self.gui.itemOperations[item.URN()]
+}
+
+func (self *StateAccessor) SetItemOperation(item types.HasUrn, operation types.ItemOperation) {
+	self.gui.itemOperationsMutex.Lock()
+	defer self.gui.itemOperationsMutex.Unlock()
+
+	self.gui.itemOperations[item.URN()] = operation
+}
+
+func (self *StateAccessor) ClearItemOperation(item types.HasUrn) {
+	self.gui.itemOperationsMutex.Lock()
+	defer self.gui.itemOperationsMutex.Unlock()
+
+	delete(self.gui.itemOperations, item.URN())
 }
 
 // we keep track of some stuff from one render to the next to see if certain
@@ -273,7 +302,6 @@ func (gui *Gui) onNewRepo(startArgs appTypes.StartArgs, contextKey types.Context
 		gui.gitVersion,
 		gui.os,
 		git_config.NewStdCachedGitConfig(gui.Log),
-		gui.Mutexes.SyncMutex,
 	)
 	if err != nil {
 		return err
@@ -303,7 +331,7 @@ func (gui *Gui) onNewRepo(startArgs appTypes.StartArgs, contextKey types.Context
 		// because e.g. with worktrees, we'll show the current worktree at the top of the list.
 		listContext, ok := contextToPush.(types.IListContext)
 		if ok {
-			listContext.GetList().SetSelectedLineIdx(0)
+			listContext.GetList().SetSelection(0)
 		}
 	}
 
@@ -360,7 +388,7 @@ func (gui *Gui) resetState(startArgs appTypes.StartArgs) types.Context {
 			Authors:               map[string]*models.Author{},
 		},
 		Modes: &types.Modes{
-			Filtering:        filtering.New(startArgs.FilterPath),
+			Filtering:        filtering.New(startArgs.FilterPath, ""),
 			CherryPicking:    cherrypicking.New(),
 			Diffing:          diffing.New(),
 			MarkedBaseCommit: marked_base_commit.New(),
@@ -441,6 +469,7 @@ func NewGui(
 	updater *updates.Updater,
 	showRecentRepos bool,
 	initialDir string,
+	test integrationTypes.IntegrationTest,
 ) (*Gui, error) {
 	gui := &Gui{
 		Common:               cmn,
@@ -463,7 +492,6 @@ func NewGui(
 			RefreshingFilesMutex:    &deadlock.Mutex{},
 			RefreshingBranchesMutex: &deadlock.Mutex{},
 			RefreshingStatusMutex:   &deadlock.Mutex{},
-			SyncMutex:               &deadlock.Mutex{},
 			LocalCommitsMutex:       &deadlock.Mutex{},
 			SubCommitsMutex:         &deadlock.Mutex{},
 			AuthorsMutex:            &deadlock.Mutex{},
@@ -473,6 +501,9 @@ func NewGui(
 		},
 		InitialDir:       initialDir,
 		afterLayoutFuncs: make(chan func() error, 1000),
+
+		itemOperations:      make(map[string]types.ItemOperation),
+		itemOperationsMutex: &deadlock.Mutex{},
 	}
 
 	gui.PopupHandler = popup.NewPopupHandler(
@@ -485,9 +516,11 @@ func NewGui(
 		func() types.Context { return gui.State.ContextMgr.Current() },
 		gui.createMenu,
 		func(message string, f func(gocui.Task) error) { gui.helpers.AppStatus.WithWaitingStatus(message, f) },
-		func(message string) { gui.helpers.AppStatus.Toast(message) },
+		func(message string, f func() error) {
+			gui.helpers.AppStatus.WithWaitingStatusSync(message, f)
+		},
+		func(message string, kind types.ToastKind) { gui.helpers.AppStatus.Toast(message, kind) },
 		func() string { return gui.Views.Confirmation.TextArea.GetContent() },
-		func(f func(gocui.Task)) { gui.c.OnWorker(f) },
 		func() bool { return gui.c.InDemo() },
 	)
 
@@ -624,7 +657,10 @@ func (gui *Gui) Run(startArgs appTypes.StartArgs) error {
 	deadlock.Opts.LogBuf = utils.NewOnceWriter(os.Stderr, func() {
 		gui.g.Close()
 	})
-	deadlock.Opts.Disable = !gui.Debug
+	// disable deadlock reporting if we're not running in debug mode, or if
+	// we're debugging an integration test. In this latter case, stopping at
+	// breakpoints and stepping through code can easily take more than 30s.
+	deadlock.Opts.Disable = !gui.Debug || os.Getenv(components.WAIT_FOR_DEBUGGER_ENV_VAR) == ""
 
 	if err := gui.Config.ReloadUserConfig(); err != nil {
 		return nil
@@ -788,7 +824,7 @@ func (gui *Gui) runSubprocess(cmdObj oscommands.ICmdObj) error { //nolint:unpara
 	subprocess.Stderr = io.Discard
 	subprocess.Stdin = nil
 
-	if gui.Config.GetUserConfig().PromptToReturnFromSubprocess {
+	if gui.integrationTest == nil && (gui.Config.GetUserConfig().PromptToReturnFromSubprocess || err != nil) {
 		fmt.Fprintf(os.Stdout, "\n%s", style.FgGreen.Sprint(gui.Tr.PressEnterToReturn))
 
 		// scan to buffer to prevent run unintentional operations when TUI resumes.
@@ -833,6 +869,72 @@ func (gui *Gui) showIntroPopupMessage() {
 			HandleClose:   onConfirm,
 		})
 	})
+}
+
+func (gui *Gui) showBreakingChangesMessage() {
+	_, err := types.ParseVersionNumber(gui.Config.GetVersion())
+	if err != nil {
+		// We don't have a parseable version, so we'll assume it's a developer
+		// build, or a build from HEAD with a version such as 0.40.0-g1234567;
+		// in these cases we don't show release notes.
+		return
+	}
+
+	last := &types.VersionNumber{}
+	lastVersionStr := gui.c.GetAppState().LastVersion
+	// If there's no saved last version, we show all release notes. This is for
+	// people upgrading from a version before we started to save lastVersion.
+	// First time new users won't see the release notes because we show them the
+	// intro popup instead.
+	if lastVersionStr != "" {
+		last, err = types.ParseVersionNumber(lastVersionStr)
+		if err != nil {
+			// The last version was a developer build, so don't show release
+			// notes in this case either.
+			return
+		}
+	}
+
+	// Now collect all release notes texts for versions newer than lastVersion.
+	// We don't need to bother checking the current version here, because we
+	// can't possibly have texts for versions newer than current.
+	type versionAndText struct {
+		version *types.VersionNumber
+		text    string
+	}
+	texts := []versionAndText{}
+	for versionStr, text := range gui.Tr.BreakingChangesByVersion {
+		v, err := types.ParseVersionNumber(versionStr)
+		if err != nil {
+			// Ignore bogus entries in the BreakingChanges map
+			continue
+		}
+		if last.IsOlderThan(v) {
+			texts = append(texts, versionAndText{version: v, text: text})
+		}
+	}
+
+	if len(texts) > 0 {
+		sort.Slice(texts, func(i, j int) bool {
+			return texts[i].version.IsOlderThan(texts[j].version)
+		})
+		message := strings.Join(lo.Map(texts, func(t versionAndText, _ int) string { return t.text }), "\n")
+
+		gui.waitForIntro.Add(1)
+		gui.c.OnUIThread(func() error {
+			onConfirm := func() error {
+				gui.waitForIntro.Done()
+				return nil
+			}
+
+			return gui.c.Confirm(types.ConfirmOpts{
+				Title:         gui.Tr.BreakingChangesTitle,
+				Prompt:        gui.Tr.BreakingChangesMessage + "\n\n" + message,
+				HandleConfirm: onConfirm,
+				HandleClose:   onConfirm,
+			})
+		})
+	}
 }
 
 // setColorScheme sets the color scheme for the app based on the user config

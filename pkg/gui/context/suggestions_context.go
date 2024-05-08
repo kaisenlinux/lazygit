@@ -36,7 +36,7 @@ func NewSuggestionsContext(
 		return state.Suggestions
 	}
 
-	getDisplayStrings := func(startIdx int, length int) [][]string {
+	getDisplayStrings := func(_ int, _ int) [][]string {
 		return presentation.GetSuggestionListDisplayStrings(state.Suggestions)
 	}
 
@@ -54,25 +54,18 @@ func NewSuggestionsContext(
 				Focusable:             true,
 				HasUncontrolledBounds: true,
 			})),
-			list:              viewModel,
-			getDisplayStrings: getDisplayStrings,
-			c:                 c,
+			ListRenderer: ListRenderer{
+				list:              viewModel,
+				getDisplayStrings: getDisplayStrings,
+			},
+			c: c,
 		},
 	}
 }
 
-func (self *SuggestionsContext) GetSelectedItemId() string {
-	item := self.GetSelected()
-	if item == nil {
-		return ""
-	}
-
-	return item.Value
-}
-
 func (self *SuggestionsContext) SetSuggestions(suggestions []*types.Suggestion) {
 	self.State.Suggestions = suggestions
-	self.SetSelectedLineIdx(0)
+	self.SetSelection(0)
 	self.c.ResetViewOrigin(self.GetView())
 	_ = self.HandleRender()
 }
@@ -87,4 +80,9 @@ func (self *SuggestionsContext) RefreshSuggestions() {
 			return func() {}
 		}
 	})
+}
+
+// There is currently no need to use range-select in the suggestions view so we're disabling it.
+func (self *SuggestionsContext) RangeSelectEnabled() bool {
+	return false
 }

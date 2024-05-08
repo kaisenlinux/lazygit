@@ -23,6 +23,7 @@ type IntegrationTest interface {
 // this is the interface through which our integration tests interact with the lazygit gui
 type GuiDriver interface {
 	PressKey(string)
+	Click(int, int)
 	Keys() config.KeybindingConfig
 	CurrentContext() types.Context
 	ContextForView(viewName string) types.Context
@@ -42,4 +43,7 @@ type GuiDriver interface {
 	View(viewName string) *gocui.View
 	SetCaption(caption string)
 	SetCaptionPrefix(prefix string)
+	// Pop the next toast that was displayed; returns nil if there was none
+	NextToast() *string
+	CheckAllToastsAcknowledged()
 }

@@ -3,10 +3,14 @@ package components
 import (
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"time"
+
+	"github.com/jesseduffield/lazygit/pkg/utils"
 )
 
 // this is for running shell commands, mostly for the sake of setting up the repo
@@ -15,17 +19,27 @@ import (
 type Shell struct {
 	// working directory the shell is invoked in
 	dir string
+	// passed into each command
+	env []string
+
 	// when running the shell outside the gui we can directly panic on failure,
 	// but inside the gui we need to close the gui before panicking
 	fail func(string)
+
+	randomFileContentIndex int
 }
 
-func NewShell(dir string, fail func(string)) *Shell {
-	return &Shell{dir: dir, fail: fail}
+func NewShell(dir string, env []string, fail func(string)) *Shell {
+	return &Shell{dir: dir, env: env, fail: fail}
 }
 
 func (self *Shell) RunCommand(args []string) *Shell {
-	output, err := self.runCommandWithOutput(args)
+	return self.RunCommandWithEnv(args, []string{})
+}
+
+// Run a command with additional environment variables set
+func (self *Shell) RunCommandWithEnv(args []string, env []string) *Shell {
+	output, err := self.runCommandWithOutputAndEnv(args, env)
 	if err != nil {
 		self.fail(fmt.Sprintf("error running command: %v\n%s", args, output))
 	}
@@ -43,8 +57,12 @@ func (self *Shell) RunCommandExpectError(args []string) *Shell {
 }
 
 func (self *Shell) runCommandWithOutput(args []string) (string, error) {
+	return self.runCommandWithOutputAndEnv(args, []string{})
+}
+
+func (self *Shell) runCommandWithOutputAndEnv(args []string, env []string) (string, error) {
 	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Env = os.Environ()
+	cmd.Env = append(self.env, env...)
 	cmd.Dir = self.dir
 
 	output, err := cmd.CombinedOutput()
@@ -122,6 +140,10 @@ func (self *Shell) NewBranch(name string) *Shell {
 	return self.RunCommand([]string{"git", "checkout", "-b", name})
 }
 
+func (self *Shell) NewBranchFrom(name string, from string) *Shell {
+	return self.RunCommand([]string{"git", "checkout", "-b", name, from})
+}
+
 func (self *Shell) Checkout(name string) *Shell {
 	return self.RunCommand([]string{"git", "checkout", name})
 }
@@ -150,6 +172,18 @@ func (self *Shell) EmptyCommit(message string) *Shell {
 	return self.RunCommand([]string{"git", "commit", "--allow-empty", "-m", message})
 }
 
+func (self *Shell) EmptyCommitDaysAgo(message string, daysAgo int) *Shell {
+	return self.RunCommand([]string{"git", "commit", "--allow-empty", "--date", fmt.Sprintf("%d days ago", daysAgo), "-m", message})
+}
+
+func (self *Shell) EmptyCommitWithDate(message string, date string) *Shell {
+	env := []string{
+		"GIT_AUTHOR_DATE=" + date,
+		"GIT_COMMITTER_DATE=" + date,
+	}
+	return self.RunCommandWithEnv([]string{"git", "commit", "--allow-empty", "-m", message}, env)
+}
+
 func (self *Shell) Revert(ref string) *Shell {
 	return self.RunCommand([]string{"git", "revert", ref})
 }
@@ -160,6 +194,10 @@ func (self *Shell) CreateLightweightTag(name string, ref string) *Shell {
 
 func (self *Shell) CreateAnnotatedTag(name string, message string, ref string) *Shell {
 	return self.RunCommand([]string{"git", "tag", "-a", name, "-m", message, ref})
+}
+
+func (self *Shell) PushBranch(upstream, branch string) *Shell {
+	return self.RunCommand([]string{"git", "push", "--set-upstream", upstream, branch})
 }
 
 // convenience method for creating a file and adding it
@@ -217,6 +255,83 @@ func (self *Shell) CreateNCommitsWithRandomMessages(n int) *Shell {
 	return self
 }
 
+// This creates a repo history of commits
+// It uses a branching strategy where each feature branch is directly branched off
+// of the master branch
+// Only to be used in demos
+func (self *Shell) CreateRepoHistory() *Shell {
+	authors := []string{"Yang Wen-li", "Siegfried Kircheis", "Paul Oberstein", "Oscar Reuenthal", "Fredrica Greenhill"}
+
+	numAuthors := 5
+	numBranches := 10
+	numInitialCommits := 20
+	maxCommitsPerBranch := 5
+	// Each commit will happen on a separate day
+	repoStartDaysAgo := 100
+
+	totalCommits := 0
+
+	// Generate commits
+	for i := 0; i < numInitialCommits; i++ {
+		author := authors[i%numAuthors]
+		commitMessage := RandomCommitMessages[totalCommits%len(RandomCommitMessages)]
+
+		self.SetAuthor(author, "")
+		self.EmptyCommitDaysAgo(commitMessage, repoStartDaysAgo-totalCommits)
+		totalCommits++
+	}
+
+	// Generate branches and merges
+	for i := 0; i < numBranches; i++ {
+		// We'll have one author creating all the commits in the branch
+		author := authors[i%numAuthors]
+		branchName := RandomBranchNames[i%len(RandomBranchNames)]
+
+		// Choose a random commit within the last 20 commits on the master branch
+		lastMasterCommit := totalCommits - 1
+		commitOffset := rand.Intn(utils.Min(lastMasterCommit, 5)) + 1
+
+		// Create the feature branch and checkout the chosen commit
+		self.NewBranchFrom(branchName, fmt.Sprintf("master~%d", commitOffset))
+
+		numCommitsInBranch := rand.Intn(maxCommitsPerBranch) + 1
+		for j := 0; j < numCommitsInBranch; j++ {
+			commitMessage := RandomCommitMessages[totalCommits%len(RandomCommitMessages)]
+
+			self.SetAuthor(author, "")
+			self.EmptyCommitDaysAgo(commitMessage, repoStartDaysAgo-totalCommits)
+			totalCommits++
+		}
+
+		self.Checkout("master")
+
+		prevCommitterDate := os.Getenv("GIT_COMMITTER_DATE")
+		prevAuthorDate := os.Getenv("GIT_AUTHOR_DATE")
+
+		commitDate := time.Now().Add(time.Duration(totalCommits-repoStartDaysAgo) * time.Hour * 24)
+		os.Setenv("GIT_COMMITTER_DATE", commitDate.Format(time.RFC3339))
+		os.Setenv("GIT_AUTHOR_DATE", commitDate.Format(time.RFC3339))
+
+		// Merge branch into master
+		self.RunCommand([]string{"git", "merge", "--no-ff", branchName, "-m", fmt.Sprintf("Merge %s into master", branchName)})
+
+		os.Setenv("GIT_COMMITTER_DATE", prevCommitterDate)
+		os.Setenv("GIT_AUTHOR_DATE", prevAuthorDate)
+	}
+
+	return self
+}
+
+// Creates a commit with a random file
+// Only to be used in demos
+func (self *Shell) RandomChangeCommit(message string) *Shell {
+	index := self.randomFileContentIndex
+	self.randomFileContentIndex++
+	randomFileName := fmt.Sprintf("random-%d.go", index)
+	self.CreateFileAndAdd(randomFileName, RandomFileContents[index%len(RandomFileContents)])
+	return self.Commit(message)
+}
+
 func (self *Shell) SetConfig(key string, value string) *Shell {
 	self.RunCommand([]string{"git", "config", "--local", key, value})
 	return self
@@ -230,9 +345,9 @@ func (self *Shell) CloneIntoRemote(name string) *Shell {
 	return self
 }
 
-func (self *Shell) CloneIntoSubmodule(submoduleName string) *Shell {
+func (self *Shell) CloneIntoSubmodule(submoduleName string, submodulePath string) *Shell {
 	self.Clone("other_repo")
-	self.RunCommand([]string{"git", "submodule", "add", "../other_repo", submoduleName})
+	self.RunCommand([]string{"git", "submodule", "add", "--name", submoduleName, "../other_repo", submodulePath})
 
 	return self
 }
@@ -350,10 +465,17 @@ func (self *Shell) CopyFile(source string, destination string) *Shell {
 	return self
 }
 
-// NOTE: this only takes effect before running the test;
-// the test will still run in the original directory
+// The final value passed to Chdir() during setup
+// will be the directory the test is run from.
 func (self *Shell) Chdir(path string) *Shell {
 	self.dir = filepath.Join(self.dir, path)
+
+	return self
+}
+
+func (self *Shell) SetAuthor(authorName string, authorEmail string) *Shell {
+	self.RunCommand([]string{"git", "config", "--local", "user.name", authorName})
+	self.RunCommand([]string{"git", "config", "--local", "user.email", authorEmail})
 
 	return self
 }

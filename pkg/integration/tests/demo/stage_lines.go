@@ -39,7 +39,7 @@ var StageLines = NewIntegrationTest(NewIntegrationTestArgs{
 	Skip:         false,
 	IsDemo:       true,
 	SetupConfig: func(config *config.AppConfig) {
-		config.UserConfig.Gui.NerdFontsVersion = "3"
+		setDefaultDemoConfig(config)
 		config.UserConfig.Gui.ShowFileTree = false
 		config.UserConfig.Gui.ShowCommandLog = false
 	},
@@ -60,7 +60,7 @@ var StageLines = NewIntegrationTest(NewIntegrationTestArgs{
 
 		t.Views().Staging().
 			IsFocused().
-			Press(keys.Main.ToggleDragSelect).
+			Press(keys.Universal.ToggleRangeSelect).
 			PressFast(keys.Universal.NextItem).
 			PressFast(keys.Universal.NextItem).
 			Wait(500).
