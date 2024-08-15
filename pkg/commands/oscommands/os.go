@@ -239,14 +239,13 @@ func (c *OSCommand) PipeCommands(cmdObjs ...ICmdObj) error {
 	wg.Add(len(cmds))
 
 	for _, cmd := range cmds {
-		currentCmd := cmd
 		go utils.Safe(func() {
-			stderr, err := currentCmd.StderrPipe()
+			stderr, err := cmd.StderrPipe()
 			if err != nil {
 				c.Log.Error(err)
 			}
 
-			if err := currentCmd.Start(); err != nil {
+			if err := cmd.Start(); err != nil {
 				c.Log.Error(err)
 			}
 
@@ -256,7 +255,7 @@ func (c *OSCommand) PipeCommands(cmdObjs ...ICmdObj) error {
 				}
 			}
 
-			if err := currentCmd.Wait(); err != nil {
+			if err := cmd.Wait(); err != nil {
 				c.Log.Error(err)
 			}
 
@@ -301,6 +300,23 @@ func (c *OSCommand) CopyToClipboard(str string) error {
 	}
 
 	return clipboard.WriteAll(str)
+}
+
+func (c *OSCommand) PasteFromClipboard() (string, error) {
+	var s string
+	var err error
+	if c.UserConfig.OS.CopyToClipboardCmd != "" {
+		cmdStr := c.UserConfig.OS.ReadFromClipboardCmd
+		s, err = c.Cmd.NewShell(cmdStr).RunWithOutput()
+	} else {
+		s, err = clipboard.ReadAll()
+	}
+
+	if err != nil {
+		return "", err
+	}
+
+	return strings.ReplaceAll(s, "\r\n", "\n"), nil
 }
 
 func (c *OSCommand) RemoveFile(path string) error {

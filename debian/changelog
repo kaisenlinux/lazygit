@@ -1,3 +1,13 @@
+lazygit (0.43.1-1kaisen) kaisen-packages; urgency=medium
+
+  * Import the 0.43.1 release
+  * Update the quilt patch
+  * Bump the Standars-Version
+  * Bump the golang-go version required to build
+  * Drop the i386 arch
+
+ -- Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>  Thu, 15 Aug 2024 16:12:35 +0200
+
 lazygit (0.41.0-1kaisen) kaisen-packages; urgency=medium
 
   * Import the 0.41.0 release

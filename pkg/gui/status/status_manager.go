@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/jesseduffield/gocui"
+	"github.com/jesseduffield/lazygit/pkg/config"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
 	"github.com/jesseduffield/lazygit/pkg/utils"
 	"github.com/samber/lo"
@@ -47,13 +48,12 @@ func NewStatusManager() *StatusManager {
 	return &StatusManager{}
 }
 
-func (self *StatusManager) WithWaitingStatus(message string, renderFunc func(), f func(*WaitingStatusHandle)) {
+func (self *StatusManager) WithWaitingStatus(message string, renderFunc func(), f func(*WaitingStatusHandle) error) error {
 	handle := &WaitingStatusHandle{statusManager: self, message: message, renderFunc: renderFunc, id: -1}
 	handle.Show()
+	defer handle.Hide()
 
-	f(handle)
-
-	handle.Hide()
+	return f(handle)
 }
 
 func (self *StatusManager) AddToastStatus(message string, kind types.ToastKind) int {
@@ -69,13 +69,13 @@ func (self *StatusManager) AddToastStatus(message string, kind types.ToastKind) 
 	return id
 }
 
-func (self *StatusManager) GetStatusString() (string, gocui.Attribute) {
+func (self *StatusManager) GetStatusString(userConfig *config.UserConfig) (string, gocui.Attribute) {
 	if len(self.statuses) == 0 {
 		return "", gocui.ColorDefault
 	}
 	topStatus := self.statuses[0]
 	if topStatus.statusType == "waiting" {
-		return topStatus.message + " " + utils.Loader(time.Now()), topStatus.color
+		return topStatus.message + " " + utils.Loader(time.Now(), userConfig.Gui.Spinner), topStatus.color
 	}
 	return topStatus.message, topStatus.color
 }

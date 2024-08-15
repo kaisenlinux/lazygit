@@ -69,10 +69,10 @@ func (self *RefsHelper) CheckoutRef(ref string, options types.CheckoutRefOptions
 					Prompt: self.c.Tr.AutoStashPrompt,
 					HandleConfirm: func() error {
 						if err := self.c.Git().Stash.Push(self.c.Tr.StashPrefix + ref); err != nil {
-							return self.c.Error(err)
+							return err
 						}
 						if err := self.c.Git().Branch.Checkout(ref, cmdOptions); err != nil {
-							return self.c.Error(err)
+							return err
 						}
 
 						onSuccess()
@@ -80,16 +80,14 @@ func (self *RefsHelper) CheckoutRef(ref string, options types.CheckoutRefOptions
 							if err := self.c.Refresh(refreshOptions); err != nil {
 								return err
 							}
-							return self.c.Error(err)
+							return err
 						}
 						return self.c.Refresh(refreshOptions)
 					},
 				})
 			}
 
-			if err := self.c.Error(err); err != nil {
-				return err
-			}
+			return err
 		}
 		onSuccess()
 
@@ -132,6 +130,7 @@ func (self *RefsHelper) CheckoutRemoteBranch(fullBranchName string, localBranchN
 		Title: utils.ResolvePlaceholderString(self.c.Tr.RemoteBranchCheckoutTitle, map[string]string{
 			"branchName": fullBranchName,
 		}),
+		Prompt: self.c.Tr.RemoteBranchCheckoutPrompt,
 		Items: []*types.MenuItem{
 			{
 				Label:   self.c.Tr.CheckoutTypeNewBranch,
@@ -142,7 +141,7 @@ func (self *RefsHelper) CheckoutRemoteBranch(fullBranchName string, localBranchN
 					// "git checkout -b", but we want to benefit from all the
 					// nice features of the CheckoutRef function.
 					if err := self.c.Git().Branch.CreateWithUpstream(localBranchName, fullBranchName); err != nil {
-						return self.c.Error(err)
+						return err
 					}
 					// Do a sync refresh to make sure the new branch is visible,
 					// so that we see an inline status when checking it out
@@ -176,7 +175,7 @@ func (self *RefsHelper) GetCheckedOutRef() *models.Branch {
 
 func (self *RefsHelper) ResetToRef(ref string, strength string, envVars []string) error {
 	if err := self.c.Git().Commit.ResetToCommit(ref, strength, envVars); err != nil {
-		return self.c.Error(err)
+		return err
 	}
 
 	self.c.Contexts().LocalCommits.SetSelection(0)
@@ -191,7 +190,7 @@ func (self *RefsHelper) ResetToRef(ref string, strength string, envVars []string
 	return nil
 }
 
-func (self *RefsHelper) CreateSortOrderMenu(sortOptionsOrder []string, onSelected func(sortOrder string) error) error {
+func (self *RefsHelper) CreateSortOrderMenu(sortOptionsOrder []string, onSelected func(sortOrder string) error, currentValue string) error {
 	type sortMenuOption struct {
 		key         types.Key
 		label       string
@@ -222,7 +221,8 @@ func (self *RefsHelper) CreateSortOrderMenu(sortOptionsOrder []string, onSelecte
 			OnPress: func() error {
 				return onSelected(opt.sortOrder)
 			},
-			Key: opt.key,
+			Key:    opt.key,
+			Widget: types.MakeMenuRadioButton(opt.sortOrder == currentValue),
 		}
 	})
 	return self.c.Menu(types.CreateMenuOptions{
@@ -274,12 +274,21 @@ func (self *RefsHelper) NewBranch(from string, fromFormattedName string, suggest
 		},
 	)
 
+	if suggestedBranchName == "" {
+		suggestedBranchName = self.c.UserConfig.Git.BranchPrefix
+	}
+
 	return self.c.Prompt(types.PromptOpts{
 		Title:          message,
 		InitialContent: suggestedBranchName,
 		HandleConfirm: func(response string) error {
 			self.c.LogAction(self.c.Tr.Actions.CreateBranch)
-			if err := self.c.Git().Branch.New(SanitizedBranchName(response), from); err != nil {
+			newBranchName := SanitizedBranchName(response)
+			newBranchFunc := self.c.Git().Branch.New
+			if newBranchName != suggestedBranchName {
+				newBranchFunc = self.c.Git().Branch.NewWithoutTracking
+			}
+			if err := newBranchFunc(newBranchName, from); err != nil {
 				return err
 			}
 

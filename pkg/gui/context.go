@@ -230,6 +230,10 @@ func (self *ContextMgr) ActivateContext(c types.Context, opts types.OnFocusOpts)
 	self.gui.helpers.Window.SetWindowContext(c)
 
 	self.gui.helpers.Window.MoveToTopOfWindow(c)
+	oldView := self.gui.c.GocuiGui().CurrentView()
+	if oldView != nil && oldView.Name() != viewName {
+		oldView.HighlightInactive = true
+	}
 	if _, err := self.gui.c.GocuiGui().SetCurrentView(viewName); err != nil {
 		return err
 	}
@@ -386,4 +390,13 @@ func (self *ContextMgr) ContextForKey(key types.ContextKey) types.Context {
 	}
 
 	return nil
+}
+
+func (self *ContextMgr) PopupContexts() []types.Context {
+	self.RLock()
+	defer self.RUnlock()
+
+	return lo.Filter(self.ContextStack, func(context types.Context, _ int) bool {
+		return context.GetKind() == types.TEMPORARY_POPUP || context.GetKind() == types.PERSISTENT_POPUP
+	})
 }

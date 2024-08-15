@@ -12,10 +12,11 @@ import (
 	"github.com/creack/pty"
 	"github.com/jesseduffield/gocui"
 	"github.com/jesseduffield/lazygit/pkg/utils"
+	"github.com/samber/lo"
 )
 
-func (gui *Gui) desiredPtySize() *pty.Winsize {
-	width, height := gui.Views.Main.Size()
+func (gui *Gui) desiredPtySize(view *gocui.View) *pty.Winsize {
+	width, height := view.Size()
 
 	return &pty.Winsize{Cols: uint16(width), Rows: uint16(height)}
 }
@@ -24,11 +25,12 @@ func (gui *Gui) onResize() error {
 	gui.Mutexes.PtyMutex.Lock()
 	defer gui.Mutexes.PtyMutex.Unlock()
 
-	for _, ptmx := range gui.viewPtmxMap {
+	for viewName, ptmx := range gui.viewPtmxMap {
 		// TODO: handle resizing properly: we need to actually clear the main view
 		// and re-read the output from our pty. Or we could just re-run the original
 		// command from scratch
-		if err := pty.Setsize(ptmx, gui.desiredPtySize()); err != nil {
+		view, _ := gui.g.View(viewName)
+		if err := pty.Setsize(ptmx, gui.desiredPtySize(view)); err != nil {
 			return utils.WrapError(err)
 		}
 	}
@@ -43,7 +45,7 @@ func (gui *Gui) onResize() error {
 // pseudo-terminal meaning we'll get the behaviour we want from the underlying
 // command.
 func (gui *Gui) newPtyTask(view *gocui.View, cmd *exec.Cmd, prefix string) error {
-	width, _ := gui.Views.Main.Size()
+	width, _ := view.Size()
 	pager := gui.git.Config.GetPager(width)
 	externalDiffCommand := gui.Config.GetUserConfig().Git.Paging.ExternalDiffCommand
 
@@ -54,6 +56,13 @@ func (gui *Gui) newPtyTask(view *gocui.View, cmd *exec.Cmd, prefix string) error
 
 	cmdStr := strings.Join(cmd.Args, " ")
 
+	// This communicates to pagers that we're in a very simple
+	// terminal that they should not expect to have much capabilities.
+	// Moving the cursor, clearing the screen, or querying for colors are among such "advanced" capabilities.
+	// Context: https://github.com/jesseduffield/lazygit/issues/3419
+	cmd.Env = removeExistingTermEnvVars(cmd.Env)
+	cmd.Env = append(cmd.Env, "TERM=dumb")
+
 	cmd.Env = append(cmd.Env, "GIT_PAGER="+pager)
 
 	manager := gui.getManager(view)
@@ -61,7 +70,7 @@ func (gui *Gui) newPtyTask(view *gocui.View, cmd *exec.Cmd, prefix string) error
 	var ptmx *os.File
 	start := func() (*exec.Cmd, io.Reader) {
 		var err error
-		ptmx, err = pty.StartWithSize(cmd, gui.desiredPtySize())
+		ptmx, err = pty.StartWithSize(cmd, gui.desiredPtySize(view))
 		if err != nil {
 			gui.c.Log.Error(err)
 		}
@@ -86,4 +95,21 @@ func (gui *Gui) newPtyTask(view *gocui.View, cmd *exec.Cmd, prefix string) error
 	}
 
 	return nil
+}
+
+func removeExistingTermEnvVars(env []string) []string {
+	return lo.Filter(env, func(envVar string, _ int) bool {
+		return !isTermEnvVar(envVar)
+	})
+}
+
+// Terminals set a variety of different environment variables
+// to identify themselves to processes. This list should catch the most common among them.
+func isTermEnvVar(envVar string) bool {
+	return strings.HasPrefix(envVar, "TERM=") ||
+		strings.HasPrefix(envVar, "TERM_PROGRAM=") ||
+		strings.HasPrefix(envVar, "TERM_PROGRAM_VERSION=") ||
+		strings.HasPrefix(envVar, "TERMINAL_EMULATOR=") ||
+		strings.HasPrefix(envVar, "TERMINAL_NAME=") ||
+		strings.HasPrefix(envVar, "TERMINAL_VERSION_")
 }

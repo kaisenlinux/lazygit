@@ -161,7 +161,7 @@ func (self *cmdObjRunner) RunAndProcessLines(cmdObj ICmdObj, onLine func(line st
 	}
 
 	scanner := bufio.NewScanner(stdoutPipe)
-	scanner.Split(bufio.ScanLines)
+	scanner.Split(utils.ScanLinesAndTruncateWhenLongerThanBuffer(bufio.MaxScanTokenSize))
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -176,6 +176,11 @@ func (self *cmdObjRunner) RunAndProcessLines(cmdObj ICmdObj, onLine func(line st
 			_ = Kill(cmd)
 			break
 		}
+	}
+
+	if scanner.Err() != nil {
+		_ = Kill(cmd)
+		return scanner.Err()
 	}
 
 	_ = cmd.Wait()
@@ -220,9 +225,6 @@ func (self *cmdObjRunner) runAndStreamAux(
 	cmdObj ICmdObj,
 	onRun func(*cmdHandler, io.Writer),
 ) error {
-	// if we're streaming this we don't want any fancy terminal stuff
-	cmdObj.AddEnvVars("TERM=dumb")
-
 	cmdWriter := self.guiIO.newCmdWriterFn()
 
 	if cmdObj.ShouldLog() {
@@ -282,6 +284,7 @@ const (
 	Username
 	Passphrase
 	PIN
+	Token
 )
 
 // Whenever we're asked for a password we just enter a newline, which will
@@ -374,6 +377,7 @@ func (self *cmdObjRunner) getCheckForCredentialRequestFunc() func([]byte) (Crede
 		`Username\s*for\s*'.+':`:                 Username,
 		`Enter\s*passphrase\s*for\s*key\s*'.+':`: Passphrase,
 		`Enter\s*PIN\s*for\s*.+\s*key\s*.+:`:     PIN,
+		`.*2FA Token.*`:                          Token,
 	}
 
 	compiledPrompts := map[*regexp.Regexp]CredentialType{}

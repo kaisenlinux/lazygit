@@ -39,6 +39,18 @@ type ParentContexter interface {
 	GetParentContext() (Context, bool)
 }
 
+type NeedsRerenderOnWidthChangeLevel int
+
+const (
+	// view doesn't render differently when its width changes
+	NEEDS_RERENDER_ON_WIDTH_CHANGE_NONE NeedsRerenderOnWidthChangeLevel = iota
+	// view renders differently when its width changes. An example is a view
+	// that truncates long lines to the view width, e.g. the branches view
+	NEEDS_RERENDER_ON_WIDTH_CHANGE_WHEN_WIDTH_CHANGES
+	// view renders differently only when the screen mode changes
+	NEEDS_RERENDER_ON_WIDTH_CHANGE_WHEN_SCREEN_MODE_CHANGES
+)
+
 type IBaseContext interface {
 	HasKeybindings
 	ParentContexter
@@ -60,8 +72,11 @@ type IBaseContext interface {
 	// determined independently.
 	HasControlledBounds() bool
 
-	// true if the view needs to be rerendered when its width changes
-	NeedsRerenderOnWidthChange() bool
+	// to what extent the view needs to be rerendered when its width changes
+	NeedsRerenderOnWidthChange() NeedsRerenderOnWidthChangeLevel
+
+	// true if the view needs to be rerendered when its height changes
+	NeedsRerenderOnHeightChange() bool
 
 	// returns the desired title for the view upon activation. If there is no desired title (returns empty string), then
 	// no title will be set
@@ -71,6 +86,7 @@ type IBaseContext interface {
 
 	AddKeybindingsFn(KeybindingsFn)
 	AddMouseKeybindingsFn(MouseKeybindingsFn)
+	ClearAllBindingsFn()
 
 	// This is a bit of a hack at the moment: we currently only set an onclick function so that
 	// our list controller can come along and wrap it in a list-specific click handler.
@@ -114,12 +130,16 @@ type ISearchableContext interface {
 	Context
 	ISearchHistoryContext
 
+	// These are all implemented by SearchTrait
 	SetSearchString(string)
 	GetSearchString() string
 	ClearSearchString()
 	IsSearching() bool
 	IsSearchableContext()
 	RenderSearchStatus(int, int)
+
+	// This must be implemented by each concrete context. Return nil if not searching the model.
+	ModelSearchResults(searchStr string, caseSensitive bool) []gocui.SearchPosition
 }
 
 type DiffableContext interface {
@@ -146,6 +166,7 @@ type IListContext interface {
 	FocusLine()
 	IsListContext() // used for type switch
 	RangeSelectEnabled() bool
+	RenderOnlyVisibleLines() bool
 }
 
 type IPatchExplorerContext interface {
@@ -168,6 +189,8 @@ type IViewTrait interface {
 	SetRangeSelectStart(yIdx int)
 	CancelRangeSelect()
 	SetViewPortContent(content string)
+	SetViewPortContentAndClearEverythingElse(content string)
+	SetContentLineCount(lineCount int)
 	SetContent(content string)
 	SetFooter(value string)
 	SetOriginX(value int)
@@ -245,7 +268,7 @@ type IListPanelState interface {
 }
 
 type ListItem interface {
-	// ID is a SHA when the item is a commit, a filename when the item is a file, 'stash@{4}' when it's a stash entry, 'my_branch' when it's a branch
+	// ID is a hash when the item is a commit, a filename when the item is a file, 'stash@{4}' when it's a stash entry, 'my_branch' when it's a branch
 	ID() string
 
 	// Description is something we would show in a message e.g. '123as14: push blah' for a commit

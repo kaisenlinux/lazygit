@@ -41,11 +41,38 @@ func (self *SuggestionsController) GetKeybindings(opts types.KeybindingsOpts) []
 		},
 		{
 			Key:     opts.GetKey(opts.Config.Universal.TogglePanel),
-			Handler: func() error { return self.c.ReplaceContext(self.c.Contexts().Confirmation) },
+			Handler: self.switchToConfirmation,
+		},
+		{
+			Key: opts.GetKey(opts.Config.Universal.Remove),
+			Handler: func() error {
+				return self.context().State.OnDeleteSuggestion()
+			},
+		},
+		{
+			Key: opts.GetKey(opts.Config.Universal.Edit),
+			Handler: func() error {
+				if self.context().State.AllowEditSuggestion {
+					if selectedItem := self.c.Contexts().Suggestions.GetSelected(); selectedItem != nil {
+						self.c.Contexts().Confirmation.GetView().TextArea.Clear()
+						self.c.Contexts().Confirmation.GetView().TextArea.TypeString(selectedItem.Value)
+						self.c.Contexts().Confirmation.GetView().RenderTextArea()
+						self.c.Contexts().Suggestions.RefreshSuggestions()
+						return self.switchToConfirmation()
+					}
+				}
+				return nil
+			},
 		},
 	}
 
 	return bindings
+}
+
+func (self *SuggestionsController) switchToConfirmation() error {
+	self.c.Views().Suggestions.Subtitle = ""
+	self.c.Views().Suggestions.Highlight = false
+	return self.c.ReplaceContext(self.c.Contexts().Confirmation)
 }
 
 func (self *SuggestionsController) GetOnFocusLost() func(types.OnFocusLostOpts) error {

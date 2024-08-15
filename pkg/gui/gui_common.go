@@ -33,6 +33,10 @@ func (self *guiCommon) PostRefreshUpdate(context types.Context) error {
 	return self.gui.postRefreshUpdate(context)
 }
 
+func (self *guiCommon) HandleGenericClick(view *gocui.View) error {
+	return self.gui.handleGenericClick(view)
+}
+
 func (self *guiCommon) RunSubprocessAndRefresh(cmdObj oscommands.ICmdObj) error {
 	return self.gui.runSubprocessWithSuspenseAndRefresh(cmdObj)
 }
@@ -67,6 +71,10 @@ func (self *guiCommon) CurrentStaticContext() types.Context {
 
 func (self *guiCommon) CurrentSideContext() types.Context {
 	return self.gui.State.ContextMgr.CurrentSide()
+}
+
+func (self *guiCommon) CurrentPopupContexts() []types.Context {
+	return self.gui.State.ContextMgr.PopupContexts()
 }
 
 func (self *guiCommon) IsCurrentContext(c types.Context) bool {
@@ -147,7 +155,7 @@ func (self *guiCommon) OnUIThread(f func() error) {
 	self.gui.onUIThread(f)
 }
 
-func (self *guiCommon) OnWorker(f func(gocui.Task)) {
+func (self *guiCommon) OnWorker(f func(gocui.Task) error) {
 	self.gui.onWorker(f)
 }
 
@@ -185,12 +193,7 @@ func (self *guiCommon) GetInitialKeybindingsWithCustomCommands() ([]*types.Bindi
 }
 
 func (self *guiCommon) AfterLayout(f func() error) {
-	select {
-	case self.gui.afterLayoutFuncs <- f:
-	default:
-		// hopefully this never happens
-		self.gui.c.Log.Error("afterLayoutFuncs channel is full, skipping function")
-	}
+	self.gui.afterLayout(f)
 }
 
 func (self *guiCommon) RunningIntegrationTest() bool {

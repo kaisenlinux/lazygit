@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 
@@ -137,7 +138,7 @@ func (self *WorkingTreeHelper) HandleCommitEditorPress() error {
 func (self *WorkingTreeHelper) HandleWIPCommitPress() error {
 	skipHookPrefix := self.c.UserConfig.Git.SkipHookPrefix
 	if skipHookPrefix == "" {
-		return self.c.ErrorMsg(self.c.Tr.SkipHookPrefixNotConfigured)
+		return errors.New(self.c.Tr.SkipHookPrefixNotConfigured)
 	}
 
 	return self.HandleCommitPressWithMessage(skipHookPrefix)
@@ -151,12 +152,16 @@ func (self *WorkingTreeHelper) HandleCommitPress() error {
 		if commitPrefixConfig != nil {
 			prefixPattern := commitPrefixConfig.Pattern
 			prefixReplace := commitPrefixConfig.Replace
+			branchName := self.refHelper.GetCheckedOutRef().Name
 			rgx, err := regexp.Compile(prefixPattern)
 			if err != nil {
-				return self.c.ErrorMsg(fmt.Sprintf("%s: %s", self.c.Tr.CommitPrefixPatternError, err.Error()))
+				return fmt.Errorf("%s: %s", self.c.Tr.CommitPrefixPatternError, err.Error())
 			}
-			prefix := rgx.ReplaceAllString(self.refHelper.GetCheckedOutRef().Name, prefixReplace)
-			message = prefix
+
+			if rgx.MatchString(branchName) {
+				prefix := rgx.ReplaceAllString(branchName, prefixReplace)
+				message = prefix
+			}
 		}
 	}
 
@@ -165,11 +170,11 @@ func (self *WorkingTreeHelper) HandleCommitPress() error {
 
 func (self *WorkingTreeHelper) WithEnsureCommitableFiles(handler func() error) error {
 	if err := self.prepareFilesForCommit(); err != nil {
-		return self.c.Error(err)
+		return err
 	}
 
 	if len(self.c.Model().Files) == 0 {
-		return self.c.ErrorMsg(self.c.Tr.NoFilesStagedTitle)
+		return errors.New(self.c.Tr.NoFilesStagedTitle)
 	}
 
 	if !self.AnyStagedFiles() {
@@ -186,10 +191,10 @@ func (self *WorkingTreeHelper) promptToStageAllAndRetry(retry func() error) erro
 		HandleConfirm: func() error {
 			self.c.LogAction(self.c.Tr.Actions.StageAllFiles)
 			if err := self.c.Git().WorkingTree.StageAll(); err != nil {
-				return self.c.Error(err)
+				return err
 			}
 			if err := self.syncRefresh(); err != nil {
-				return self.c.Error(err)
+				return err
 			}
 
 			return retry()
@@ -219,9 +224,9 @@ func (self *WorkingTreeHelper) prepareFilesForCommit() error {
 
 func (self *WorkingTreeHelper) commitPrefixConfigForRepo() *config.CommitPrefixConfig {
 	cfg, ok := self.c.UserConfig.Git.CommitPrefixes[self.c.Git().RepoPaths.RepoName()]
-	if !ok {
-		return nil
+	if ok {
+		return &cfg
 	}
 
-	return &cfg
+	return self.c.UserConfig.Git.CommitPrefix
 }

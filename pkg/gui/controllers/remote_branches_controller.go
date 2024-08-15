@@ -94,6 +94,14 @@ func (self *RemoteBranchesController) GetKeybindings(opts types.KeybindingsOpts)
 			Tooltip:           self.c.Tr.ResetTooltip,
 			OpensMenu:         true,
 		},
+		{
+			Key: opts.GetKey(opts.Config.Universal.OpenDiffTool),
+			Handler: self.withItem(func(selectedBranch *models.RemoteBranch) error {
+				return self.c.Helpers().Diff.OpenDiffToolForRef(selectedBranch)
+			}),
+			GetDisabledReason: self.require(self.singleItemSelected()),
+			Description:       self.c.Tr.OpenDiffTool,
+		},
 	}
 }
 
@@ -145,7 +153,8 @@ func (self *RemoteBranchesController) createSortMenu() error {
 			return self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC, Scope: []types.RefreshableView{types.REMOTES}})
 		}
 		return nil
-	})
+	},
+		self.c.GetAppState().RemoteBranchSortOrder)
 }
 
 func (self *RemoteBranchesController) createResetMenu(selectedBranch *models.RemoteBranch) error {
@@ -169,7 +178,7 @@ func (self *RemoteBranchesController) setAsUpstream(selectedBranch *models.Remot
 		HandleConfirm: func() error {
 			self.c.LogAction(self.c.Tr.Actions.SetBranchUpstream)
 			if err := self.c.Git().Branch.SetUpstream(selectedBranch.RemoteName, selectedBranch.Name, checkedOutBranch.Name); err != nil {
-				return self.c.Error(err)
+				return err
 			}
 
 			return self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.BRANCHES, types.REMOTES}})

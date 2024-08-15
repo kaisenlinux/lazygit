@@ -60,24 +60,24 @@ func (self *StashCommands) Push(message string) error {
 	return self.cmd.New(cmdArgs).Run()
 }
 
-func (self *StashCommands) Store(sha string, message string) error {
+func (self *StashCommands) Store(hash string, message string) error {
 	trimmedMessage := strings.Trim(message, " \t")
 
 	cmdArgs := NewGitCmd("stash").Arg("store").
 		ArgIf(trimmedMessage != "", "-m", trimmedMessage).
-		Arg(sha).
+		Arg(hash).
 		ToArgv()
 
 	return self.cmd.New(cmdArgs).Run()
 }
 
-func (self *StashCommands) Sha(index int) (string, error) {
+func (self *StashCommands) Hash(index int) (string, error) {
 	cmdArgs := NewGitCmd("rev-parse").
 		Arg(fmt.Sprintf("refs/stash@{%d}", index)).
 		ToArgv()
 
-	sha, _, err := self.cmd.New(cmdArgs).DontLog().RunWithOutputs()
-	return strings.Trim(sha, "\r\n"), err
+	hash, _, err := self.cmd.New(cmdArgs).DontLog().RunWithOutputs()
+	return strings.Trim(hash, "\r\n"), err
 }
 
 func (self *StashCommands) ShowStashEntryCmdObj(index int) oscommands.ICmdObj {
@@ -87,6 +87,7 @@ func (self *StashCommands) ShowStashEntryCmdObj(index int) oscommands.ICmdObj {
 		Arg(fmt.Sprintf("--color=%s", self.UserConfig.Git.Paging.ColorArg)).
 		Arg(fmt.Sprintf("--unified=%d", self.AppState.DiffContextSize)).
 		ArgIf(self.AppState.IgnoreWhitespaceInDiffView, "--ignore-all-space").
+		Arg(fmt.Sprintf("--find-renames=%d%%", self.AppState.RenameSimilarityThreshold)).
 		Arg(fmt.Sprintf("stash@{%d}", index)).
 		Dir(self.repoPaths.worktreePath).
 		ToArgv()
@@ -121,9 +122,22 @@ func (self *StashCommands) StashUnstagedChanges(message string) error {
 	return nil
 }
 
-// SaveStagedChanges stashes only the currently staged changes. This takes a few steps
-// shoutouts to Joe on https://stackoverflow.com/questions/14759748/stashing-only-staged-changes-in-git-is-it-possible
+// SaveStagedChanges stashes only the currently staged changes.
 func (self *StashCommands) SaveStagedChanges(message string) error {
+	if self.version.IsAtLeast(2, 35, 0) {
+		return self.cmd.New(NewGitCmd("stash").Arg("push").Arg("--staged").Arg("-m", message).ToArgv()).Run()
+	}
+
+	// Git versions older than 2.35.0 don't support the --staged flag, so we
+	// need to fall back to a more complex solution.
+	// Shoutouts to Joe on https://stackoverflow.com/questions/14759748/stashing-only-staged-changes-in-git-is-it-possible
+	//
+	// Note that this method has a few bugs:
+	// - it fails when there are *only* staged changes
+	// - it fails when staged and unstaged changes within a single file are too close together
+	// We don't bother fixing these, because users can simply update git when
+	// they are affected by these issues.
+
 	// wrap in 'writing', which uses a mutex
 	if err := self.cmd.New(
 		NewGitCmd("stash").Arg("--keep-index").ToArgv(),
@@ -179,7 +193,7 @@ func (self *StashCommands) StashIncludeUntrackedChanges(message string) error {
 }
 
 func (self *StashCommands) Rename(index int, message string) error {
-	sha, err := self.Sha(index)
+	hash, err := self.Hash(index)
 	if err != nil {
 		return err
 	}
@@ -188,7 +202,7 @@ func (self *StashCommands) Rename(index int, message string) error {
 		return err
 	}
 
-	err = self.Store(sha, message)
+	err = self.Store(hash, message)
 	if err != nil {
 		return err
 	}

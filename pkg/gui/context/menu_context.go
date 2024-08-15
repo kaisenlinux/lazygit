@@ -1,6 +1,8 @@
 package context
 
 import (
+	"errors"
+
 	"github.com/jesseduffield/lazygit/pkg/gui/keybindings"
 	"github.com/jesseduffield/lazygit/pkg/gui/style"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
@@ -48,6 +50,8 @@ func NewMenuContext(
 type MenuViewModel struct {
 	c               *ContextCommon
 	menuItems       []*types.MenuItem
+	prompt          string
+	promptLines     []string
 	columnAlignment []utils.Alignment
 	*FilteredListViewModel[*types.MenuItem]
 }
@@ -71,12 +75,26 @@ func (self *MenuViewModel) SetMenuItems(items []*types.MenuItem, columnAlignment
 	self.columnAlignment = columnAlignment
 }
 
+func (self *MenuViewModel) GetPrompt() string {
+	return self.prompt
+}
+
+func (self *MenuViewModel) SetPrompt(prompt string) {
+	self.prompt = prompt
+	self.promptLines = nil
+}
+
+func (self *MenuViewModel) GetPromptLines() []string {
+	return self.promptLines
+}
+
+func (self *MenuViewModel) SetPromptLines(promptLines []string) {
+	self.promptLines = promptLines
+}
+
 // TODO: move into presentation package
 func (self *MenuViewModel) GetDisplayStrings(_ int, _ int) [][]string {
 	menuItems := self.FilteredListViewModel.GetItems()
-	showKeys := lo.SomeBy(menuItems, func(item *types.MenuItem) bool {
-		return item.Key != nil
-	})
 
 	return lo.Map(menuItems, func(item *types.MenuItem, _ int) []string {
 		displayStrings := item.LabelColumns
@@ -84,29 +102,50 @@ func (self *MenuViewModel) GetDisplayStrings(_ int, _ int) [][]string {
 			displayStrings[0] = style.FgDefault.SetStrikethrough().Sprint(displayStrings[0])
 		}
 
-		if !showKeys {
-			return displayStrings
+		keyLabel := ""
+		if item.Key != nil {
+			keyLabel = style.FgCyan.Sprint(keybindings.LabelFromKey(item.Key))
 		}
 
-		keyLabel := keybindings.LabelFromKey(item.Key)
-		displayStrings = utils.Prepend(displayStrings, style.FgCyan.Sprint(keyLabel))
+		checkMark := ""
+		switch item.Widget {
+		case types.MenuWidgetNone:
+			// do nothing
+		case types.MenuWidgetRadioButtonSelected:
+			checkMark = "(•)"
+		case types.MenuWidgetRadioButtonUnselected:
+			checkMark = "( )"
+		case types.MenuWidgetCheckboxSelected:
+			checkMark = "[✓]"
+		case types.MenuWidgetCheckboxUnselected:
+			checkMark = "[ ]"
+		}
+
+		displayStrings = utils.Prepend(displayStrings, keyLabel, checkMark)
 		return displayStrings
 	})
 }
 
 func (self *MenuViewModel) GetNonModelItems() []*NonModelItem {
+	result := []*NonModelItem{}
+	result = append(result, lo.Map(self.promptLines, func(line string, _ int) *NonModelItem {
+		return &NonModelItem{
+			Index:   0,
+			Column:  0,
+			Content: line,
+		}
+	})...)
+
 	// Don't display section headers when we are filtering, and the filter mode
 	// is fuzzy. The reason is that filtering changes the order of the items
 	// (they are sorted by best match), so all the sections would be messed up.
 	if self.FilteredListViewModel.IsFiltering() && self.c.UserConfig.Gui.UseFuzzySearch() {
-		return []*NonModelItem{}
+		return result
 	}
 
-	result := []*NonModelItem{}
 	menuItems := self.FilteredListViewModel.GetItems()
 	var prevSection *types.MenuSection = nil
 	for i, menuItem := range menuItems {
-		menuItem := menuItem
 		if menuItem.Section != nil && menuItem.Section != prevSection {
 			if prevSection != nil {
 				result = append(result, &NonModelItem{
@@ -151,7 +190,7 @@ func (self *MenuContext) GetKeybindings(opts types.KeybindingsOpts) []*types.Bin
 func (self *MenuContext) OnMenuPress(selectedItem *types.MenuItem) error {
 	if selectedItem != nil && selectedItem.DisabledReason != nil {
 		if selectedItem.DisabledReason.ShowErrorInPanel {
-			return self.c.ErrorMsg(selectedItem.DisabledReason.Text)
+			return errors.New(selectedItem.DisabledReason.Text)
 		}
 
 		self.c.ErrorToast(self.c.Tr.DisabledMenuItemPrefix + selectedItem.DisabledReason.Text)

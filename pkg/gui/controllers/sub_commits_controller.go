@@ -46,7 +46,7 @@ func (self *SubCommitsController) GetOnRenderToMain() func() error {
 			if commit == nil {
 				task = types.NewRenderStringTask("No commits")
 			} else {
-				cmdObj := self.c.Git().Commit.ShowCmdObj(commit.Sha, self.c.Modes().Filtering.GetPath())
+				cmdObj := self.c.Git().Commit.ShowCmdObj(commit.Hash, self.c.Modes().Filtering.GetPath())
 
 				task = types.NewRunPtyTask(cmdObj.GetCmd())
 			}
@@ -68,10 +68,8 @@ func (self *SubCommitsController) GetOnFocus() func(types.OnFocusOpts) error {
 		context := self.context()
 		if context.GetSelectedLineIdx() > COMMIT_THRESHOLD && context.GetLimitCommits() {
 			context.SetLimitCommits(false)
-			self.c.OnWorker(func(_ gocui.Task) {
-				if err := self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.SUB_COMMITS}}); err != nil {
-					_ = self.c.Error(err)
-				}
+			self.c.OnWorker(func(_ gocui.Task) error {
+				return self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.SUB_COMMITS}})
 			})
 		}
 

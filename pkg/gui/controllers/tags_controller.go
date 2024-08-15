@@ -74,6 +74,14 @@ func (self *TagsController) GetKeybindings(opts types.KeybindingsOpts) []*types.
 			DisplayOnScreen:   true,
 			OpensMenu:         true,
 		},
+		{
+			Key: opts.GetKey(opts.Config.Universal.OpenDiffTool),
+			Handler: self.withItem(func(selectedTag *models.Tag) error {
+				return self.c.Helpers().Diff.OpenDiffToolForRef(selectedTag)
+			}),
+			GetDisabledReason: self.require(self.singleItemSelected()),
+			Description:       self.c.Tr.OpenDiffTool,
+		},
 	}
 
 	return bindings
@@ -230,7 +238,7 @@ func (self *TagsController) createResetMenu(tag *models.Tag) error {
 }
 
 func (self *TagsController) create() error {
-	// leaving commit SHA blank so that we're just creating the tag for the current commit
+	// leaving commit hash blank so that we're just creating the tag for the current commit
 	return self.c.Helpers().Tags.OpenCreateTagPrompt("", func() {
 		self.context().SetSelection(0)
 	})

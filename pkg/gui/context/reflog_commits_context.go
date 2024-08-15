@@ -22,7 +22,7 @@ func NewReflogCommitsContext(c *ContextCommon) *ReflogCommitsContext {
 	viewModel := NewFilteredListViewModel(
 		func() []*models.Commit { return c.Model().FilteredReflogCommits },
 		func(commit *models.Commit) []string {
-			return []string{commit.ShortSha(), commit.Name}
+			return []string{commit.ShortHash(), commit.Name}
 		},
 	)
 
@@ -30,7 +30,7 @@ func NewReflogCommitsContext(c *ContextCommon) *ReflogCommitsContext {
 		return presentation.GetReflogCommitListDisplayStrings(
 			viewModel.GetItems(),
 			c.State().GetRepoState().GetScreenMode() != types.SCREEN_NORMAL,
-			c.Modes().CherryPicking.SelectedShaSet(),
+			c.Modes().CherryPicking.SelectedHashSet(),
 			c.Modes().Diffing.Ref,
 			time.Now(),
 			c.UserConfig.Gui.TimeFormat,
@@ -48,7 +48,7 @@ func NewReflogCommitsContext(c *ContextCommon) *ReflogCommitsContext {
 				Key:                        REFLOG_COMMITS_CONTEXT_KEY,
 				Kind:                       types.SIDE_CONTEXT,
 				Focusable:                  true,
-				NeedsRerenderOnWidthChange: true,
+				NeedsRerenderOnWidthChange: types.NEEDS_RERENDER_ON_WIDTH_CHANGE_WHEN_SCREEN_MODE_CHANGES,
 			})),
 			ListRenderer: ListRenderer{
 				list:              viewModel,

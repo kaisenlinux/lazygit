@@ -2,12 +2,15 @@ package context
 
 import (
 	"log"
+	"strings"
 	"time"
 
+	"github.com/jesseduffield/gocui"
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
 	"github.com/jesseduffield/lazygit/pkg/commands/types/enums"
 	"github.com/jesseduffield/lazygit/pkg/gui/presentation"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
+	"github.com/samber/lo"
 )
 
 type LocalCommitsContext struct {
@@ -17,8 +20,9 @@ type LocalCommitsContext struct {
 }
 
 var (
-	_ types.IListContext    = (*LocalCommitsContext)(nil)
-	_ types.DiffableContext = (*LocalCommitsContext)(nil)
+	_ types.IListContext       = (*LocalCommitsContext)(nil)
+	_ types.DiffableContext    = (*LocalCommitsContext)(nil)
+	_ types.ISearchableContext = (*LocalCommitsContext)(nil)
 )
 
 func NewLocalCommitsContext(c *ContextCommon) *LocalCommitsContext {
@@ -28,12 +32,12 @@ func NewLocalCommitsContext(c *ContextCommon) *LocalCommitsContext {
 	)
 
 	getDisplayStrings := func(startIdx int, endIdx int) [][]string {
-		selectedCommitSha := ""
+		selectedCommitHash := ""
 
 		if c.CurrentContext().GetKey() == LOCAL_COMMITS_CONTEXT_KEY {
 			selectedCommit := viewModel.GetSelected()
 			if selectedCommit != nil {
-				selectedCommitSha = selectedCommit.Sha
+				selectedCommitHash = selectedCommit.Hash
 			}
 		}
 
@@ -47,14 +51,14 @@ func NewLocalCommitsContext(c *ContextCommon) *LocalCommitsContext {
 			c.Model().CheckedOutBranch,
 			hasRebaseUpdateRefsConfig,
 			c.State().GetRepoState().GetScreenMode() != types.SCREEN_NORMAL,
-			c.Modes().CherryPicking.SelectedShaSet(),
+			c.Modes().CherryPicking.SelectedHashSet(),
 			c.Modes().Diffing.Ref,
-			c.Modes().MarkedBaseCommit.GetSha(),
+			c.Modes().MarkedBaseCommit.GetHash(),
 			c.UserConfig.Gui.TimeFormat,
 			c.UserConfig.Gui.ShortTimeFormat,
 			time.Now(),
 			c.UserConfig.Git.ParseEmoji,
-			selectedCommitSha,
+			selectedCommitHash,
 			startIdx,
 			endIdx,
 			shouldShowGraph(c),
@@ -68,12 +72,13 @@ func NewLocalCommitsContext(c *ContextCommon) *LocalCommitsContext {
 		SearchTrait:           NewSearchTrait(c),
 		ListContextTrait: &ListContextTrait{
 			Context: NewSimpleContext(NewBaseContext(NewBaseContextOpts{
-				View:                       c.Views().Commits,
-				WindowName:                 "commits",
-				Key:                        LOCAL_COMMITS_CONTEXT_KEY,
-				Kind:                       types.SIDE_CONTEXT,
-				Focusable:                  true,
-				NeedsRerenderOnWidthChange: true,
+				View:                        c.Views().Commits,
+				WindowName:                  "commits",
+				Key:                         LOCAL_COMMITS_CONTEXT_KEY,
+				Kind:                        types.SIDE_CONTEXT,
+				Focusable:                   true,
+				NeedsRerenderOnWidthChange:  types.NEEDS_RERENDER_ON_WIDTH_CHANGE_WHEN_SCREEN_MODE_CHANGES,
+				NeedsRerenderOnHeightChange: true,
 			})),
 			ListRenderer: ListRenderer{
 				list:              viewModel,
@@ -81,13 +86,11 @@ func NewLocalCommitsContext(c *ContextCommon) *LocalCommitsContext {
 			},
 			c:                       c,
 			refreshViewportOnChange: true,
+			renderOnlyVisibleLines:  true,
 		},
 	}
 
-	ctx.GetView().SetOnSelectItem(ctx.SearchTrait.onSelectItemWrapper(func(selectedLineIdx int) error {
-		ctx.GetList().SetSelection(selectedLineIdx)
-		return ctx.HandleFocus(types.OnFocusOpts{})
-	}))
+	ctx.GetView().SetOnSelectItem(ctx.SearchTrait.onSelectItemWrapper(ctx.OnSearchSelect))
 
 	return ctx
 }
@@ -125,10 +128,37 @@ func (self *LocalCommitsContext) GetSelectedRef() types.Ref {
 	return commit
 }
 
+// Returns the commit hash of the selected commit, or an empty string if no
+// commit is selected
+func (self *LocalCommitsContext) GetSelectedCommitHash() string {
+	commit := self.GetSelected()
+	if commit == nil {
+		return ""
+	}
+	return commit.Hash
+}
+
+func (self *LocalCommitsContext) SelectCommitByHash(hash string) bool {
+	if hash == "" {
+		return false
+	}
+
+	if _, idx, found := lo.FindIndexOf(self.GetItems(), func(c *models.Commit) bool { return c.Hash == hash }); found {
+		self.SetSelection(idx)
+		return true
+	}
+
+	return false
+}
+
 func (self *LocalCommitsContext) GetDiffTerminals() []string {
 	itemId := self.GetSelectedItemId()
 
 	return []string{itemId}
+}
+
+func (self *LocalCommitsContext) ModelSearchResults(searchStr string, caseSensitive bool) []gocui.SearchPosition {
+	return searchModelCommits(caseSensitive, self.GetCommits(), self.ColumnPositions(), searchStr)
 }
 
 func (self *LocalCommitsViewModel) SetLimitCommits(value bool) {
@@ -169,4 +199,19 @@ func shouldShowGraph(c *ContextCommon) bool {
 
 	log.Fatalf("Unknown value for git.log.showGraph: %s. Expected one of: 'always', 'never', 'when-maximised'", value)
 	return false
+}
+
+func searchModelCommits(caseSensitive bool, commits []*models.Commit, columnPositions []int, searchStr string) []gocui.SearchPosition {
+	normalize := lo.Ternary(caseSensitive, func(s string) string { return s }, strings.ToLower)
+	return lo.FilterMap(commits, func(commit *models.Commit, idx int) (gocui.SearchPosition, bool) {
+		// The XStart and XEnd values are only used if the search string can't
+		// be found in the view. This can really only happen if the user is
+		// searching for a commit hash that is longer than the truncated hash
+		// that we render. So we just set the XStart and XEnd values to the
+		// start and end of the commit hash column, which is the second one.
+		result := gocui.SearchPosition{XStart: columnPositions[1], XEnd: columnPositions[2] - 1, Y: idx}
+		return result, strings.Contains(normalize(commit.Hash), searchStr) ||
+			strings.Contains(normalize(commit.Name), searchStr) ||
+			strings.Contains(normalize(commit.ExtraInfo), searchStr) // allow searching for tags
+	})
 }

@@ -8,7 +8,6 @@ import (
 	"github.com/jesseduffield/lazygit/pkg/config"
 	"github.com/jesseduffield/lazygit/pkg/gui/types"
 	"github.com/jesseduffield/lazygit/pkg/utils"
-	"github.com/mattn/go-runewidth"
 	"golang.org/x/exp/slices"
 )
 
@@ -216,6 +215,15 @@ func mainSectionChildren(args WindowArrangementArgs) []*boxlayout.Box {
 		}
 	}
 
+	if args.CurrentWindow == "secondary" && args.ScreenMode == types.SCREEN_FULL {
+		return []*boxlayout.Box{
+			{
+				Window: "secondary",
+				Weight: 1,
+			},
+		}
+	}
+
 	return []*boxlayout.Box{
 		{
 			Window: "main",
@@ -239,7 +247,7 @@ func getMidSectionWeights(args WindowArrangementArgs) (int, int) {
 		mainSectionWeight = 5 // need to shrink side panel to make way for main panels if side-by-side
 	}
 
-	if args.CurrentWindow == "main" {
+	if args.CurrentWindow == "main" || args.CurrentWindow == "secondary" {
 		if args.ScreenMode == types.SCREEN_HALF || args.ScreenMode == types.SCREEN_FULL {
 			sideSectionWeight = 0
 		}
@@ -263,7 +271,7 @@ func infoSectionChildren(args WindowArrangementArgs) []*boxlayout.Box {
 		return []*boxlayout.Box{
 			{
 				Window: "searchPrefix",
-				Size:   runewidth.StringWidth(args.SearchPrefix),
+				Size:   utils.StringWidth(args.SearchPrefix),
 			},
 			{
 				Window: "search",
@@ -316,7 +324,7 @@ func infoSectionChildren(args WindowArrangementArgs) []*boxlayout.Box {
 		// app status appears very briefly in demos and dislodges the caption,
 		// so better not to show it at all
 		if args.AppStatus != "" {
-			result = append(result, &boxlayout.Box{Window: "appStatus", Size: runewidth.StringWidth(args.AppStatus)})
+			result = append(result, &boxlayout.Box{Window: "appStatus", Size: utils.StringWidth(args.AppStatus)})
 		}
 	}
 
@@ -329,7 +337,7 @@ func infoSectionChildren(args WindowArrangementArgs) []*boxlayout.Box {
 			&boxlayout.Box{
 				Window: "information",
 				// unlike appStatus, informationStr has various colors so we need to decolorise before taking the length
-				Size: runewidth.StringWidth(utils.Decolorise(args.InformationStr)),
+				Size: utils.StringWidth(utils.Decolorise(args.InformationStr)),
 			})
 	}
 
@@ -443,7 +451,7 @@ func sidePanelChildren(args WindowArrangementArgs) func(width int, height int) [
 				if accordionMode && defaultBox.Window == args.CurrentSideWindow {
 					return &boxlayout.Box{
 						Window: defaultBox.Window,
-						Weight: 2,
+						Weight: args.UserConfig.Gui.ExpandedSidePanelWeight,
 					}
 				}
 

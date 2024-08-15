@@ -33,7 +33,7 @@ type (
 
 // PatchBuilder manages the building of a patch for a commit to be applied to another commit (or the working tree, or removed from the current commit). We also support building patches from things like stashes, for which there is less flexibility
 type PatchBuilder struct {
-	// To is the commit sha if we're dealing with files of a commit, or a stash ref for a stash
+	// To is the commit hash if we're dealing with files of a commit, or a stash ref for a stash
 	To      string
 	From    string
 	reverse bool
@@ -46,7 +46,7 @@ type PatchBuilder struct {
 	fileInfoMap map[string]*fileInfo
 	Log         *logrus.Entry
 
-	// loadFileDiff loads the diff of a file, for a given to (typically a commit SHA)
+	// loadFileDiff loads the diff of a file, for a given to (typically a commit hash)
 	loadFileDiff loadFileDiffFunc
 }
 
@@ -65,7 +65,7 @@ func (p *PatchBuilder) Start(from, to string, reverse bool, canRebase bool) {
 	p.fileInfoMap = map[string]*fileInfo{}
 }
 
-func (p *PatchBuilder) PatchToApply(reverse bool) string {
+func (p *PatchBuilder) PatchToApply(reverse bool, turnAddedFilesIntoDiffAgainstEmptyFile bool) string {
 	patch := ""
 
 	for filename, info := range p.fileInfoMap {
@@ -73,7 +73,12 @@ func (p *PatchBuilder) PatchToApply(reverse bool) string {
 			continue
 		}
 
-		patch += p.RenderPatchForFile(filename, true, reverse)
+		patch += p.RenderPatchForFile(RenderPatchForFileOpts{
+			Filename:                               filename,
+			Plain:                                  true,
+			Reverse:                                reverse,
+			TurnAddedFilesIntoDiffAgainstEmptyFile: turnAddedFilesIntoDiffAgainstEmptyFile,
+		})
 	}
 
 	return patch
@@ -172,8 +177,15 @@ func (p *PatchBuilder) RemoveFileLineRange(filename string, firstLineIdx, lastLi
 	return nil
 }
 
-func (p *PatchBuilder) RenderPatchForFile(filename string, plain bool, reverse bool) string {
-	info, err := p.getFileInfo(filename)
+type RenderPatchForFileOpts struct {
+	Filename                               string
+	Plain                                  bool
+	Reverse                                bool
+	TurnAddedFilesIntoDiffAgainstEmptyFile bool
+}
+
+func (p *PatchBuilder) RenderPatchForFile(opts RenderPatchForFileOpts) string {
+	info, err := p.getFileInfo(opts.Filename)
 	if err != nil {
 		p.Log.Error(err)
 		return ""
@@ -183,7 +195,7 @@ func (p *PatchBuilder) RenderPatchForFile(filename string, plain bool, reverse b
 		return ""
 	}
 
-	if info.mode == WHOLE && plain {
+	if info.mode == WHOLE && opts.Plain {
 		// Use the whole diff (spares us parsing it and then formatting it).
 		// TODO: see if this is actually noticeably faster.
 		// The reverse flag is only for part patches so we're ignoring it here.
@@ -192,11 +204,12 @@ func (p *PatchBuilder) RenderPatchForFile(filename string, plain bool, reverse b
 
 	patch := Parse(info.diff).
 		Transform(TransformOpts{
-			Reverse:             reverse,
-			IncludedLineIndices: info.includedLineIndices,
+			Reverse:                                opts.Reverse,
+			TurnAddedFilesIntoDiffAgainstEmptyFile: opts.TurnAddedFilesIntoDiffAgainstEmptyFile,
+			IncludedLineIndices:                    info.includedLineIndices,
 		})
 
-	if plain {
+	if opts.Plain {
 		return patch.FormatPlain()
 	} else {
 		return patch.FormatView(FormatViewOpts{})
@@ -209,7 +222,12 @@ func (p *PatchBuilder) renderEachFilePatch(plain bool) []string {
 
 	sort.Strings(filenames)
 	patches := lo.Map(filenames, func(filename string, _ int) string {
-		return p.RenderPatchForFile(filename, plain, false)
+		return p.RenderPatchForFile(RenderPatchForFileOpts{
+			Filename:                               filename,
+			Plain:                                  plain,
+			Reverse:                                false,
+			TurnAddedFilesIntoDiffAgainstEmptyFile: true,
+		})
 	})
 	output := lo.Filter(patches, func(patch string, _ int) bool {
 		return patch != ""

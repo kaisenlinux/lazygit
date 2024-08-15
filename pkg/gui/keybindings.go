@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"errors"
 	"log"
 
 	"github.com/jesseduffield/gocui"
@@ -148,7 +149,7 @@ func (self *Gui) GetInitialKeybindings() ([]*types.Binding, []*gocui.ViewMouseBi
 			Key:               opts.GetKey(opts.Config.Universal.CopyToClipboard),
 			Handler:           self.handleCopySelectedSideContextItemCommitHashToClipboard,
 			GetDisabledReason: self.getCopySelectedSideContextItemToClipboardDisabledReason,
-			Description:       self.c.Tr.CopyCommitShaToClipboard,
+			Description:       self.c.Tr.CopyCommitHashToClipboard,
 		},
 		{
 			ViewName:    "commits",
@@ -161,14 +162,14 @@ func (self *Gui) GetInitialKeybindings() ([]*types.Binding, []*gocui.ViewMouseBi
 			Key:               opts.GetKey(opts.Config.Universal.CopyToClipboard),
 			Handler:           self.handleCopySelectedSideContextItemToClipboard,
 			GetDisabledReason: self.getCopySelectedSideContextItemToClipboardDisabledReason,
-			Description:       self.c.Tr.CopyCommitShaToClipboard,
+			Description:       self.c.Tr.CopyCommitHashToClipboard,
 		},
 		{
 			ViewName:          "subCommits",
 			Key:               opts.GetKey(opts.Config.Universal.CopyToClipboard),
 			Handler:           self.handleCopySelectedSideContextItemCommitHashToClipboard,
 			GetDisabledReason: self.getCopySelectedSideContextItemToClipboardDisabledReason,
-			Description:       self.c.Tr.CopyCommitShaToClipboard,
+			Description:       self.c.Tr.CopyCommitHashToClipboard,
 		},
 		{
 			ViewName: "information",
@@ -246,6 +247,12 @@ func (self *Gui) GetInitialKeybindings() ([]*types.Binding, []*gocui.ViewMouseBi
 			Key:      opts.GetKey(opts.Config.Universal.NextItemAlt),
 			Modifier: gocui.ModNone,
 			Handler:  self.scrollDownConfirmationPanel,
+		},
+		{
+			ViewName: "confirmation",
+			Key:      gocui.MouseLeft,
+			Modifier: gocui.ModNone,
+			Handler:  self.handleConfirmationClick,
 		},
 		{
 			ViewName: "confirmation",
@@ -436,7 +443,7 @@ func (gui *Gui) callKeybindingHandler(binding *types.Binding) error {
 	}
 	if disabledReason != nil {
 		if disabledReason.ShowErrorInPanel {
-			return gui.c.ErrorMsg(disabledReason.Text)
+			return errors.New(disabledReason.Text)
 		}
 
 		gui.c.ErrorToast(gui.Tr.DisabledMenuItemPrefix + disabledReason.Text)

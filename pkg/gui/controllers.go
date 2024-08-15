@@ -20,6 +20,10 @@ func (gui *Gui) Helpers() *helpers.Helpers {
 // in the keybinding menu: the earlier that the controller is attached to a context,
 // the lower in the list the keybindings will appear.
 func (gui *Gui) resetHelpersAndControllers() {
+	for _, context := range gui.Contexts().Flatten() {
+		context.ClearAllBindingsFn()
+	}
+
 	helperCommon := gui.c
 	recordDirectoryHelper := helpers.NewRecordDirectoryHelper(helperCommon)
 	reposHelper := helpers.NewRecentReposHelper(helperCommon, recordDirectoryHelper, gui.onNewRepo)
@@ -175,6 +179,7 @@ func (gui *Gui) resetHelpersAndControllers() {
 	undoController := controllers.NewUndoController(common)
 	globalController := controllers.NewGlobalController(common)
 	contextLinesController := controllers.NewContextLinesController(common)
+	renameSimilarityThresholdController := controllers.NewRenameSimilarityThresholdController(common)
 	verticalScrollControllerFactory := controllers.NewVerticalScrollControllerFactory(common, &gui.viewBufferManagerMap)
 
 	branchesController := controllers.NewBranchesController(common)
@@ -379,6 +384,7 @@ func (gui *Gui) resetHelpersAndControllers() {
 		undoController,
 		globalController,
 		contextLinesController,
+		renameSimilarityThresholdController,
 		jumpToSideWindowController,
 		syncController,
 	)
@@ -400,7 +406,6 @@ func (gui *Gui) getCommitMessageSetTextareaTextFn(getView func() *gocui.View) fu
 		view := getView()
 		view.ClearTextArea()
 		view.TextArea.TypeString(text)
-		gui.helpers.Confirmation.ResizeCommitMessagePanels()
 		view.RenderTextArea()
 	}
 }

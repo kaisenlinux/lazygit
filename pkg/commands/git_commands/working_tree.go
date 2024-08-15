@@ -3,6 +3,7 @@ package git_commands
 import (
 	"fmt"
 	"os"
+	"path"
 
 	"github.com/go-errors/errors"
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
@@ -232,7 +233,8 @@ func (self *WorkingTreeCommands) Ignore(filename string) error {
 
 // Exclude adds a file to the .git/info/exclude for the repo
 func (self *WorkingTreeCommands) Exclude(filename string) error {
-	return self.os.AppendLineToFile(".git/info/exclude", filename)
+	excludeFile := path.Join(self.repoPaths.repoGitDirPath, "info", "exclude")
+	return self.os.AppendLineToFile(excludeFile, filename)
 }
 
 // WorktreeFileDiff returns the diff of a file
@@ -261,6 +263,7 @@ func (self *WorkingTreeCommands) WorktreeFileDiffCmdObj(node models.IFile, plain
 		Arg(fmt.Sprintf("--unified=%d", contextSize)).
 		Arg(fmt.Sprintf("--color=%s", colorArg)).
 		ArgIf(!plain && self.AppState.IgnoreWhitespaceInDiffView, "--ignore-all-space").
+		Arg(fmt.Sprintf("--find-renames=%d%%", self.AppState.RenameSimilarityThreshold)).
 		ArgIf(cached, "--cached").
 		ArgIf(noIndex, "--no-index").
 		Arg("--").
@@ -311,8 +314,8 @@ func (self *WorkingTreeCommands) ShowFileDiffCmdObj(from string, to string, reve
 }
 
 // CheckoutFile checks out the file for the given commit
-func (self *WorkingTreeCommands) CheckoutFile(commitSha, fileName string) error {
-	cmdArgs := NewGitCmd("checkout").Arg(commitSha, "--", fileName).
+func (self *WorkingTreeCommands) CheckoutFile(commitHash, fileName string) error {
+	cmdArgs := NewGitCmd("checkout").Arg(commitHash, "--", fileName).
 		ToArgv()
 
 	return self.cmd.New(cmdArgs).Run()
@@ -361,7 +364,7 @@ func (self *WorkingTreeCommands) ResetAndClean() error {
 	return self.RemoveUntrackedFiles()
 }
 
-// ResetHardHead runs `git reset --hard`
+// ResetHard runs `git reset --hard`
 func (self *WorkingTreeCommands) ResetHard(ref string) error {
 	cmdArgs := NewGitCmd("reset").Arg("--hard", ref).
 		ToArgv()

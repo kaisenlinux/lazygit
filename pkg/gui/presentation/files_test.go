@@ -13,10 +13,6 @@ import (
 	"github.com/xo/terminfo"
 )
 
-func init() {
-	color.ForceSetColorLevel(terminfo.ColorLevelNone)
-}
-
 func toStringSlice(str string) []string {
 	return strings.Split(strings.TrimSpace(str), "\n")
 }
@@ -66,8 +62,10 @@ M  file1
 		},
 	}
 
+	oldColorLevel := color.ForceSetColorLevel(terminfo.ColorLevelNone)
+	defer color.ForceSetColorLevel(oldColorLevel)
+
 	for _, s := range scenarios {
-		s := s
 		t.Run(s.name, func(t *testing.T) {
 			viewModel := filetree.NewFileTree(func() []*models.File { return s.files }, utils.NewDummyLog(), true)
 			viewModel.SetTree()
@@ -125,8 +123,10 @@ M file1
 		},
 	}
 
+	oldColorLevel := color.ForceSetColorLevel(terminfo.ColorLevelNone)
+	defer color.ForceSetColorLevel(oldColorLevel)
+
 	for _, s := range scenarios {
-		s := s
 		t.Run(s.name, func(t *testing.T) {
 			viewModel := filetree.NewCommitFileTreeViewModel(func() []*models.CommitFile { return s.files }, utils.NewDummyLog(), true)
 			viewModel.SetRef(&models.Commit{})

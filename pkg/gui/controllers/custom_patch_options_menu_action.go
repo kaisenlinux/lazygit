@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/jesseduffield/gocui"
@@ -15,11 +16,11 @@ type CustomPatchOptionsMenuAction struct {
 
 func (self *CustomPatchOptionsMenuAction) Call() error {
 	if !self.c.Git().Patch.PatchBuilder.Active() {
-		return self.c.ErrorMsg(self.c.Tr.NoPatchError)
+		return errors.New(self.c.Tr.NoPatchError)
 	}
 
 	if self.c.Git().Patch.PatchBuilder.IsEmpty() {
-		return self.c.ErrorMsg(self.c.Tr.EmptyPatchError)
+		return errors.New(self.c.Tr.EmptyPatchError)
 	}
 
 	menuItems := []*types.MenuItem{
@@ -67,7 +68,7 @@ func (self *CustomPatchOptionsMenuAction) Call() error {
 
 		if self.c.CurrentContext().GetKey() == self.c.Contexts().LocalCommits.GetKey() {
 			selectedCommit := self.c.Contexts().LocalCommits.GetSelected()
-			if selectedCommit != nil && self.c.Git().Patch.PatchBuilder.To != selectedCommit.Sha {
+			if selectedCommit != nil && self.c.Git().Patch.PatchBuilder.To != selectedCommit.Hash {
 
 				var disabledReason *types.DisabledReason
 				if self.c.Contexts().LocalCommits.AreMultipleItemsSelected() {
@@ -80,7 +81,7 @@ func (self *CustomPatchOptionsMenuAction) Call() error {
 					append(
 						[]*types.MenuItem{
 							{
-								Label:          fmt.Sprintf(self.c.Tr.MovePatchToSelectedCommit, selectedCommit.Sha),
+								Label:          fmt.Sprintf(self.c.Tr.MovePatchToSelectedCommit, selectedCommit.Hash),
 								Tooltip:        self.c.Tr.MovePatchToSelectedCommitTooltip,
 								OnPress:        self.handleMovePatchToSelectedCommit,
 								Key:            'm',
@@ -106,7 +107,7 @@ func (self *CustomPatchOptionsMenuAction) Call() error {
 
 func (self *CustomPatchOptionsMenuAction) getPatchCommitIndex() int {
 	for index, commit := range self.c.Model().Commits {
-		if commit.Sha == self.c.Git().Patch.PatchBuilder.To {
+		if commit.Hash == self.c.Git().Patch.PatchBuilder.To {
 			return index
 		}
 	}
@@ -115,7 +116,7 @@ func (self *CustomPatchOptionsMenuAction) getPatchCommitIndex() int {
 
 func (self *CustomPatchOptionsMenuAction) validateNormalWorkingTreeState() (bool, error) {
 	if self.c.Git().Status.WorkingTreeState() != enums.REBASE_MODE_NONE {
-		return false, self.c.ErrorMsg(self.c.Tr.CantPatchWhileRebasingError)
+		return false, errors.New(self.c.Tr.CantPatchWhileRebasingError)
 	}
 	return true, nil
 }
@@ -213,10 +214,13 @@ func (self *CustomPatchOptionsMenuAction) handlePullPatchIntoNewCommit() error {
 			PreserveMessage:  false,
 			OnConfirm: func(summary string, description string) error {
 				return self.c.WithWaitingStatus(self.c.Tr.RebasingStatus, func(gocui.Task) error {
-					_ = self.c.Helpers().Commits.PopCommitMessageContexts()
+					_ = self.c.Helpers().Commits.CloseCommitMessagePanel()
 					self.c.LogAction(self.c.Tr.Actions.MovePatchIntoNewCommit)
 					err := self.c.Git().Patch.PullPatchIntoNewCommit(self.c.Model().Commits, commitIndex, summary, description)
-					return self.c.Helpers().MergeAndRebase.CheckMergeOrRebase(err)
+					if err := self.c.Helpers().MergeAndRebase.CheckMergeOrRebase(err); err != nil {
+						return err
+					}
+					return self.c.PushContext(self.c.Contexts().LocalCommits)
 				})
 			},
 		},
@@ -233,8 +237,8 @@ func (self *CustomPatchOptionsMenuAction) handleApplyPatch(reverse bool) error {
 		action = "Apply patch in reverse"
 	}
 	self.c.LogAction(action)
-	if err := self.c.Git().Patch.ApplyCustomPatch(reverse); err != nil {
-		return self.c.Error(err)
+	if err := self.c.Git().Patch.ApplyCustomPatch(reverse, true); err != nil {
+		return err
 	}
 	return self.c.Refresh(types.RefreshOptions{Mode: types.ASYNC})
 }
@@ -244,7 +248,7 @@ func (self *CustomPatchOptionsMenuAction) copyPatchToClipboard() error {
 
 	self.c.LogAction(self.c.Tr.Actions.CopyPatchToClipboard)
 	if err := self.c.OS().CopyToClipboard(patch); err != nil {
-		return self.c.Error(err)
+		return err
 	}
 
 	self.c.Toast(self.c.Tr.PatchCopiedToClipboard)

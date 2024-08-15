@@ -18,7 +18,7 @@ var DeleteRemoteBranchWithCredentialPrompt = NewIntegrationTest(NewIntegrationTe
 
 		shell.NewBranch("mybranch")
 
-		shell.PushBranch("origin", "mybranch")
+		shell.PushBranchAndSetUpstream("origin", "mybranch")
 
 		// actually getting a password prompt is tricky: it requires SSH'ing into localhost under a newly created, restricted, user.
 		// This is not easy to do in a cross-platform way, nor is it easy to do in a docker container.
@@ -44,7 +44,7 @@ var DeleteRemoteBranchWithCredentialPrompt = NewIntegrationTest(NewIntegrationTe
 				Confirm()
 		}
 
-		t.Views().Status().Content(Contains("✓ repo → mybranch"))
+		t.Views().Status().Content(Equals("✓ repo → mybranch"))
 
 		deleteBranch()
 
@@ -66,7 +66,7 @@ var DeleteRemoteBranchWithCredentialPrompt = NewIntegrationTest(NewIntegrationTe
 			Content(Contains("incorrect username/password")).
 			Confirm()
 
-		t.Views().Status().Content(Contains("✓ repo → mybranch"))
+		t.Views().Status().Content(Equals("✓ repo → mybranch"))
 
 		// try again with correct password
 		deleteBranch()
@@ -81,7 +81,7 @@ var DeleteRemoteBranchWithCredentialPrompt = NewIntegrationTest(NewIntegrationTe
 			Type("password").
 			Confirm()
 
-		t.Views().Status().Content(Contains("repo → mybranch").DoesNotContain("✓"))
+		t.Views().Status().Content(Equals("(upstream gone) repo → mybranch"))
 		t.Views().Branches().TopLines(Contains("mybranch (upstream gone)"))
 	},
 })

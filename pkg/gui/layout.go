@@ -72,13 +72,25 @@ func (gui *Gui) layout(g *gocui.Gui) error {
 			frameOffset = 0
 		}
 
-		if context.NeedsRerenderOnWidthChange() {
+		mustRerender := false
+		if context.NeedsRerenderOnWidthChange() == types.NEEDS_RERENDER_ON_WIDTH_CHANGE_WHEN_WIDTH_CHANGES {
 			// view.Width() returns the width -1 for some reason
 			oldWidth := view.Width() + 1
 			newWidth := dimensionsObj.X1 - dimensionsObj.X0 + 2*frameOffset
 			if oldWidth != newWidth {
-				contextsToRerender = append(contextsToRerender, context)
+				mustRerender = true
 			}
+		}
+		if context.NeedsRerenderOnHeightChange() {
+			// view.Height() returns the height -1 for some reason
+			oldHeight := view.Height() + 1
+			newHeight := dimensionsObj.Y1 - dimensionsObj.Y0 + 2*frameOffset
+			if oldHeight != newHeight {
+				mustRerender = true
+			}
+		}
+		if mustRerender {
+			contextsToRerender = append(contextsToRerender, context)
 		}
 
 		_, err = g.SetView(
@@ -161,9 +173,7 @@ func (gui *Gui) layout(g *gocui.Gui) error {
 	// if you run `lazygit --logs`
 	// this will let you see these branches as prettified json
 	// gui.c.Log.Info(utils.AsJson(gui.State.Model.Branches[0:4]))
-	if err := gui.helpers.Confirmation.ResizeCurrentPopupPanel(); err != nil {
-		return err
-	}
+	gui.helpers.Confirmation.ResizeCurrentPopupPanels()
 
 	gui.renderContextOptionsMap()
 
@@ -272,35 +282,6 @@ func (gui *Gui) onInitialViewsCreation() error {
 	gui.helpers.Update.CheckForUpdateInBackground()
 
 	gui.waitForIntro.Done()
-
-	return nil
-}
-
-// getFocusLayout returns a manager function for when view gain and lose focus
-func (gui *Gui) getFocusLayout() func(g *gocui.Gui) error {
-	var previousView *gocui.View
-	return func(g *gocui.Gui) error {
-		newView := gui.g.CurrentView()
-		// for now we don't consider losing focus to a popup panel as actually losing focus
-		if newView != previousView && !gui.helpers.Confirmation.IsPopupPanel(newView.Name()) {
-			if err := gui.onViewFocusLost(previousView); err != nil {
-				return err
-			}
-
-			previousView = newView
-		}
-		return nil
-	}
-}
-
-func (gui *Gui) onViewFocusLost(oldView *gocui.View) error {
-	if oldView == nil {
-		return nil
-	}
-
-	oldView.Highlight = false
-
-	_ = oldView.SetOriginX(0)
 
 	return nil
 }

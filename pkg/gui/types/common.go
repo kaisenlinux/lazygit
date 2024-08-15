@@ -35,6 +35,10 @@ type IGuiCommon interface {
 	// case would be overkill, although refresh will internally call 'PostRefreshUpdate'
 	PostRefreshUpdate(Context) error
 
+	// a generic click handler that can be used for any view; it handles opening
+	// URLs in the browser when the user clicks on one
+	HandleGenericClick(view *gocui.View) error
+
 	// renders string to a view without resetting its origin
 	SetViewContent(view *gocui.View, content string)
 	// resets cursor and origin of view. Often used before calling SetViewContent
@@ -63,6 +67,7 @@ type IGuiCommon interface {
 	CurrentContext() Context
 	CurrentStaticContext() Context
 	CurrentSideContext() Context
+	CurrentPopupContexts() []Context
 	IsCurrentContext(Context) bool
 	// TODO: replace the above context-based methods with just using Context() e.g. replace PushContext() with Context().Push()
 	Context() IContextMgr
@@ -81,7 +86,7 @@ type IGuiCommon interface {
 	OnUIThread(f func() error)
 	// Runs a function in a goroutine. Use this whenever you want to run a goroutine and keep track of the fact
 	// that lazygit is still busy. See docs/dev/Busy.md
-	OnWorker(f func(gocui.Task))
+	OnWorker(f func(gocui.Task) error)
 	// Function to call at the end of our 'layout' function which renders views
 	// For example, you may want a view's line to be focused only after that view is
 	// resized, if in accordion mode.
@@ -127,11 +132,8 @@ type IModeMgr interface {
 }
 
 type IPopupHandler interface {
-	// Shows a popup with a (localized) "Error" caption and the given error message (in red).
-	//
-	// This is a convenience wrapper around Alert().
-	ErrorMsg(message string) error
-	Error(err error) error
+	// The global error handler for gocui. Not to be used by application code.
+	ErrorHandler(err error) error
 	// Shows a notification popup with the given title and message to the user.
 	//
 	// This is a convenience wrapper around Confirm(), thus the popup can be closed using both 'Enter' and 'ESC'.
@@ -158,22 +160,25 @@ const (
 
 type CreateMenuOptions struct {
 	Title           string
+	Prompt          string // a message that will be displayed above the menu options
 	Items           []*MenuItem
 	HideCancel      bool
 	ColumnAlignment []utils.Alignment
 }
 
 type CreatePopupPanelOpts struct {
-	HasLoader           bool
-	Editable            bool
-	Title               string
-	Prompt              string
-	HandleConfirm       func() error
-	HandleConfirmPrompt func(string) error
-	HandleClose         func() error
+	HasLoader              bool
+	Editable               bool
+	Title                  string
+	Prompt                 string
+	HandleConfirm          func() error
+	HandleConfirmPrompt    func(string) error
+	HandleClose            func() error
+	HandleDeleteSuggestion func(int) error
 
 	FindSuggestionsFunc func(string) []*Suggestion
 	Mask                bool
+	AllowEditSuggestion bool
 }
 
 type ConfirmOpts struct {
@@ -191,9 +196,11 @@ type PromptOpts struct {
 	InitialContent      string
 	FindSuggestionsFunc func(string) []*Suggestion
 	HandleConfirm       func(string) error
+	AllowEditSuggestion bool
 	// CAPTURE THIS
-	HandleClose func() error
-	Mask        bool
+	HandleClose            func() error
+	HandleDeleteSuggestion func(int) error
+	Mask                   bool
 }
 
 type MenuSection struct {
@@ -211,6 +218,30 @@ type DisabledReason struct {
 	ShowErrorInPanel bool
 }
 
+type MenuWidget int
+
+const (
+	MenuWidgetNone MenuWidget = iota
+	MenuWidgetRadioButtonSelected
+	MenuWidgetRadioButtonUnselected
+	MenuWidgetCheckboxSelected
+	MenuWidgetCheckboxUnselected
+)
+
+func MakeMenuRadioButton(value bool) MenuWidget {
+	if value {
+		return MenuWidgetRadioButtonSelected
+	}
+	return MenuWidgetRadioButtonUnselected
+}
+
+func MakeMenuCheckBox(value bool) MenuWidget {
+	if value {
+		return MenuWidgetCheckboxSelected
+	}
+	return MenuWidgetCheckboxUnselected
+}
+
 type MenuItem struct {
 	Label string
 
@@ -225,6 +256,12 @@ type MenuItem struct {
 	// If Key is defined it allows the user to press the key to invoke the menu
 	// item, as opposed to having to navigate to it
 	Key Key
+
+	// A widget to show in front of the menu item. Supported widget types are
+	// checkboxes and radio buttons,
+	// This only handles the rendering of the widget; the behavior needs to be
+	// provided by the client.
+	Widget MenuWidget
 
 	// The tooltip will be displayed upon highlighting the menu item
 	Tooltip string
@@ -275,6 +312,8 @@ type Model struct {
 	// Name of the currently checked out branch. This will be set even when
 	// we're on a detached head because we're rebasing or bisecting.
 	CheckedOutBranch string
+
+	MainBranches *git_commands.MainBranches
 
 	// for displaying suggestions while typing in a file name
 	FilesTrie *patricia.Trie

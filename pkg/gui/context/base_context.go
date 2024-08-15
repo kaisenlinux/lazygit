@@ -20,11 +20,12 @@ type BaseContext struct {
 	onFocusFn           onFocusFn
 	onFocusLostFn       onFocusLostFn
 
-	focusable                  bool
-	transient                  bool
-	hasControlledBounds        bool
-	needsRerenderOnWidthChange bool
-	highlightOnFocus           bool
+	focusable                   bool
+	transient                   bool
+	hasControlledBounds         bool
+	needsRerenderOnWidthChange  types.NeedsRerenderOnWidthChangeLevel
+	needsRerenderOnHeightChange bool
+	highlightOnFocus            bool
 
 	*ParentContextMgr
 }
@@ -37,15 +38,16 @@ type (
 var _ types.IBaseContext = &BaseContext{}
 
 type NewBaseContextOpts struct {
-	Kind                       types.ContextKind
-	Key                        types.ContextKey
-	View                       *gocui.View
-	WindowName                 string
-	Focusable                  bool
-	Transient                  bool
-	HasUncontrolledBounds      bool // negating for the sake of making false the default
-	HighlightOnFocus           bool
-	NeedsRerenderOnWidthChange bool
+	Kind                        types.ContextKind
+	Key                         types.ContextKey
+	View                        *gocui.View
+	WindowName                  string
+	Focusable                   bool
+	Transient                   bool
+	HasUncontrolledBounds       bool // negating for the sake of making false the default
+	HighlightOnFocus            bool
+	NeedsRerenderOnWidthChange  types.NeedsRerenderOnWidthChangeLevel
+	NeedsRerenderOnHeightChange bool
 
 	OnGetOptionsMap func() map[string]string
 }
@@ -56,18 +58,19 @@ func NewBaseContext(opts NewBaseContextOpts) *BaseContext {
 	hasControlledBounds := !opts.HasUncontrolledBounds
 
 	return &BaseContext{
-		kind:                       opts.Kind,
-		key:                        opts.Key,
-		view:                       opts.View,
-		windowName:                 opts.WindowName,
-		onGetOptionsMap:            opts.OnGetOptionsMap,
-		focusable:                  opts.Focusable,
-		transient:                  opts.Transient,
-		hasControlledBounds:        hasControlledBounds,
-		highlightOnFocus:           opts.HighlightOnFocus,
-		needsRerenderOnWidthChange: opts.NeedsRerenderOnWidthChange,
-		ParentContextMgr:           &ParentContextMgr{},
-		viewTrait:                  viewTrait,
+		kind:                        opts.Kind,
+		key:                         opts.Key,
+		view:                        opts.View,
+		windowName:                  opts.WindowName,
+		onGetOptionsMap:             opts.OnGetOptionsMap,
+		focusable:                   opts.Focusable,
+		transient:                   opts.Transient,
+		hasControlledBounds:         hasControlledBounds,
+		highlightOnFocus:            opts.HighlightOnFocus,
+		needsRerenderOnWidthChange:  opts.NeedsRerenderOnWidthChange,
+		needsRerenderOnHeightChange: opts.NeedsRerenderOnHeightChange,
+		ParentContextMgr:            &ParentContextMgr{},
+		viewTrait:                   viewTrait,
 	}
 }
 
@@ -128,6 +131,11 @@ func (self *BaseContext) AddKeybindingsFn(fn types.KeybindingsFn) {
 
 func (self *BaseContext) AddMouseKeybindingsFn(fn types.MouseKeybindingsFn) {
 	self.mouseKeybindingsFns = append(self.mouseKeybindingsFns, fn)
+}
+
+func (self *BaseContext) ClearAllBindingsFn() {
+	self.keybindingsFns = []types.KeybindingsFn{}
+	self.mouseKeybindingsFns = []types.MouseKeybindingsFn{}
 }
 
 func (self *BaseContext) AddOnClickFn(fn func() error) {
@@ -193,8 +201,12 @@ func (self *BaseContext) HasControlledBounds() bool {
 	return self.hasControlledBounds
 }
 
-func (self *BaseContext) NeedsRerenderOnWidthChange() bool {
+func (self *BaseContext) NeedsRerenderOnWidthChange() types.NeedsRerenderOnWidthChangeLevel {
 	return self.needsRerenderOnWidthChange
+}
+
+func (self *BaseContext) NeedsRerenderOnHeightChange() bool {
+	return self.needsRerenderOnHeightChange
 }
 
 func (self *BaseContext) Title() string {

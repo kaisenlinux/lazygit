@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mattn/go-runewidth"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -107,22 +108,22 @@ func TestTruncateWithEllipsis(t *testing.T) {
 		{
 			"hello world !",
 			3,
-			"...",
+			"he…",
 		},
 		{
 			"hello world !",
 			4,
-			"h...",
+			"hel…",
 		},
 		{
 			"hello world !",
 			5,
-			"he...",
+			"hell…",
 		},
 		{
 			"hello world !",
 			12,
-			"hello wor...",
+			"hello world…",
 		},
 		{
 			"hello world !",
@@ -137,12 +138,17 @@ func TestTruncateWithEllipsis(t *testing.T) {
 		{
 			"大大大大",
 			5,
-			"大...",
+			"大大…",
 		},
 		{
 			"大大大大",
 			2,
 			"..",
+		},
+		{
+			"大大大大",
+			1,
+			".",
 		},
 		{
 			"大大大大",
@@ -243,5 +249,29 @@ func TestRenderDisplayStrings(t *testing.T) {
 		output, columnPositions := RenderDisplayStrings(test.input, test.columnAlignments)
 		assert.EqualValues(t, test.expectedOutput, strings.Join(output, "\n"))
 		assert.EqualValues(t, test.expectedColumnPositions, columnPositions)
+	}
+}
+
+func BenchmarkStringWidthAsciiOriginal(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		runewidth.StringWidth("some ASCII string")
+	}
+}
+
+func BenchmarkStringWidthAsciiOptimized(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		StringWidth("some ASCII string")
+	}
+}
+
+func BenchmarkStringWidthNonAsciiOriginal(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		runewidth.StringWidth("some non-ASCII string 🍉")
+	}
+}
+
+func BenchmarkStringWidthNonAsciiOptimized(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		StringWidth("some non-ASCII string 🍉")
 	}
 }

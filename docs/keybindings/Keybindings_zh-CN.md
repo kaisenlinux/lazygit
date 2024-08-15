@@ -14,6 +14,8 @@ _Legend: `<c-b>` means ctrl+b, `<a-b>` means alt+b, `B` means shift+b_
 | `` @ `` | 打开命令日志菜单 | View options for the command log e.g. show/hide the command log and focus the command log. |
 | `` P `` | 推送 | Push the current branch to its upstream branch. If no upstream is configured, you will be prompted to configure an upstream branch. |
 | `` p `` | 拉取 | Pull changes from the remote for the current branch. If no upstream is configured, you will be prompted to configure an upstream branch. |
+| `` ) `` | Increase rename similarity threshold | Increase the similarity threshold for a deletion and addition pair to be treated as a rename. |
+| `` ( `` | Decrease rename similarity threshold | Decrease the similarity threshold for a deletion and addition pair to be treated as a rename. |
 | `` } `` | 扩大差异视图中显示的上下文范围 | Increase the amount of the context shown around changes in the diff view. |
 | `` { `` | 缩小差异视图中显示的上下文范围 | Decrease the amount of the context shown around changes in the diff view. |
 | `` : `` | 执行自定义命令 | Bring up a prompt where you can enter a shell command to execute. Not to be confused with pre-configured custom commands. |
@@ -53,7 +55,7 @@ _Legend: `<c-b>` means ctrl+b, `<a-b>` means alt+b, `B` means shift+b_
 
 | Key | Action | Info |
 |-----|--------|-------------|
-| `` <c-o> `` | 将提交的 SHA 复制到剪贴板 |  |
+| `` <c-o> `` | 将提交的 hash 复制到剪贴板 |  |
 | `` <space> `` | 检出 | Checkout the selected commit as a detached HEAD. |
 | `` y `` | Copy commit attribute to clipboard | Copy commit attribute to clipboard (e.g. hash, URL, diff, message, author). |
 | `` o `` | 在浏览器中打开提交 |  |
@@ -91,13 +93,14 @@ _Legend: `<c-b>` means ctrl+b, `<a-b>` means alt+b, `B` means shift+b_
 | `` F `` | 强制检出 | Force checkout selected branch. This will discard all local changes in your working directory before checking out the selected branch. |
 | `` d `` | Delete | View delete options for local/remote branch. |
 | `` r `` | 将已检出的分支变基到该分支 | Rebase the checked-out branch onto the selected branch. |
-| `` M `` | 合并到当前检出的分支 | Merge selected branch into currently checked out branch. |
+| `` M `` | 合并到当前检出的分支 | View options for merging the selected item into the current branch (regular merge, squash merge) |
 | `` f `` | 从上游快进此分支 | Fast-forward selected branch from its upstream. |
 | `` T `` | 创建标签 |  |
 | `` s `` | Sort order |  |
 | `` g `` | 查看重置选项 |  |
 | `` R `` | 重命名分支 |  |
 | `` u `` | View upstream options | View options relating to the branch's upstream e.g. setting/unsetting the upstream and resetting to the upstream. |
+| `` <c-t> `` | Open external diff tool (git difftool) |  |
 | `` <enter> `` | 查看提交 |  |
 | `` w `` | View worktree options |  |
 | `` / `` | Filter the current view by text |  |
@@ -106,7 +109,7 @@ _Legend: `<c-b>` means ctrl+b, `<a-b>` means alt+b, `B` means shift+b_
 
 | Key | Action | Info |
 |-----|--------|-------------|
-| `` <c-o> `` | 将提交的 SHA 复制到剪贴板 |  |
+| `` <c-o> `` | 将提交的 hash 复制到剪贴板 |  |
 | `` <space> `` | 检出 | Checkout the selected commit as a detached HEAD. |
 | `` y `` | Copy commit attribute to clipboard | Copy commit attribute to clipboard (e.g. hash, URL, diff, message, author). |
 | `` o `` | 在浏览器中打开提交 |  |
@@ -137,11 +140,11 @@ _Legend: `<c-b>` means ctrl+b, `<a-b>` means alt+b, `B` means shift+b_
 
 | Key | Action | Info |
 |-----|--------|-------------|
-| `` <c-o> `` | 将提交的 SHA 复制到剪贴板 |  |
+| `` <c-o> `` | 将提交的 hash 复制到剪贴板 |  |
 | `` <c-r> `` | 重置已拣选（复制）的提交 |  |
 | `` b `` | 查看二分查找选项 |  |
 | `` s `` | 压缩 | Squash the selected commit into the commit below it. The selected commit's message will be appended to the commit below it. |
-| `` f `` | 修正（fixup） | Meld the selected commit into the commit below it. Similar to fixup, but the selected commit's message will be discarded. |
+| `` f `` | 修正（fixup） | Meld the selected commit into the commit below it. Similar to squash, but the selected commit's message will be discarded. |
 | `` r `` | 改写提交 | Reword the selected commit's message. |
 | `` R `` | 使用编辑器重命名提交 |  |
 | `` d `` | 删除提交 | Drop the selected commit. This will remove the commit from the branch via a rebase. If the commit makes changes that later commits depend on, you may need to resolve merge conflicts. |
@@ -248,6 +251,7 @@ If you would instead like to start an interactive rebase from the selected commi
 | `` d `` | Delete | View delete options for local/remote tag. |
 | `` P `` | 推送标签 | Push the selected tag to a remote. You'll be prompted to select a remote. |
 | `` g `` | Reset | View reset options (soft/mixed/hard) for resetting onto selected item. |
+| `` <c-t> `` | Open external diff tool (git difftool) |  |
 | `` <enter> `` | 查看提交 |  |
 | `` w `` | View worktree options |  |
 | `` / `` | Filter the current view by text |  |
@@ -342,12 +346,13 @@ If you would instead like to start an interactive rebase from the selected commi
 | `` <c-o> `` | 将分支名称复制到剪贴板 |  |
 | `` <space> `` | 检出 | Checkout a new local branch based on the selected remote branch, or the remote branch as a detached head. |
 | `` n `` | 新分支 |  |
-| `` M `` | 合并到当前检出的分支 | Merge selected branch into currently checked out branch. |
+| `` M `` | 合并到当前检出的分支 | View options for merging the selected item into the current branch (regular merge, squash merge) |
 | `` r `` | 将已检出的分支变基到该分支 | Rebase the checked-out branch onto the selected branch. |
 | `` d `` | Delete | Delete the remote branch from the remote. |
 | `` u `` | Set as upstream | 设置为检出分支的上游 |
 | `` s `` | Sort order |  |
 | `` g `` | 查看重置选项 | View reset options (soft/mixed/hard) for resetting onto selected item. |
+| `` <c-t> `` | Open external diff tool (git difftool) |  |
 | `` <enter> `` | 查看提交 |  |
 | `` w `` | View worktree options |  |
 | `` / `` | Filter the current view by text |  |

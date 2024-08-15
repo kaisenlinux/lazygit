@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jesseduffield/gocui"
 	"github.com/jesseduffield/lazygit/pkg/commands/git_commands"
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
 	"github.com/jesseduffield/lazygit/pkg/gui/presentation"
@@ -21,8 +22,9 @@ type SubCommitsContext struct {
 }
 
 var (
-	_ types.IListContext    = (*SubCommitsContext)(nil)
-	_ types.DiffableContext = (*SubCommitsContext)(nil)
+	_ types.IListContext       = (*SubCommitsContext)(nil)
+	_ types.DiffableContext    = (*SubCommitsContext)(nil)
+	_ types.ISearchableContext = (*SubCommitsContext)(nil)
 )
 
 func NewSubCommitsContext(
@@ -44,11 +46,11 @@ func NewSubCommitsContext(
 			return [][]string{}
 		}
 
-		selectedCommitSha := ""
+		selectedCommitHash := ""
 		if c.CurrentContext().GetKey() == SUB_COMMITS_CONTEXT_KEY {
 			selectedCommit := viewModel.GetSelected()
 			if selectedCommit != nil {
-				selectedCommitSha = selectedCommit.Sha
+				selectedCommitHash = selectedCommit.Hash
 			}
 		}
 		branches := []*models.Branch{}
@@ -63,19 +65,17 @@ func NewSubCommitsContext(
 			viewModel.GetRef().RefName(),
 			hasRebaseUpdateRefsConfig,
 			c.State().GetRepoState().GetScreenMode() != types.SCREEN_NORMAL,
-			c.Modes().CherryPicking.SelectedShaSet(),
+			c.Modes().CherryPicking.SelectedHashSet(),
 			c.Modes().Diffing.Ref,
 			"",
 			c.UserConfig.Gui.TimeFormat,
 			c.UserConfig.Gui.ShortTimeFormat,
 			time.Now(),
 			c.UserConfig.Git.ParseEmoji,
-			selectedCommitSha,
+			selectedCommitHash,
 			startIdx,
 			endIdx,
-			// Don't show the graph in the left/right view; we'd like to, but
-			// it's too complicated:
-			shouldShowGraph(c) && viewModel.GetRefToShowDivergenceFrom() == "",
+			shouldShowGraph(c),
 			git_commands.NewNullBisectInfo(),
 			false,
 		)
@@ -115,13 +115,14 @@ func NewSubCommitsContext(
 		DynamicTitleBuilder: NewDynamicTitleBuilder(c.Tr.SubCommitsDynamicTitle),
 		ListContextTrait: &ListContextTrait{
 			Context: NewSimpleContext(NewBaseContext(NewBaseContextOpts{
-				View:                       c.Views().SubCommits,
-				WindowName:                 "branches",
-				Key:                        SUB_COMMITS_CONTEXT_KEY,
-				Kind:                       types.SIDE_CONTEXT,
-				Focusable:                  true,
-				Transient:                  true,
-				NeedsRerenderOnWidthChange: true,
+				View:                        c.Views().SubCommits,
+				WindowName:                  "branches",
+				Key:                         SUB_COMMITS_CONTEXT_KEY,
+				Kind:                        types.SIDE_CONTEXT,
+				Focusable:                   true,
+				Transient:                   true,
+				NeedsRerenderOnWidthChange:  types.NEEDS_RERENDER_ON_WIDTH_CHANGE_WHEN_SCREEN_MODE_CHANGES,
+				NeedsRerenderOnHeightChange: true,
 			})),
 			ListRenderer: ListRenderer{
 				list:              viewModel,
@@ -130,13 +131,11 @@ func NewSubCommitsContext(
 			},
 			c:                       c,
 			refreshViewportOnChange: true,
+			renderOnlyVisibleLines:  true,
 		},
 	}
 
-	ctx.GetView().SetOnSelectItem(ctx.SearchTrait.onSelectItemWrapper(func(selectedLineIdx int) error {
-		ctx.GetList().SetSelection(selectedLineIdx)
-		return ctx.HandleFocus(types.OnFocusOpts{})
-	}))
+	ctx.GetView().SetOnSelectItem(ctx.SearchTrait.onSelectItemWrapper(ctx.OnSearchSelect))
 
 	return ctx
 }
@@ -203,4 +202,8 @@ func (self *SubCommitsContext) GetDiffTerminals() []string {
 	itemId := self.GetSelectedItemId()
 
 	return []string{itemId}
+}
+
+func (self *SubCommitsContext) ModelSearchResults(searchStr string, caseSensitive bool) []gocui.SearchPosition {
+	return searchModelCommits(caseSensitive, self.GetCommits(), self.ColumnPositions(), searchStr)
 }

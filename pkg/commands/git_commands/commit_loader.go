@@ -11,13 +11,13 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/fsmiamoto/git-todo-parser/todo"
 	"github.com/jesseduffield/lazygit/pkg/commands/models"
 	"github.com/jesseduffield/lazygit/pkg/commands/oscommands"
 	"github.com/jesseduffield/lazygit/pkg/commands/types/enums"
 	"github.com/jesseduffield/lazygit/pkg/common"
 	"github.com/jesseduffield/lazygit/pkg/utils"
 	"github.com/samber/lo"
+	"github.com/stefanhaller/git-todo-parser/todo"
 )
 
 // context:
@@ -35,11 +35,6 @@ type CommitLoader struct {
 	readFile      func(filename string) ([]byte, error)
 	walkFiles     func(root string, fn filepath.WalkFunc) error
 	dotGitDir     string
-	// List of main branches that exist in the repo.
-	// We use these to obtain the merge base of the branch.
-	// When nil, we're yet to obtain the list of existing main branches.
-	// When an empty slice, we've obtained the list and it's empty.
-	mainBranches []string
 	*GitCommon
 }
 
@@ -56,7 +51,6 @@ func NewCommitLoader(
 		getRebaseMode: getRebaseMode,
 		readFile:      os.ReadFile,
 		walkFiles:     filepath.Walk,
-		mainBranches:  nil,
 		GitCommon:     gitCommon,
 	}
 }
@@ -72,6 +66,7 @@ type GetCommitsOptions struct {
 	All bool
 	// If non-empty, show divergence from this ref (left-right log)
 	RefToShowDivergenceFrom string
+	MainBranches            *MainBranches
 }
 
 // GetCommits obtains the commits of the current branch
@@ -108,9 +103,9 @@ func (self *CommitLoader) GetCommits(opts GetCommitsOptions) ([]*models.Commit, 
 	go utils.Safe(func() {
 		defer wg.Done()
 
-		ancestor = self.getMergeBase(opts.RefName)
+		ancestor = opts.MainBranches.GetMergeBase(opts.RefName)
 		if opts.RefToShowDivergenceFrom != "" {
-			remoteAncestor = self.getMergeBase(opts.RefToShowDivergenceFrom)
+			remoteAncestor = opts.MainBranches.GetMergeBase(opts.RefToShowDivergenceFrom)
 		}
 	})
 
@@ -129,7 +124,7 @@ func (self *CommitLoader) GetCommits(opts GetCommitsOptions) ([]*models.Commit, 
 	}
 
 	for _, commit := range commits {
-		if commit.Sha == firstPushedCommit {
+		if commit.Hash == firstPushedCommit {
 			passedFirstPushedCommit = true
 		}
 		if commit.Status != models.StatusRebasing {
@@ -198,24 +193,24 @@ func (self *CommitLoader) MergeRebasingCommits(commits []*models.Commit) ([]*mod
 	return result, nil
 }
 
-// extractCommitFromLine takes a line from a git log and extracts the sha, message, date, and tag if present
+// extractCommitFromLine takes a line from a git log and extracts the hash, message, date, and tag if present
 // then puts them into a commit object
 // example input:
 // 8ad01fe32fcc20f07bc6693f87aa4977c327f1e1|10 hours ago|Jesse Duffield| (HEAD -> master, tag: v0.15.2)|refresh commits when adding a tag
 func (self *CommitLoader) extractCommitFromLine(line string, showDivergence bool) *models.Commit {
 	split := strings.SplitN(line, "\x00", 8)
 
-	sha := split[0]
+	hash := split[0]
 	unixTimestamp := split[1]
 	authorName := split[2]
 	authorEmail := split[3]
 	extraInfo := strings.TrimSpace(split[4])
 	parentHashes := split[5]
-	message := split[6]
 	divergence := models.DivergenceNone
 	if showDivergence {
-		divergence = lo.Ternary(split[7] == "<", models.DivergenceLeft, models.DivergenceRight)
+		divergence = lo.Ternary(split[6] == "<", models.DivergenceLeft, models.DivergenceRight)
 	}
+	message := split[7]
 
 	tags := []string{}
 
@@ -241,7 +236,7 @@ func (self *CommitLoader) extractCommitFromLine(line string, showDivergence bool
 	}
 
 	return &models.Commit{
-		Sha:           sha,
+		Hash:          hash,
 		Name:          message,
 		Tags:          tags,
 		ExtraInfo:     extraInfo,
@@ -260,8 +255,8 @@ func (self *CommitLoader) getHydratedRebasingCommits(rebaseMode enums.RebaseMode
 		return nil, nil
 	}
 
-	commitShas := lo.FilterMap(commits, func(commit *models.Commit, _ int) (string, bool) {
-		return commit.Sha, commit.Sha != ""
+	commitHashes := lo.FilterMap(commits, func(commit *models.Commit, _ int) (string, bool) {
+		return commit.Hash, commit.Hash != ""
 	})
 
 	// note that we're not filtering these as we do non-rebasing commits just because
@@ -270,14 +265,14 @@ func (self *CommitLoader) getHydratedRebasingCommits(rebaseMode enums.RebaseMode
 		NewGitCmd("show").
 			Config("log.showSignature=false").
 			Arg("--no-patch", "--oneline", "--abbrev=20", prettyFormat).
-			Arg(commitShas...).
+			Arg(commitHashes...).
 			ToArgv(),
 	).DontLog()
 
 	fullCommits := map[string]*models.Commit{}
 	err := cmdObj.RunAndProcessLines(func(line string) (bool, error) {
 		commit := self.extractCommitFromLine(line, false)
-		fullCommits[commit.Sha] = commit
+		fullCommits[commit.Hash] = commit
 		return false, nil
 	})
 	if err != nil {
@@ -285,23 +280,23 @@ func (self *CommitLoader) getHydratedRebasingCommits(rebaseMode enums.RebaseMode
 	}
 
 	findFullCommit := lo.Ternary(self.version.IsOlderThan(2, 25, 2),
-		func(sha string) *models.Commit {
+		func(hash string) *models.Commit {
 			for s, c := range fullCommits {
-				if strings.HasPrefix(s, sha) {
+				if strings.HasPrefix(s, hash) {
 					return c
 				}
 			}
 			return nil
 		},
-		func(sha string) *models.Commit {
-			return fullCommits[sha]
+		func(hash string) *models.Commit {
+			return fullCommits[hash]
 		})
 
 	hydratedCommits := make([]*models.Commit, 0, len(commits))
 	for _, rebasingCommit := range commits {
-		if rebasingCommit.Sha == "" {
+		if rebasingCommit.Hash == "" {
 			hydratedCommits = append(hydratedCommits, rebasingCommit)
-		} else if commit := findFullCommit(rebasingCommit.Sha); commit != nil {
+		} else if commit := findFullCommit(rebasingCommit.Hash); commit != nil {
 			commit.Action = rebasingCommit.Action
 			commit.Status = rebasingCommit.Status
 			hydratedCommits = append(hydratedCommits, commit)
@@ -337,9 +332,9 @@ func (self *CommitLoader) getRebasingCommits(rebaseMode enums.RebaseMode) []*mod
 
 	// See if the current commit couldn't be applied because it conflicted; if
 	// so, add a fake entry for it
-	if conflictedCommitSha := self.getConflictedCommit(todos); conflictedCommitSha != "" {
+	if conflictedCommitHash := self.getConflictedCommit(todos); conflictedCommitHash != "" {
 		commits = append(commits, &models.Commit{
-			Sha:    conflictedCommitSha,
+			Hash:   conflictedCommitHash,
 			Name:   "",
 			Status: models.StatusRebasing,
 			Action: models.ActionConflict,
@@ -349,12 +344,14 @@ func (self *CommitLoader) getRebasingCommits(rebaseMode enums.RebaseMode) []*mod
 	for _, t := range todos {
 		if t.Command == todo.UpdateRef {
 			t.Msg = t.Ref
+		} else if t.Command == todo.Exec {
+			t.Msg = t.ExecCommand
 		} else if t.Commit == "" {
 			// Command does not have a commit associated, skip
 			continue
 		}
 		commits = utils.Prepend(commits, &models.Commit{
-			Sha:    t.Commit,
+			Hash:   t.Commit,
 			Name:   t.Msg,
 			Status: models.StatusRebasing,
 			Action: t.Command,
@@ -458,8 +455,8 @@ func setCommitMergedStatuses(ancestor string, commits []*models.Commit) {
 
 	passedAncestor := false
 	for i, commit := range commits {
-		// some commits aren't really commits and don't have sha's, such as the update-ref todo
-		if commit.Sha != "" && strings.HasPrefix(ancestor, commit.Sha) {
+		// some commits aren't really commits and don't have hashes, such as the update-ref todo
+		if commit.Hash != "" && strings.HasPrefix(ancestor, commit.Hash) {
 			passedAncestor = true
 		}
 		if commit.Status != models.StatusPushed && commit.Status != models.StatusUnpushed {
@@ -469,84 +466,6 @@ func setCommitMergedStatuses(ancestor string, commits []*models.Commit) {
 			commits[i].Status = models.StatusMerged
 		}
 	}
-}
-
-func (self *CommitLoader) getMergeBase(refName string) string {
-	if self.mainBranches == nil {
-		self.mainBranches = self.getExistingMainBranches()
-	}
-
-	if len(self.mainBranches) == 0 {
-		return ""
-	}
-
-	// We pass all configured main branches to the merge-base call; git will
-	// return the base commit for the closest one.
-
-	output, err := self.cmd.New(
-		NewGitCmd("merge-base").Arg(refName).Arg(self.mainBranches...).
-			ToArgv(),
-	).DontLog().RunWithOutput()
-	if err != nil {
-		// If there's an error, it must be because one of the main branches that
-		// used to exist when we called getExistingMainBranches() was deleted
-		// meanwhile. To fix this for next time, throw away our cache.
-		self.mainBranches = nil
-	}
-	return ignoringWarnings(output)
-}
-
-func (self *CommitLoader) getExistingMainBranches() []string {
-	var existingBranches []string
-	var wg sync.WaitGroup
-
-	mainBranches := self.UserConfig.Git.MainBranches
-	existingBranches = make([]string, len(mainBranches))
-
-	for i, branchName := range mainBranches {
-		wg.Add(1)
-		i := i
-		branchName := branchName
-		go utils.Safe(func() {
-			defer wg.Done()
-
-			// Try to determine upstream of local main branch
-			if ref, err := self.cmd.New(
-				NewGitCmd("rev-parse").Arg("--symbolic-full-name", branchName+"@{u}").ToArgv(),
-			).DontLog().RunWithOutput(); err == nil {
-				existingBranches[i] = strings.TrimSpace(ref)
-				return
-			}
-
-			// If this failed, a local branch for this main branch doesn't exist or it
-			// has no upstream configured. Try looking for one in the "origin" remote.
-			ref := "refs/remotes/origin/" + branchName
-			if err := self.cmd.New(
-				NewGitCmd("rev-parse").Arg("--verify", "--quiet", ref).ToArgv(),
-			).DontLog().Run(); err == nil {
-				existingBranches[i] = ref
-				return
-			}
-
-			// If this failed as well, try if we have the main branch as a local
-			// branch. This covers the case where somebody is using git locally
-			// for something, but never pushing anywhere.
-			ref = "refs/heads/" + branchName
-			if err := self.cmd.New(
-				NewGitCmd("rev-parse").Arg("--verify", "--quiet", ref).ToArgv(),
-			).DontLog().Run(); err == nil {
-				existingBranches[i] = ref
-			}
-		})
-	}
-
-	wg.Wait()
-
-	existingBranches = lo.Filter(existingBranches, func(branch string, _ int) bool {
-		return branch != ""
-	})
-
-	return existingBranches
 }
 
 func ignoringWarnings(commandOutput string) string {
@@ -559,7 +478,7 @@ func ignoringWarnings(commandOutput string) string {
 	return lastLine
 }
 
-// getFirstPushedCommit returns the first commit SHA which has been pushed to the ref's upstream.
+// getFirstPushedCommit returns the first commit hash which has been pushed to the ref's upstream.
 // all commits above this are deemed unpushed and marked as such.
 func (self *CommitLoader) getFirstPushedCommit(refName string) (string, error) {
 	output, err := self.cmd.New(
@@ -605,4 +524,4 @@ func (self *CommitLoader) getLogCmd(opts GetCommitsOptions) oscommands.ICmdObj {
 	return self.cmd.New(cmdArgs).DontLog()
 }
 
-const prettyFormat = `--pretty=format:%H%x00%at%x00%aN%x00%ae%x00%D%x00%p%x00%s%x00%m`
+const prettyFormat = `--pretty=format:%H%x00%at%x00%aN%x00%ae%x00%D%x00%p%x00%m%x00%s`

@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"time"
-
-	"github.com/jesseduffield/lazygit/pkg/utils"
 )
 
 // this is for running shell commands, mostly for the sake of setting up the repo
@@ -197,6 +195,10 @@ func (self *Shell) CreateAnnotatedTag(name string, message string, ref string) *
 }
 
 func (self *Shell) PushBranch(upstream, branch string) *Shell {
+	return self.RunCommand([]string{"git", "push", upstream, branch})
+}
+
+func (self *Shell) PushBranchAndSetUpstream(upstream, branch string) *Shell {
 	return self.RunCommand([]string{"git", "push", "--set-upstream", upstream, branch})
 }
 
@@ -289,7 +291,7 @@ func (self *Shell) CreateRepoHistory() *Shell {
 
 		// Choose a random commit within the last 20 commits on the master branch
 		lastMasterCommit := totalCommits - 1
-		commitOffset := rand.Intn(utils.Min(lastMasterCommit, 5)) + 1
+		commitOffset := rand.Intn(min(lastMasterCommit, 5)) + 1
 
 		// Create the feature branch and checkout the chosen commit
 		self.NewBranchFrom(branchName, fmt.Sprintf("master~%d", commitOffset))
@@ -354,6 +356,12 @@ func (self *Shell) CloneIntoSubmodule(submoduleName string, submodulePath string
 
 func (self *Shell) Clone(repoName string) *Shell {
 	self.RunCommand([]string{"git", "clone", "--bare", ".", "../" + repoName})
+
+	return self
+}
+
+func (self *Shell) CloneNonBare(repoName string) *Shell {
+	self.RunCommand([]string{"git", "clone", ".", "../" + repoName})
 
 	return self
 }

@@ -5,15 +5,15 @@ Maintainer: Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>
 Rules-Requires-Root: no
 Build-Depends:
  debhelper-compat (= 13),
- golang-go (>= 1.18),
+ golang-go (>= 1.22),
  dh-golang,
-Standards-Version: 4.6.1
+Standards-Version: 4.7.2
 Homepage: https://github.com/jesseduffield/lazygit
 Vcs-Browser: https://gitlab.com/kaisenlinux/packages/lazygit
 Vcs-Git: https://gitlab.com/kaisenlinux/packages/lazygit.git
 
 Package: lazygit
-Architecture: amd64 arm64 i386
+Architecture: amd64 arm64
 Depends:
  ${shlibs:Depends},
  ${misc:Depends},

@@ -263,8 +263,8 @@ func (self *ViewDriver) assertLines(offset int, matchers ...*TextMatcher) *ViewD
 				return false, fmt.Sprintf(
 					"Unexpected selection in view '%s'. Expected %s to be selected but got %s.\nExpected selected lines:\n---\n%s\n---\n\nActual selected lines:\n---\n%s\n---\n",
 					view.Name(),
-					formatLineRange(startIdx, endIdx),
 					formatLineRange(expectedStartIdx, expectedEndIdx),
+					formatLineRange(startIdx, endIdx),
 					strings.Join(expectedSelectedLines, "\n"),
 					strings.Join(lines, "\n"),
 				)
@@ -397,6 +397,12 @@ func (self *ViewDriver) Press(keyStr string) *ViewDriver {
 	return self
 }
 
+func (self *ViewDriver) Delay() *ViewDriver {
+	self.t.Wait(self.t.inputDelay)
+
+	return self
+}
+
 // for use when typing or navigating, because in demos we want that to happen
 // faster
 func (self *ViewDriver) PressFast(keyStr string) *ViewDriver {
@@ -425,6 +431,11 @@ func (self *ViewDriver) SelectPreviousItem() *ViewDriver {
 	return self.PressFast(self.t.keys.Universal.PrevItem)
 }
 
+// i.e. pressing '<'
+func (self *ViewDriver) GotoTop() *ViewDriver {
+	return self.PressFast(self.t.keys.Universal.GotoTop)
+}
+
 // i.e. pressing space
 func (self *ViewDriver) PressPrimaryAction() *ViewDriver {
 	return self.Press(self.t.keys.Universal.Select)
@@ -451,21 +462,15 @@ func (self *ViewDriver) PressEscape() *ViewDriver {
 // - the user is not in a list item
 // - no list item is found containing the given text
 // - multiple list items are found containing the given text in the initial page of items
-//
-// NOTE: this currently assumes that BufferLines returns all the lines that can be accessed.
-// If this changes in future, we'll need to update this code to first attempt to find the item
-// in the current page and failing that, jump to the top of the view and iterate through all of it,
-// looking for the item.
 func (self *ViewDriver) NavigateToLine(matcher *TextMatcher) *ViewDriver {
 	self.IsFocused()
 
 	view := self.getView()
 	lines := view.BufferLines()
 
-	var matchIndex int
+	matchIndex := -1
 
 	self.t.assertWithRetries(func() (bool, string) {
-		matchIndex = -1
 		var matches []string
 		// first we look for a duplicate on the current screen. We won't bother looking beyond that though.
 		for i, line := range lines {
@@ -477,12 +482,18 @@ func (self *ViewDriver) NavigateToLine(matcher *TextMatcher) *ViewDriver {
 		}
 		if len(matches) > 1 {
 			return false, fmt.Sprintf("Found %d matches for `%s`, expected only a single match. Matching lines:\n%s", len(matches), matcher.name(), strings.Join(matches, "\n"))
-		} else if len(matches) == 0 {
-			return false, fmt.Sprintf("Could not find item matching: %s. Lines:\n%s", matcher.name(), strings.Join(lines, "\n"))
-		} else {
-			return true, ""
 		}
+		return true, ""
 	})
+
+	// If no match was found, it could be that this is a view that renders only
+	// the visible lines. In that case, we jump to the top and then press
+	// down-arrow until we found the match. We simply return the first match we
+	// find, so we have no way to assert that there are no duplicates.
+	if matchIndex == -1 {
+		self.GotoTop()
+		matchIndex = len(lines)
+	}
 
 	selectedLineIdx := self.getSelectedLineIdx()
 	if selectedLineIdx == matchIndex {
@@ -508,12 +519,14 @@ func (self *ViewDriver) NavigateToLine(matcher *TextMatcher) *ViewDriver {
 	for i := 0; i < maxNumKeyPresses; i++ {
 		keyPress()
 		idx := self.getSelectedLineIdx()
-		if ok, _ := matcher.test(lines[idx]); ok {
+		// It is important to use view.BufferLines() here and not lines, because it
+		// could change with every keypress.
+		if ok, _ := matcher.test(view.BufferLines()[idx]); ok {
 			return self
 		}
 	}
 
-	self.t.fail(fmt.Sprintf("Could not navigate to item matching: %s. Lines:\n%s", matcher.name(), strings.Join(lines, "\n")))
+	self.t.fail(fmt.Sprintf("Could not navigate to item matching: %s. Lines:\n%s", matcher.name(), strings.Join(view.BufferLines(), "\n")))
 	return self
 }
 
@@ -559,7 +572,7 @@ func (self *ViewDriver) IsVisible() *ViewDriver {
 
 func (self *ViewDriver) IsInvisible() *ViewDriver {
 	self.t.assertWithRetries(func() (bool, string) {
-		return !self.getView().Visible, fmt.Sprintf("%s: Expected view to be visible, but it was not", self.context)
+		return !self.getView().Visible, fmt.Sprintf("%s: Expected view to be invisible, but it was not", self.context)
 	})
 
 	return self
@@ -595,7 +608,9 @@ func (self *ViewDriver) SetCaptionPrefix(prefix string) *ViewDriver {
 }
 
 func (self *ViewDriver) Wait(milliseconds int) *ViewDriver {
-	self.t.Wait(milliseconds)
+	if !self.t.gui.Headless() {
+		self.t.Wait(milliseconds)
+	}
 
 	return self
 }

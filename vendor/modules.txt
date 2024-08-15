@@ -34,10 +34,7 @@ github.com/emirpasic/gods/utils
 # github.com/fatih/color v1.9.0
 ## explicit; go 1.13
 github.com/fatih/color
-# github.com/fsmiamoto/git-todo-parser v0.0.5
-## explicit; go 1.13
-github.com/fsmiamoto/git-todo-parser/todo
-# github.com/gdamore/encoding v1.0.0
+# github.com/gdamore/encoding v1.0.1
 ## explicit; go 1.9
 github.com/gdamore/encoding
 # github.com/gdamore/tcell/v2 v2.7.4
@@ -113,6 +110,9 @@ github.com/gobwas/glob/util/strings
 # github.com/gookit/color v1.4.2
 ## explicit; go 1.12
 github.com/gookit/color
+# github.com/iancoleman/orderedmap v0.3.0
+## explicit; go 1.16
+github.com/iancoleman/orderedmap
 # github.com/imdario/mergo v0.3.11
 ## explicit; go 1.13
 github.com/imdario/mergo
@@ -172,7 +172,7 @@ github.com/jesseduffield/go-git/v5/utils/merkletrie/filesystem
 github.com/jesseduffield/go-git/v5/utils/merkletrie/index
 github.com/jesseduffield/go-git/v5/utils/merkletrie/internal/frame
 github.com/jesseduffield/go-git/v5/utils/merkletrie/noder
-# github.com/jesseduffield/gocui v0.3.1-0.20240309085756-86e0d5a312de
+# github.com/jesseduffield/gocui v0.3.1-0.20240628061234-aed9e133e65b
 ## explicit; go 1.12
 github.com/jesseduffield/gocui
 # github.com/jesseduffield/kill v0.0.0-20220618033138-bfbe04675d10
@@ -185,9 +185,6 @@ github.com/jesseduffield/lazycore/pkg/utils
 # github.com/jesseduffield/minimal/gitignore v0.3.3-0.20211018110810-9cde264e6b1e
 ## explicit; go 1.15
 github.com/jesseduffield/minimal/gitignore
-# github.com/jesseduffield/yaml v2.1.0+incompatible
-## explicit
-github.com/jesseduffield/yaml
 # github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0
 ## explicit
 github.com/kardianos/osext
@@ -272,6 +269,9 @@ github.com/spf13/afero/mem
 # github.com/spkg/bom v0.0.0-20160624110644-59b7046e48ad
 ## explicit
 github.com/spkg/bom
+# github.com/stefanhaller/git-todo-parser v0.0.7-0.20240406123903-fd957137b6e2
+## explicit; go 1.13
+github.com/stefanhaller/git-todo-parser/todo
 # github.com/stretchr/testify v1.8.1
 ## explicit; go 1.13
 github.com/stretchr/testify/assert
@@ -313,16 +313,19 @@ golang.org/x/exp/slices
 golang.org/x/net/context
 golang.org/x/net/internal/socks
 golang.org/x/net/proxy
-# golang.org/x/sys v0.18.0
+# golang.org/x/sync v0.7.0
+## explicit; go 1.18
+golang.org/x/sync/errgroup
+# golang.org/x/sys v0.21.0
 ## explicit; go 1.18
 golang.org/x/sys/cpu
 golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
-# golang.org/x/term v0.18.0
+# golang.org/x/term v0.21.0
 ## explicit; go 1.18
 golang.org/x/term
-# golang.org/x/text v0.14.0
+# golang.org/x/text v0.16.0
 ## explicit; go 1.18
 golang.org/x/text/encoding
 golang.org/x/text/encoding/internal/identifier

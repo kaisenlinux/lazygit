@@ -10,8 +10,8 @@ Author: Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>
 -	date        string
 -	version     string
 -	buildSource = "unknown"
-+	date        = "2024/05/08"
-+	version     = "0.41.0"
++	date        = "2024/08/15"
++	version     = "0.43.1"
 +	buildSource = "Built by Kevin Chevreuil - Kaisen"
  )
  

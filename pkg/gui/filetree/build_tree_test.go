@@ -127,7 +127,7 @@ func TestBuildTreeFromFiles(t *testing.T) {
 			expected: &Node[models.File]{
 				Path: "",
 				// it is a little strange that we're not bubbling up our merge conflict
-				// here but we are technically still in in tree mode and that's the rule
+				// here but we are technically still in tree mode and that's the rule
 				Children: []*Node[models.File]{
 					{
 						File: &models.File{Name: "a"},
@@ -147,7 +147,6 @@ func TestBuildTreeFromFiles(t *testing.T) {
 	}
 
 	for _, s := range scenarios {
-		s := s
 		t.Run(s.name, func(t *testing.T) {
 			result := BuildTreeFromFiles(s.files)
 			assert.EqualValues(t, s.expected, result)
@@ -306,7 +305,6 @@ func TestBuildFlatTreeFromFiles(t *testing.T) {
 	}
 
 	for _, s := range scenarios {
-		s := s
 		t.Run(s.name, func(t *testing.T) {
 			result := BuildFlatTreeFromFiles(s.files)
 			assert.EqualValues(t, s.expected, result)
@@ -420,7 +418,6 @@ func TestBuildTreeFromCommitFiles(t *testing.T) {
 	}
 
 	for _, s := range scenarios {
-		s := s
 		t.Run(s.name, func(t *testing.T) {
 			result := BuildTreeFromCommitFiles(s.files)
 			assert.EqualValues(t, s.expected, result)
@@ -521,7 +518,6 @@ func TestBuildFlatTreeFromCommitFiles(t *testing.T) {
 	}
 
 	for _, s := range scenarios {
-		s := s
 		t.Run(s.name, func(t *testing.T) {
 			result := BuildFlatTreeFromCommitFiles(s.files)
 			assert.EqualValues(t, s.expected, result)

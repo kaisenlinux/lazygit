@@ -81,6 +81,11 @@ type View struct {
 	// foreground colors of the selected line, when it is highlighted.
 	SelBgColor, SelFgColor Attribute
 
+	// InactiveViewSelBgColor is used to configure the background color of the
+	// selected line, when it is highlighted but the view doesn't have the
+	// focus.
+	InactiveViewSelBgColor Attribute
+
 	// If Editable is true, keystrokes will be added to the view's internal
 	// buffer at the cursor position.
 	Editable bool
@@ -96,6 +101,9 @@ type View struct {
 	// If Highlight is true, Sel{Bg,Fg}Colors will be used
 	// for the line under the cursor position.
 	Highlight bool
+	// If HighlightInactive is true, InavtiveViewSel{Bg,Fg}Colors will be used
+	// instead of Sel{Bg,Fg}Colors for highlighting selected lines.
+	HighlightInactive bool
 
 	// If Frame is true, a border will be drawn around the view.
 	Frame bool
@@ -184,7 +192,8 @@ func (v *View) clearViewLines() {
 
 type searcher struct {
 	searchString       string
-	searchPositions    []cellPos
+	searchPositions    []SearchPosition
+	modelSearchResults []SearchPosition
 	currentSearchIndex int
 	onSelectItem       func(int, int, int) error
 }
@@ -228,7 +237,7 @@ func (v *View) SelectSearchResult(index int) error {
 		index = itemCount - 1
 	}
 
-	y := v.searcher.searchPositions[index].y
+	y := v.searcher.searchPositions[index].Y
 
 	v.FocusPoint(v.ox, y)
 	if v.searcher.onSelectItem != nil {
@@ -242,9 +251,22 @@ func (v *View) GetSearchStatus() (int, int) {
 	return v.searcher.currentSearchIndex, len(v.searcher.searchPositions)
 }
 
-func (v *View) Search(str string) error {
+// modelSearchResults is optional; pass nil to search the view. If non-nil,
+// these positions will be used for highlighting search results. Even in this
+// case the view will still be searched on a per-line basis, so that the caller
+// doesn't have to make assumptions where in the rendered line the search result
+// is. The XStart and XEnd values in the modelSearchResults are only used in
+// case the search string is not found in the given line, which can happen if
+// the view renders an abbreviated version of some of the model data.
+//
+// Mind the difference between nil and empty slice: nil means we're not
+// searching the model, empty slice means we *are* searching the model but we
+// didn't find any matches.
+func (v *View) UpdateSearchResults(str string, modelSearchResults []SearchPosition) {
 	v.writeMutex.Lock()
-	v.searcher.search(str)
+	defer v.writeMutex.Unlock()
+
+	v.searcher.search(str, modelSearchResults)
 	v.updateSearchPositions()
 
 	if len(v.searcher.searchPositions) > 0 {
@@ -253,18 +275,23 @@ func (v *View) Search(str string) error {
 		adjustedY := v.oy + v.cy
 		adjustedX := v.ox + v.cx
 		for i, pos := range v.searcher.searchPositions {
-			if pos.y > adjustedY || (pos.y == adjustedY && pos.x > adjustedX) {
+			if pos.Y > adjustedY || (pos.Y == adjustedY && pos.XStart > adjustedX) {
 				currentIndex = i
 				break
 			}
 		}
 		v.searcher.currentSearchIndex = currentIndex
-		v.writeMutex.Unlock()
-		return v.SelectSearchResult(currentIndex)
-	} else {
-		v.writeMutex.Unlock()
-		return v.searcher.onSelectItem(-1, -1, 0)
 	}
+}
+
+func (v *View) Search(str string, modelSearchResults []SearchPosition) error {
+	v.UpdateSearchResults(str, modelSearchResults)
+
+	if len(v.searcher.searchPositions) > 0 {
+		return v.SelectSearchResult(v.searcher.currentSearchIndex)
+	}
+
+	return v.searcher.onSelectItem(-1, -1, 0)
 }
 
 func (v *View) ClearSearch() {
@@ -324,21 +351,23 @@ func calculateNewOrigin(selectedLine int, oldOrigin int, lineCount int, viewHeig
 	return oldOrigin
 }
 
-func (s *searcher) search(str string) {
+func (s *searcher) search(str string, modelSearchResults []SearchPosition) {
 	s.searchString = str
-	s.searchPositions = []cellPos{}
+	s.searchPositions = []SearchPosition{}
+	s.modelSearchResults = modelSearchResults
 	s.currentSearchIndex = 0
 }
 
 func (s *searcher) clearSearch() {
 	s.searchString = ""
-	s.searchPositions = []cellPos{}
+	s.searchPositions = []SearchPosition{}
 	s.currentSearchIndex = 0
 }
 
-type cellPos struct {
-	x int
-	y int
+type SearchPosition struct {
+	XStart int
+	XEnd   int
+	Y      int
 }
 
 type viewLine struct {
@@ -383,6 +412,7 @@ func newView(name string, x0, y0, x1, y1 int, mode OutputMode) *View {
 
 	v.FgColor, v.BgColor = ColorDefault, ColorDefault
 	v.SelFgColor, v.SelBgColor = ColorDefault, ColorDefault
+	v.InactiveViewSelBgColor = ColorDefault
 	v.TitleColor, v.FrameColor = ColorDefault, ColorDefault
 	return v
 }
@@ -485,7 +515,19 @@ func (v *View) setRune(x, y int, ch rune, fgColor, bgColor Attribute) error {
 				fgColor += 8
 			}
 			fgColor = fgColor | AttrBold
-			bgColor = bgColor | v.SelBgColor
+			if v.HighlightInactive {
+				bgColor = bgColor | v.InactiveViewSelBgColor
+			} else {
+				bgColor = bgColor | v.SelBgColor
+			}
+		}
+	}
+
+	if matched, selected := v.isPatternMatchedRune(x, y); matched {
+		if selected {
+			bgColor = ColorCyan
+		} else {
+			bgColor = ColorYellow
 		}
 	}
 
@@ -742,16 +784,19 @@ func (v *View) writeRunes(p []rune) {
 			}
 			v.wx = 0
 		default:
-			moveCursor, cells := v.parseInput(r, v.wx, v.wy)
+			truncateLine, cells := v.parseInput(r, v.wx, v.wy)
 			if cells == nil {
 				continue
 			}
 			v.writeCells(v.wx, v.wy, cells)
-			if moveCursor {
-				v.wx += len(cells)
+			v.wx += len(cells)
+			if truncateLine {
+				v.lines[v.wy] = v.lines[v.wy][:v.wx]
 			}
 		}
 	}
+
+	v.updateSearchPositions()
 }
 
 // exported functions use the mutex. Non-exported functions are for internal use
@@ -767,9 +812,9 @@ func (v *View) writeString(s string) {
 // parseInput parses char by char the input written to the View. It returns nil
 // while processing ESC sequences. Otherwise, it returns a cell slice that
 // contains the processed data.
-func (v *View) parseInput(ch rune, x int, y int) (bool, []cell) {
+func (v *View) parseInput(ch rune, x int, _ int) (bool, []cell) {
 	cells := []cell{}
-	moveCursor := true
+	truncateLine := false
 
 	isEscape, err := v.ei.parseOne(ch)
 	if err != nil {
@@ -785,18 +830,13 @@ func (v *View) parseInput(ch rune, x int, y int) (bool, []cell) {
 	} else {
 		repeatCount := 1
 		if _, ok := v.ei.instruction.(eraseInLineFromCursor); ok {
-			// fill rest of line
+			// truncate line
 			v.ei.instructionRead()
-			cx := 0
-			for _, cell := range v.lines[v.wy] {
-				cx += runewidth.RuneWidth(cell.chr)
-			}
-			repeatCount = v.InnerWidth() - cx
-			ch = ' '
-			moveCursor = false
+			repeatCount = 0
+			truncateLine = true
 		} else if isEscape {
 			// do not output anything
-			return moveCursor, nil
+			return truncateLine, nil
 		} else if ch == '\t' {
 			// fill tab-sized space
 			const tabStop = 4
@@ -813,7 +853,7 @@ func (v *View) parseInput(ch rune, x int, y int) (bool, []cell) {
 		}
 	}
 
-	return moveCursor, cells
+	return truncateLine, cells
 }
 
 // Read reads data into p from the current reading position set by SetReadPos.
@@ -957,8 +997,11 @@ func (v *View) updateSearchPositions() {
 			normalizedSearchStr = strings.ToLower(v.searcher.searchString)
 		}
 
-		v.searcher.searchPositions = []cellPos{}
-		for y, line := range v.lines {
+		v.searcher.searchPositions = []SearchPosition{}
+
+		searchPositionsForLine := func(line []cell, y int) []SearchPosition {
+			var result []SearchPosition
+			searchStringWidth := runewidth.StringWidth(v.searcher.searchString)
 			x := 0
 			for startIdx, c := range line {
 				found := true
@@ -975,9 +1018,45 @@ func (v *View) updateSearchPositions() {
 					offset += 1
 				}
 				if found {
-					v.searcher.searchPositions = append(v.searcher.searchPositions, cellPos{x: x, y: y})
+					result = append(result, SearchPosition{XStart: x, XEnd: x + searchStringWidth, Y: y})
 				}
 				x += runewidth.RuneWidth(c.chr)
+			}
+			return result
+		}
+
+		if v.searcher.modelSearchResults != nil {
+			for _, result := range v.searcher.modelSearchResults {
+				if result.Y >= len(v.lines) {
+					break
+				}
+
+				// If a view line exists for this line index:
+				if v.lines[result.Y] != nil {
+					// search this view line for the search string
+					positions := searchPositionsForLine(v.lines[result.Y], result.Y)
+					if len(positions) > 0 {
+						// If we found any occurrences, add them
+						v.searcher.searchPositions = append(v.searcher.searchPositions, positions...)
+					} else {
+						// Otherwise, the search string was found in the model
+						// but not in the view line; this can happen if the view
+						// renders only truncated versions of the model strings.
+						// In this case, add one search position with what the
+						// model search function returned.
+						v.searcher.searchPositions = append(v.searcher.searchPositions, result)
+					}
+				} else {
+					// We don't have a view line for this line index. Add a
+					// searchPosition anyway, just for the sake of being able to
+					// show the "n of m" search status. The X positions don't
+					// matter in this case.
+					v.searcher.searchPositions = append(v.searcher.searchPositions, SearchPosition{XStart: -1, XEnd: -1, Y: result.Y})
+				}
+			}
+		} else {
+			for y, line := range v.lines {
+				v.searcher.searchPositions = append(v.searcher.searchPositions, searchPositionsForLine(line, y)...)
 			}
 		}
 	}
@@ -999,7 +1078,6 @@ func (v *View) draw() error {
 
 	v.clearRunes()
 
-	v.updateSearchPositions()
 	maxX, maxY := v.Size()
 
 	if v.Wrap {
@@ -1103,13 +1181,6 @@ func (v *View) draw() error {
 			if bgColor == ColorDefault {
 				bgColor = v.BgColor
 			}
-			if matched, selected := v.isPatternMatchedRune(x, y); matched {
-				if selected {
-					bgColor = ColorCyan
-				} else {
-					bgColor = ColorYellow
-				}
-			}
 
 			if err := v.setRune(x, y, c.chr, fgColor, bgColor); err != nil {
 				return err
@@ -1137,11 +1208,10 @@ func (v *View) viewLineLengthIgnoringTrailingBlankLines() int {
 }
 
 func (v *View) isPatternMatchedRune(x, y int) (bool, bool) {
-	searchStringWidth := runewidth.StringWidth(v.searcher.searchString)
 	for i, pos := range v.searcher.searchPositions {
 		adjustedY := y + v.oy
 		adjustedX := x + v.ox
-		if adjustedY == pos.y && adjustedX >= pos.x && adjustedX < pos.x+searchStringWidth {
+		if adjustedY == pos.Y && adjustedX >= pos.XStart && adjustedX < pos.XEnd {
 			return true, i == v.searcher.currentSearchIndex
 		}
 	}
@@ -1283,7 +1353,7 @@ func (v *View) Word(x, y int) (string, error) {
 	} else {
 		nr = nr + x
 	}
-	return string(str[nl:nr]), nil
+	return str[nl:nr], nil
 }
 
 // indexFunc allows to split lines by words taking into account spaces
@@ -1529,17 +1599,49 @@ func (v *View) ClearTextArea() {
 	_ = v.SetCursor(0, 0)
 }
 
-// only call this function if you don't care where v.wx and v.wy end up
-func (v *View) OverwriteLines(y int, content string) {
-	v.writeMutex.Lock()
-	defer v.writeMutex.Unlock()
-
+func (v *View) overwriteLines(y int, content string) {
 	// break by newline, then for each line, write it, then add that erase command
 	v.wx = 0
 	v.wy = y
 
 	lines := strings.Replace(content, "\n", "\x1b[K\n", -1)
+	// If the last line doesn't end with a linefeed, add the erase command at
+	// the end too
+	if !strings.HasSuffix(lines, "\n") {
+		lines += "\x1b[K"
+	}
 	v.writeString(lines)
+}
+
+// only call this function if you don't care where v.wx and v.wy end up
+func (v *View) OverwriteLines(y int, content string) {
+	v.writeMutex.Lock()
+	defer v.writeMutex.Unlock()
+
+	v.overwriteLines(y, content)
+}
+
+// only call this function if you don't care where v.wx and v.wy end up
+func (v *View) OverwriteLinesAndClearEverythingElse(y int, content string) {
+	v.writeMutex.Lock()
+	defer v.writeMutex.Unlock()
+
+	v.overwriteLines(y, content)
+
+	for i := 0; i < y; i += 1 {
+		v.lines[i] = nil
+	}
+
+	for i := v.wy + 1; i < len(v.lines); i += 1 {
+		v.lines[i] = nil
+	}
+}
+
+func (v *View) SetContentLineCount(lineCount int) {
+	if lineCount > 0 {
+		v.makeWriteable(0, lineCount-1)
+	}
+	v.lines = v.lines[:lineCount]
 }
 
 func (v *View) ScrollUp(amount int) {

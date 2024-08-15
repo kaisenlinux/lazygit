@@ -8,7 +8,7 @@ import (
 
 	"github.com/adrg/xdg"
 	"github.com/jesseduffield/lazygit/pkg/utils/yaml_utils"
-	yaml "github.com/jesseduffield/yaml"
+	"gopkg.in/yaml.v3"
 )
 
 // AppConfig contains the base configuration fields required for lazygit.
@@ -164,6 +164,10 @@ func loadUserConfig(configFiles []string, base *UserConfig) (*UserConfig, error)
 		if err := yaml.Unmarshal(content, base); err != nil {
 			return nil, fmt.Errorf("The config at `%s` couldn't be parsed, please inspect it before opening up an issue.\n%w", path, err)
 		}
+
+		if err := base.Validate(); err != nil {
+			return nil, fmt.Errorf("The config at `%s` has a validation error.\n%w", path, err)
+		}
 	}
 
 	return base, nil
@@ -180,6 +184,11 @@ func migrateUserConfig(path string, content []byte) ([]byte, error) {
 		return nil, fmt.Errorf("Couldn't migrate config file at `%s`: %s", path, err)
 	}
 
+	changedContent, err = changeNullKeybindingsToDisabled(changedContent)
+	if err != nil {
+		return nil, fmt.Errorf("Couldn't migrate config file at `%s`: %s", path, err)
+	}
+
 	// Add more migrations here...
 
 	// Write config back if changed
@@ -191,6 +200,17 @@ func migrateUserConfig(path string, content []byte) ([]byte, error) {
 	}
 
 	return content, nil
+}
+
+func changeNullKeybindingsToDisabled(changedContent []byte) ([]byte, error) {
+	return yaml_utils.Walk(changedContent, func(node *yaml.Node, path string) bool {
+		if strings.HasPrefix(path, "keybinding.") && node.Kind == yaml.ScalarNode && node.Tag == "!!null" {
+			node.Value = "<disabled>"
+			node.Tag = "!!str"
+			return true
+		}
+		return false
+	})
 }
 
 func (c *AppConfig) GetDebug() bool {
@@ -350,6 +370,7 @@ type AppState struct {
 	HideCommandLog             bool
 	IgnoreWhitespaceInDiffView bool
 	DiffContextSize            int
+	RenameSimilarityThreshold  int
 	LocalBranchSortOrder       string
 	RemoteBranchSortOrder      string
 
@@ -365,15 +386,16 @@ type AppState struct {
 
 func getDefaultAppState() *AppState {
 	return &AppState{
-		LastUpdateCheck:       0,
-		RecentRepos:           []string{},
-		StartupPopupVersion:   0,
-		LastVersion:           "",
-		DiffContextSize:       3,
-		LocalBranchSortOrder:  "recency",
-		RemoteBranchSortOrder: "alphabetical",
-		GitLogOrder:           "", // should be "topo-order" eventually
-		GitLogShowGraph:       "", // should be "always" eventually
+		LastUpdateCheck:           0,
+		RecentRepos:               []string{},
+		StartupPopupVersion:       0,
+		LastVersion:               "",
+		DiffContextSize:           3,
+		RenameSimilarityThreshold: 50,
+		LocalBranchSortOrder:      "recency",
+		RemoteBranchSortOrder:     "alphabetical",
+		GitLogOrder:               "", // should be "topo-order" eventually
+		GitLogShowGraph:           "", // should be "always" eventually
 	}
 }
 

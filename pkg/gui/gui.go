@@ -342,15 +342,8 @@ func (gui *Gui) onNewRepo(startArgs appTypes.StartArgs, contextKey types.Context
 	return nil
 }
 
-// reuseState determines if we pull the repo state from our repo state map or
-// just re-initialize it. For now we're only re-using state when we're going
-// in and out of submodules, for the sake of having the cursor back on the submodule
-// when we return.
-//
-// I tried out always reverting to the repo's original state but found that in fact
-// it gets a bit confusing to land back in the status panel when visiting a repo
-// you've already switched from. There's no doubt some easy way to make the UX
-// optimal for all cases but I'm too lazy to think about what that is right now
+// resetState reuses the repo state from our repo state map, if the repo was
+// open before; otherwise it creates a new one.
 func (gui *Gui) resetState(startArgs appTypes.StartArgs) types.Context {
 	worktreePath := gui.git.RepoPaths.WorktreePath()
 
@@ -386,6 +379,7 @@ func (gui *Gui) resetState(startArgs appTypes.StartArgs) types.Context {
 			BisectInfo:            git_commands.NewNullBisectInfo(),
 			FilesTrie:             patricia.NewTrie(),
 			Authors:               map[string]*models.Author{},
+			MainBranches:          git_commands.NewMainBranches(gui.UserConfig.Git.MainBranches, gui.os.Cmd),
 		},
 		Modes: &types.Modes{
 			Filtering:        filtering.New(startArgs.FilterPath, ""),
@@ -516,8 +510,8 @@ func NewGui(
 		func() types.Context { return gui.State.ContextMgr.Current() },
 		gui.createMenu,
 		func(message string, f func(gocui.Task) error) { gui.helpers.AppStatus.WithWaitingStatus(message, f) },
-		func(message string, f func() error) {
-			gui.helpers.AppStatus.WithWaitingStatusSync(message, f)
+		func(message string, f func() error) error {
+			return gui.helpers.AppStatus.WithWaitingStatusSync(message, f)
 		},
 		func(message string, kind types.ToastKind) { gui.helpers.AppStatus.Toast(message, kind) },
 		func() string { return gui.Views.Confirmation.TextArea.GetContent() },
@@ -652,6 +646,8 @@ func (gui *Gui) Run(startArgs appTypes.StartArgs) error {
 	gui.g = g
 	defer gui.g.Close()
 
+	g.ErrorHandler = gui.PopupHandler.ErrorHandler
+
 	// if the deadlock package wants to report a deadlock, we first need to
 	// close the gui so that we can actually read what it prints.
 	deadlock.Opts.LogBuf = utils.NewOnceWriter(os.Stderr, func() {
@@ -660,7 +656,7 @@ func (gui *Gui) Run(startArgs appTypes.StartArgs) error {
 	// disable deadlock reporting if we're not running in debug mode, or if
 	// we're debugging an integration test. In this latter case, stopping at
 	// breakpoints and stepping through code can easily take more than 30s.
-	deadlock.Opts.Disable = !gui.Debug || os.Getenv(components.WAIT_FOR_DEBUGGER_ENV_VAR) == ""
+	deadlock.Opts.Disable = !gui.Debug || os.Getenv(components.WAIT_FOR_DEBUGGER_ENV_VAR) != ""
 
 	if err := gui.Config.ReloadUserConfig(); err != nil {
 		return nil
@@ -682,7 +678,7 @@ func (gui *Gui) Run(startArgs appTypes.StartArgs) error {
 		return err
 	}
 
-	gui.g.SetManager(gocui.ManagerFunc(gui.layout), gocui.ManagerFunc(gui.getFocusLayout()))
+	gui.g.SetManager(gocui.ManagerFunc(gui.layout))
 
 	if err := gui.createAllViews(); err != nil {
 		return err
@@ -789,7 +785,7 @@ func (gui *Gui) runSubprocessWithSuspense(subprocess oscommands.ICmdObj) (bool, 
 	defer gui.Mutexes.SubprocessMutex.Unlock()
 
 	if err := gui.g.Suspend(); err != nil {
-		return false, gui.c.Error(err)
+		return false, err
 	}
 
 	gui.BackgroundRoutineMgr.PauseBackgroundRefreshes(true)
@@ -802,7 +798,7 @@ func (gui *Gui) runSubprocessWithSuspense(subprocess oscommands.ICmdObj) (bool, 
 	}
 
 	if cmdErr != nil {
-		return false, gui.c.Error(cmdErr)
+		return false, cmdErr
 	}
 
 	return true, nil
@@ -813,7 +809,7 @@ func (gui *Gui) runSubprocess(cmdObj oscommands.ICmdObj) error { //nolint:unpara
 
 	subprocess := cmdObj.GetCmd()
 	subprocess.Stdout = os.Stdout
-	subprocess.Stderr = os.Stdout
+	subprocess.Stderr = os.Stderr
 	subprocess.Stdin = os.Stdin
 
 	fmt.Fprintf(os.Stdout, "\n%s\n\n", style.FgBlue.Sprint("+ "+strings.Join(subprocess.Args, " ")))
@@ -956,10 +952,19 @@ func (gui *Gui) onUIThread(f func() error) {
 	})
 }
 
-func (gui *Gui) onWorker(f func(gocui.Task)) {
+func (gui *Gui) onWorker(f func(gocui.Task) error) {
 	gui.g.OnWorker(f)
 }
 
 func (gui *Gui) getWindowDimensions(informationStr string, appStatus string) map[string]boxlayout.Dimensions {
 	return gui.helpers.WindowArrangement.GetWindowDimensions(informationStr, appStatus)
+}
+
+func (gui *Gui) afterLayout(f func() error) {
+	select {
+	case gui.afterLayoutFuncs <- f:
+	default:
+		// hopefully this never happens
+		gui.c.Log.Error("afterLayoutFuncs channel is full, skipping function")
+	}
 }
