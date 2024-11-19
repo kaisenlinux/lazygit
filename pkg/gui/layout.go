@@ -73,6 +73,19 @@ func (gui *Gui) layout(g *gocui.Gui) error {
 		}
 
 		mustRerender := false
+		newHeight := dimensionsObj.Y1 - dimensionsObj.Y0 + 2*frameOffset
+		maxOriginY := context.TotalContentHeight()
+		if !view.CanScrollPastBottom {
+			maxOriginY -= newHeight - 1
+		}
+		if oldOriginY := view.OriginY(); oldOriginY > maxOriginY {
+			view.ScrollUp(oldOriginY - maxOriginY)
+			// the view might not have scrolled actually (if it was at the limit
+			// already), so we need to check if it did
+			if oldOriginY != view.OriginY() && context.NeedsRerenderOnHeightChange() {
+				mustRerender = true
+			}
+		}
 		if context.NeedsRerenderOnWidthChange() == types.NEEDS_RERENDER_ON_WIDTH_CHANGE_WHEN_WIDTH_CHANGES {
 			// view.Width() returns the width -1 for some reason
 			oldWidth := view.Width() + 1
@@ -164,9 +177,7 @@ func (gui *Gui) layout(g *gocui.Gui) error {
 	}
 
 	for _, context := range contextsToRerender {
-		if err := context.HandleRender(); err != nil {
-			return err
-		}
+		context.HandleRender()
 	}
 
 	// here is a good place log some stuff
@@ -211,10 +222,8 @@ func (gui *Gui) onInitialViewsCreationForRepo() error {
 		}
 	}
 
-	initialContext := gui.c.CurrentContext()
-	if err := gui.c.ActivateContext(initialContext); err != nil {
-		return err
-	}
+	initialContext := gui.c.Context().Current()
+	gui.c.Context().Activate(initialContext, types.OnFocusOpts{})
 
 	return gui.loadNewRepo()
 }
@@ -260,7 +269,7 @@ func (gui *Gui) onRepoViewReset() error {
 }
 
 func (gui *Gui) onInitialViewsCreation() error {
-	if !gui.c.UserConfig.DisableStartupPopups {
+	if !gui.c.UserConfig().DisableStartupPopups {
 		storedPopupVersion := gui.c.GetAppState().StartupPopupVersion
 		if storedPopupVersion < StartupPopupVersion {
 			gui.showIntroPopupMessage()

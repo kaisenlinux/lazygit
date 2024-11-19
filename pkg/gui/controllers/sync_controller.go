@@ -210,11 +210,11 @@ func (self *SyncController) pushAux(currentBranch *models.Branch, opts pushOpts)
 					return errors.New(self.c.Tr.UpdatesRejected)
 				}
 
-				forcePushDisabled := self.c.UserConfig.Git.DisableForcePushing
+				forcePushDisabled := self.c.UserConfig().Git.DisableForcePushing
 				if forcePushDisabled {
 					return errors.New(self.c.Tr.UpdatesRejectedAndForcePushDisabled)
 				}
-				_ = self.c.Confirm(types.ConfirmOpts{
+				self.c.Confirm(types.ConfirmOpts{
 					Title:  self.c.Tr.ForcePush,
 					Prompt: self.forcePushPrompt(),
 					HandleConfirm: func() error {
@@ -233,12 +233,12 @@ func (self *SyncController) pushAux(currentBranch *models.Branch, opts pushOpts)
 }
 
 func (self *SyncController) requestToForcePush(currentBranch *models.Branch, opts pushOpts) error {
-	forcePushDisabled := self.c.UserConfig.Git.DisableForcePushing
+	forcePushDisabled := self.c.UserConfig().Git.DisableForcePushing
 	if forcePushDisabled {
 		return errors.New(self.c.Tr.ForcePushDisabled)
 	}
 
-	return self.c.Confirm(types.ConfirmOpts{
+	self.c.Confirm(types.ConfirmOpts{
 		Title:  self.c.Tr.ForcePush,
 		Prompt: self.forcePushPrompt(),
 		HandleConfirm: func() error {
@@ -246,14 +246,16 @@ func (self *SyncController) requestToForcePush(currentBranch *models.Branch, opt
 			return self.pushAux(currentBranch, opts)
 		},
 	})
+
+	return nil
 }
 
 func (self *SyncController) forcePushPrompt() string {
 	return utils.ResolvePlaceholderString(
 		self.c.Tr.ForcePushPrompt,
 		map[string]string{
-			"cancelKey":  self.c.UserConfig.Keybinding.Universal.Return,
-			"confirmKey": self.c.UserConfig.Keybinding.Universal.Confirm,
+			"cancelKey":  self.c.UserConfig().Keybinding.Universal.Return,
+			"confirmKey": self.c.UserConfig().Keybinding.Universal.Confirm,
 		},
 	)
 }

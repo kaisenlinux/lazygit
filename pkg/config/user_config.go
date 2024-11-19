@@ -161,6 +161,10 @@ type GuiConfig struct {
 	// Status panel view.
 	// One of 'dashboard' (default) | 'allBranchesLog'
 	StatusPanelView string `yaml:"statusPanelView" jsonschema:"enum=dashboard,enum=allBranchesLog"`
+	// If true, jump to the Files panel after popping a stash
+	SwitchToFilesAfterStashPop bool `yaml:"switchToFilesAfterStashPop"`
+	// If true, jump to the Files panel after applying a stash
+	SwitchToFilesAfterStashApply bool `yaml:"switchToFilesAfterStashApply"`
 }
 
 func (c *GuiConfig) UseFuzzySearch() bool {
@@ -224,6 +228,11 @@ type GitConfig struct {
 	AutoRefresh bool `yaml:"autoRefresh"`
 	// If true, pass the --all arg to git fetch
 	FetchAll bool `yaml:"fetchAll"`
+	// If true, lazygit will automatically stage files that used to have merge
+	// conflicts but no longer do; and it will also ask you if you want to
+	// continue a merge or rebase if you've resolved all conflicts. If false, it
+	// won't do either of these things.
+	AutoStageResolvedConflicts bool `yaml:"autoStageResolvedConflicts"`
 	// Command used when displaying the current branch git log in the main window
 	BranchLogCmd string `yaml:"branchLogCmd"`
 	// Command used to display git log of all branches in the main window.
@@ -385,7 +394,7 @@ type KeybindingUniversalConfig struct {
 	ScrollDownMainAlt1                string   `yaml:"scrollDownMain-alt1"`
 	ScrollUpMainAlt2                  string   `yaml:"scrollUpMain-alt2"`
 	ScrollDownMainAlt2                string   `yaml:"scrollDownMain-alt2"`
-	ExecuteCustomCommand              string   `yaml:"executeCustomCommand"`
+	ExecuteShellCommand               string   `yaml:"executeShellCommand"`
 	CreateRebaseOptionsMenu           string   `yaml:"createRebaseOptionsMenu"`
 	Push                              string   `yaml:"pushFiles"` // 'Files' appended for legacy reasons
 	Pull                              string   `yaml:"pullFiles"` // 'Files' appended for legacy reasons
@@ -541,7 +550,7 @@ type OSConfig struct {
 
 	// A built-in preset that sets all of the above settings. Supported presets
 	// are defined in the getPreset function in editor_presets.go.
-	EditPreset string `yaml:"editPreset,omitempty" jsonschema:"example=vim,example=nvim,example=emacs,example=nano,example=vscode,example=sublime,example=kakoune,example=helix,example=xcode"`
+	EditPreset string `yaml:"editPreset,omitempty" jsonschema:"example=vim,example=nvim,example=emacs,example=nano,example=vscode,example=sublime,example=kakoune,example=helix,example=xcode,example=zed"`
 
 	// Command for opening a file, as if the file is double-clicked. Should
 	// contain "{{filename}}", but doesn't support "{{line}}".
@@ -724,7 +733,9 @@ func GetDefaultConfig() *UserConfig {
 				Frames: []string{"|", "/", "-", "\\"},
 				Rate:   50,
 			},
-			StatusPanelView: "dashboard",
+			StatusPanelView:              "dashboard",
+			SwitchToFilesAfterStashPop:   true,
+			SwitchToFilesAfterStashApply: true,
 		},
 		Git: GitConfig{
 			Paging: PagingConfig{
@@ -753,6 +764,7 @@ func GetDefaultConfig() *UserConfig {
 			AutoFetch:                    true,
 			AutoRefresh:                  true,
 			FetchAll:                     true,
+			AutoStageResolvedConflicts:   true,
 			BranchLogCmd:                 "git log --graph --color=always --abbrev-commit --decorate --date=relative --pretty=medium {{branchName}} --",
 			AllBranchesLogCmd:            "git log --graph --all --color=always --abbrev-commit --decorate --date=relative  --pretty=medium",
 			DisableForcePushing:          false,
@@ -824,7 +836,7 @@ func GetDefaultConfig() *UserConfig {
 				ScrollDownMainAlt1:                "J",
 				ScrollUpMainAlt2:                  "<c-u>",
 				ScrollDownMainAlt2:                "<c-d>",
-				ExecuteCustomCommand:              ":",
+				ExecuteShellCommand:               ":",
 				CreateRebaseOptionsMenu:           "m",
 				Push:                              "P",
 				Pull:                              "p",

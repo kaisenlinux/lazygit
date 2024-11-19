@@ -82,19 +82,20 @@ func (self *RenameSimilarityThresholdController) applyChange() error {
 	self.c.Toast(fmt.Sprintf(self.c.Tr.RenameSimilarityThresholdChanged, self.c.AppState.RenameSimilarityThreshold))
 	self.c.SaveAppStateAndLogError()
 
-	currentContext := self.c.CurrentStaticContext()
+	currentContext := self.c.Context().CurrentStatic()
 	switch currentContext.GetKey() {
 	// we make an exception for our files context, because it actually need to refresh its state afterwards.
 	case context.FILES_CONTEXT_KEY:
 		return self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.FILES}})
 	default:
-		return currentContext.HandleRenderToMain()
+		currentContext.HandleRenderToMain()
+		return nil
 	}
 }
 
 func (self *RenameSimilarityThresholdController) isShowingRenames() bool {
 	return lo.Contains(
 		CONTEXT_KEYS_SHOWING_RENAMES,
-		self.c.CurrentStaticContext().GetKey(),
+		self.c.Context().CurrentStatic().GetKey(),
 	)
 }

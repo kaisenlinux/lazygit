@@ -35,9 +35,8 @@ func NewRebaseCommands(
 }
 
 func (self *RebaseCommands) RewordCommit(commits []*models.Commit, index int, summary string, description string) error {
-	if models.IsHeadCommit(commits, index) {
-		// we've selected the top commit so no rebase is required
-		return self.commit.RewordLastCommit(summary, description)
+	if self.config.UsingGpg() {
+		return errors.New(self.Tr.DisabledForGPG)
 	}
 
 	err := self.BeginInteractiveRebaseForCommit(commits, index, false)
@@ -46,7 +45,7 @@ func (self *RebaseCommands) RewordCommit(commits []*models.Commit, index int, su
 	}
 
 	// now the selected commit should be our head so we'll amend it with the new message
-	err = self.commit.RewordLastCommit(summary, description)
+	err = self.commit.RewordLastCommit(summary, description).Run()
 	if err != nil {
 		return err
 	}
@@ -285,6 +284,11 @@ func (self *RebaseCommands) GitRebaseEditTodo(todosFileContent []byte) error {
 	return cmdObj.Run()
 }
 
+func (self *RebaseCommands) getHashOfLastCommitMade() (string, error) {
+	cmdArgs := NewGitCmd("rev-parse").Arg("--verify", "HEAD").ToArgv()
+	return self.cmd.New(cmdArgs).RunWithOutput()
+}
+
 // AmendTo amends the given commit with whatever files are staged
 func (self *RebaseCommands) AmendTo(commits []*models.Commit, commitIndex int) error {
 	commit := commits[commitIndex]
@@ -293,9 +297,7 @@ func (self *RebaseCommands) AmendTo(commits []*models.Commit, commitIndex int) e
 		return err
 	}
 
-	// Get the hash of the commit we just created
-	cmdArgs := NewGitCmd("rev-parse").Arg("--verify", "HEAD").ToArgv()
-	fixupHash, err := self.cmd.New(cmdArgs).RunWithOutput()
+	fixupHash, err := self.getHashOfLastCommitMade()
 	if err != nil {
 		return err
 	}
@@ -303,7 +305,20 @@ func (self *RebaseCommands) AmendTo(commits []*models.Commit, commitIndex int) e
 	return self.PrepareInteractiveRebaseCommand(PrepareInteractiveRebaseCommandOpts{
 		baseHashOrRoot: getBaseHashOrRoot(commits, commitIndex+1),
 		overrideEditor: true,
-		instruction:    daemon.NewMoveFixupCommitDownInstruction(commit.Hash, fixupHash),
+		instruction:    daemon.NewMoveFixupCommitDownInstruction(commit.Hash, fixupHash, true),
+	}).Run()
+}
+
+func (self *RebaseCommands) MoveFixupCommitDown(commits []*models.Commit, targetCommitIndex int) error {
+	fixupHash, err := self.getHashOfLastCommitMade()
+	if err != nil {
+		return err
+	}
+
+	return self.PrepareInteractiveRebaseCommand(PrepareInteractiveRebaseCommandOpts{
+		baseHashOrRoot: getBaseHashOrRoot(commits, targetCommitIndex+1),
+		overrideEditor: true,
+		instruction:    daemon.NewMoveFixupCommitDownInstruction(commits[targetCommitIndex].Hash, fixupHash, false),
 	}).Run()
 }
 

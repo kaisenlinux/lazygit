@@ -1,3 +1,11 @@
+lazygit (0.44.1-1kaisen) kaisen-packages; urgency=medium
+
+  * Import the 0.44.1 release
+  * Update the quilt patch
+  * Bump the golang-go version required to build
+
+ -- Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>  Tue, 19 Nov 2024 14:40:30 +0200
+
 lazygit (0.43.1-1kaisen) kaisen-packages; urgency=medium
 
   * Import the 0.43.1 release

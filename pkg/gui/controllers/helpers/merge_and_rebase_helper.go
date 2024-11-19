@@ -112,7 +112,7 @@ func (self *MergeAndRebaseHelper) genericMergeCommand(command string) error {
 	// we should end up with a command like 'git merge --continue'
 
 	// it's impossible for a rebase to require a commit so we'll use a subprocess only if it's a merge
-	needsSubprocess := (status == enums.REBASE_MODE_MERGING && command != REBASE_OPTION_ABORT && self.c.UserConfig.Git.Merging.ManualCommit) ||
+	needsSubprocess := (status == enums.REBASE_MODE_MERGING && command != REBASE_OPTION_ABORT && self.c.UserConfig().Git.Merging.ManualCommit) ||
 		// but we'll also use a subprocess if we have exec todos; those are likely to be lengthy build
 		// tasks whose output the user will want to see in the terminal
 		(status == enums.REBASE_MODE_REBASING && command != REBASE_OPTION_ABORT && self.hasExecTodos())
@@ -202,7 +202,8 @@ func (self *MergeAndRebaseHelper) PromptForConflictHandling() error {
 			{
 				Label: self.c.Tr.ViewConflictsMenuItem,
 				OnPress: func() error {
-					return self.c.PushContext(self.c.Contexts().Files)
+					self.c.Context().Push(self.c.Contexts().Files)
+					return nil
 				},
 			},
 			{
@@ -220,13 +221,15 @@ func (self *MergeAndRebaseHelper) PromptForConflictHandling() error {
 func (self *MergeAndRebaseHelper) AbortMergeOrRebaseWithConfirm() error {
 	// prompt user to confirm that they want to abort, then do it
 	mode := self.workingTreeStateNoun()
-	return self.c.Confirm(types.ConfirmOpts{
+	self.c.Confirm(types.ConfirmOpts{
 		Title:  fmt.Sprintf(self.c.Tr.AbortTitle, mode),
 		Prompt: fmt.Sprintf(self.c.Tr.AbortPrompt, mode),
 		HandleConfirm: func() error {
 			return self.genericMergeCommand(REBASE_OPTION_ABORT)
 		},
 	})
+
+	return nil
 }
 
 func (self *MergeAndRebaseHelper) workingTreeStateNoun() string {
@@ -243,13 +246,47 @@ func (self *MergeAndRebaseHelper) workingTreeStateNoun() string {
 
 // PromptToContinueRebase asks the user if they want to continue the rebase/merge that's in progress
 func (self *MergeAndRebaseHelper) PromptToContinueRebase() error {
-	return self.c.Confirm(types.ConfirmOpts{
+	self.c.Confirm(types.ConfirmOpts{
 		Title:  self.c.Tr.Continue,
 		Prompt: self.c.Tr.ConflictsResolved,
 		HandleConfirm: func() error {
+			// By the time we get here, we might have unstaged changes again,
+			// e.g. if the user had to fix build errors after resolving the
+			// conflicts, but after lazygit opened the prompt already. Ask again
+			// to auto-stage these.
+
+			// Need to refresh the files to be really sure if this is the case.
+			// We would otherwise be relying on lazygit's auto-refresh on focus,
+			// but this is not supported by all terminals or on all platforms.
+			if err := self.c.Refresh(types.RefreshOptions{
+				Mode: types.SYNC, Scope: []types.RefreshableView{types.FILES},
+			}); err != nil {
+				return err
+			}
+
+			root := self.c.Contexts().Files.FileTreeViewModel.GetRoot()
+			if root.GetHasUnstagedChanges() {
+				self.c.Confirm(types.ConfirmOpts{
+					Title:  self.c.Tr.Continue,
+					Prompt: self.c.Tr.UnstagedFilesAfterConflictsResolved,
+					HandleConfirm: func() error {
+						self.c.LogAction(self.c.Tr.Actions.StageAllFiles)
+						if err := self.c.Git().WorkingTree.StageAll(); err != nil {
+							return err
+						}
+
+						return self.genericMergeCommand(REBASE_OPTION_CONTINUE)
+					},
+				})
+
+				return nil
+			}
+
 			return self.genericMergeCommand(REBASE_OPTION_CONTINUE)
 		},
 	})
+
+	return nil
 }
 
 func (self *MergeAndRebaseHelper) RebaseOntoRef(ref string) error {
@@ -316,7 +353,8 @@ func (self *MergeAndRebaseHelper) RebaseOntoRef(ref string) error {
 				if err = self.ResetMarkedBaseCommit(); err != nil {
 					return err
 				}
-				return self.c.PushContext(self.c.Contexts().LocalCommits)
+				self.c.Context().Push(self.c.Contexts().LocalCommits)
+				return nil
 			},
 		},
 		{
@@ -435,7 +473,7 @@ func (self *MergeAndRebaseHelper) SquashMergeCommitted(refName, checkedOutBranch
 		if err = self.CheckMergeOrRebase(err); err != nil {
 			return err
 		}
-		message := utils.ResolvePlaceholderString(self.c.UserConfig.Git.Merging.SquashMergeMessage, map[string]string{
+		message := utils.ResolvePlaceholderString(self.c.UserConfig().Git.Merging.SquashMergeMessage, map[string]string{
 			"selectedRef":   refName,
 			"currentBranch": checkedOutBranchName,
 		})

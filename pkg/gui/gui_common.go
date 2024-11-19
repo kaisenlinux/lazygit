@@ -33,10 +33,6 @@ func (self *guiCommon) PostRefreshUpdate(context types.Context) error {
 	return self.gui.postRefreshUpdate(context)
 }
 
-func (self *guiCommon) HandleGenericClick(view *gocui.View) error {
-	return self.gui.handleGenericClick(view)
-}
-
 func (self *guiCommon) RunSubprocessAndRefresh(cmdObj oscommands.ICmdObj) error {
 	return self.gui.runSubprocessWithSuspenseAndRefresh(cmdObj)
 }
@@ -45,52 +41,12 @@ func (self *guiCommon) RunSubprocess(cmdObj oscommands.ICmdObj) (bool, error) {
 	return self.gui.runSubprocessWithSuspense(cmdObj)
 }
 
-func (self *guiCommon) PushContext(context types.Context, opts ...types.OnFocusOpts) error {
-	return self.gui.State.ContextMgr.Push(context, opts...)
-}
-
-func (self *guiCommon) PopContext() error {
-	return self.gui.State.ContextMgr.Pop()
-}
-
-func (self *guiCommon) ReplaceContext(context types.Context) error {
-	return self.gui.State.ContextMgr.Replace(context)
-}
-
-func (self *guiCommon) RemoveContexts(contexts []types.Context) error {
-	return self.gui.State.ContextMgr.RemoveContexts(contexts)
-}
-
-func (self *guiCommon) CurrentContext() types.Context {
-	return self.gui.State.ContextMgr.Current()
-}
-
-func (self *guiCommon) CurrentStaticContext() types.Context {
-	return self.gui.State.ContextMgr.CurrentStatic()
-}
-
-func (self *guiCommon) CurrentSideContext() types.Context {
-	return self.gui.State.ContextMgr.CurrentSide()
-}
-
-func (self *guiCommon) CurrentPopupContexts() []types.Context {
-	return self.gui.State.ContextMgr.PopupContexts()
-}
-
-func (self *guiCommon) IsCurrentContext(c types.Context) bool {
-	return self.gui.State.ContextMgr.IsCurrent(c)
-}
-
 func (self *guiCommon) Context() types.IContextMgr {
 	return self.gui.State.ContextMgr
 }
 
 func (self *guiCommon) ContextForKey(key types.ContextKey) types.Context {
 	return self.gui.State.ContextMgr.ContextForKey(key)
-}
-
-func (self *guiCommon) ActivateContext(context types.Context) error {
-	return self.gui.State.ContextMgr.ActivateContext(context, types.OnFocusOpts{})
 }
 
 func (self *guiCommon) GetAppState() *config.AppState {
@@ -159,8 +115,8 @@ func (self *guiCommon) OnWorker(f func(gocui.Task) error) {
 	self.gui.onWorker(f)
 }
 
-func (self *guiCommon) RenderToMainViews(opts types.RefreshMainOpts) error {
-	return self.gui.refreshMainViews(opts)
+func (self *guiCommon) RenderToMainViews(opts types.RefreshMainOpts) {
+	self.gui.refreshMainViews(opts)
 }
 
 func (self *guiCommon) MainViewPairs() types.MainViewPairs {
@@ -182,6 +138,10 @@ func (self *guiCommon) KeybindingsOpts() types.KeybindingsOpts {
 
 func (self *guiCommon) CallKeybindingHandler(binding *types.Binding) error {
 	return self.gui.callKeybindingHandler(binding)
+}
+
+func (self *guiCommon) ResetKeybindings() error {
+	return self.gui.resetKeybindings()
 }
 
 func (self *guiCommon) IsAnyModeActive() bool {

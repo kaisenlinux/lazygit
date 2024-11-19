@@ -452,6 +452,16 @@
           ],
           "description": "Status panel view.\nOne of 'dashboard' (default) | 'allBranchesLog'",
           "default": "dashboard"
+        },
+        "switchToFilesAfterStashPop": {
+          "type": "boolean",
+          "description": "If true, jump to the Files panel after popping a stash",
+          "default": true
+        },
+        "switchToFilesAfterStashApply": {
+          "type": "boolean",
+          "description": "If true, jump to the Files panel after applying a stash",
+          "default": true
         }
       },
       "additionalProperties": false,
@@ -571,6 +581,11 @@
         "fetchAll": {
           "type": "boolean",
           "description": "If true, pass the --all arg to git fetch",
+          "default": true
+        },
+        "autoStageResolvedConflicts": {
+          "type": "boolean",
+          "description": "If true, lazygit will automatically stage files that used to have merge\nconflicts but no longer do; and it will also ask you if you want to\ncontinue a merge or rebase if you've resolved all conflicts. If false, it\nwon't do either of these things.",
           "default": true
         },
         "branchLogCmd": {
@@ -783,7 +798,8 @@
             "sublime",
             "kakoune",
             "helix",
-            "xcode"
+            "xcode",
+            "zed"
           ]
         },
         "open": {
@@ -1232,7 +1248,7 @@
               "type": "string",
               "default": "\u003cc-d\u003e"
             },
-            "executeCustomCommand": {
+            "executeShellCommand": {
               "type": "string",
               "default": ":"
             },

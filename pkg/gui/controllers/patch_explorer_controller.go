@@ -150,10 +150,12 @@ func (self *PatchExplorerController) GetMouseKeybindings(opts types.KeybindingsO
 					return self.withRenderAndFocus(self.HandleMouseDown)()
 				}
 
-				return self.c.PushContext(self.context, types.OnFocusOpts{
+				self.c.Context().Push(self.context, types.OnFocusOpts{
 					ClickedWindowName:  self.context.GetWindowName(),
 					ClickedViewLineIdx: opts.Y,
 				})
+
+				return nil
 			},
 		},
 		{
@@ -173,7 +175,7 @@ func (self *PatchExplorerController) HandlePrevLine() error {
 	after := self.context.GetState().GetSelectedLineIdx()
 
 	if self.context.GetState().SelectingLine() {
-		checkScrollUp(self.context.GetViewTrait(), self.c.UserConfig, before, after)
+		checkScrollUp(self.context.GetViewTrait(), self.c.UserConfig(), before, after)
 	}
 
 	return nil
@@ -185,7 +187,7 @@ func (self *PatchExplorerController) HandleNextLine() error {
 	after := self.context.GetState().GetSelectedLineIdx()
 
 	if self.context.GetState().SelectingLine() {
-		checkScrollDown(self.context.GetViewTrait(), self.c.UserConfig, before, after)
+		checkScrollDown(self.context.GetViewTrait(), self.c.UserConfig(), before, after)
 	}
 
 	return nil
@@ -244,14 +246,12 @@ func (self *PatchExplorerController) HandleScrollRight() error {
 }
 
 func (self *PatchExplorerController) HandlePrevPage() error {
-	self.context.GetState().SetLineSelectMode()
 	self.context.GetState().AdjustSelectedLineIdx(-self.context.GetViewTrait().PageDelta())
 
 	return nil
 }
 
 func (self *PatchExplorerController) HandleNextPage() error {
-	self.context.GetState().SetLineSelectMode()
 	self.context.GetState().AdjustSelectedLineIdx(self.context.GetViewTrait().PageDelta())
 
 	return nil
@@ -293,7 +293,7 @@ func (self *PatchExplorerController) CopySelectedToClipboard() error {
 }
 
 func (self *PatchExplorerController) isFocused() bool {
-	return self.c.CurrentContext().GetKey() == self.context.GetKey()
+	return self.c.Context().Current().GetKey() == self.context.GetKey()
 }
 
 func (self *PatchExplorerController) withRenderAndFocus(f func() error) func() error {
@@ -302,7 +302,8 @@ func (self *PatchExplorerController) withRenderAndFocus(f func() error) func() e
 			return err
 		}
 
-		return self.context.RenderAndFocus(self.isFocused())
+		self.context.RenderAndFocus(self.isFocused())
+		return nil
 	})
 }
 

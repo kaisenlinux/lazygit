@@ -94,7 +94,7 @@ func (self *ContextLinesController) applyChange() error {
 	self.c.Toast(fmt.Sprintf(self.c.Tr.DiffContextSizeChanged, self.c.AppState.DiffContextSize))
 	self.c.SaveAppStateAndLogError()
 
-	currentContext := self.c.CurrentStaticContext()
+	currentContext := self.c.Context().CurrentStatic()
 	switch currentContext.GetKey() {
 	// we make an exception for our staging and patch building contexts because they actually need to refresh their state afterwards.
 	case context.PATCH_BUILDING_MAIN_CONTEXT_KEY:
@@ -102,7 +102,8 @@ func (self *ContextLinesController) applyChange() error {
 	case context.STAGING_MAIN_CONTEXT_KEY, context.STAGING_SECONDARY_CONTEXT_KEY:
 		return self.c.Refresh(types.RefreshOptions{Scope: []types.RefreshableView{types.STAGING}})
 	default:
-		return currentContext.HandleRenderToMain()
+		currentContext.HandleRenderToMain()
+		return nil
 	}
 }
 
@@ -117,6 +118,6 @@ func (self *ContextLinesController) checkCanChangeContext() error {
 func (self *ContextLinesController) isShowingDiff() bool {
 	return lo.Contains(
 		CONTEXT_KEYS_SHOWING_DIFFS,
-		self.c.CurrentStaticContext().GetKey(),
+		self.c.Context().CurrentStatic().GetKey(),
 	)
 }
