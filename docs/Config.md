@@ -87,6 +87,11 @@ gui:
   # - 'top': split the window vertically (side panel on top, main view below)
   enlargedSideViewLocation: left
 
+  # If true, wrap lines in the staging view to the width of the view. This
+  # makes it much easier to work with diffs that have long lines, e.g.
+  # paragraphs of markdown text.
+  wrapLinesInStagingView: true
+
   # One of 'auto' (default) | 'en' | 'zh-CN' | 'zh-TW' | 'pl' | 'nl' | 'ja' | 'ko' | 'ru'
   language: auto
 
@@ -164,6 +169,9 @@ gui:
   # This can be toggled from within Lazygit with the '~' key, but that will not change the default.
   showFileTree: true
 
+  # If true, show the number of lines changed per file in the Files view
+  showNumstatInFilesView: false
+
   # If true, show a random tip in the command log when Lazygit starts
   showRandomTip: true
 
@@ -211,9 +219,9 @@ gui:
   # If 'auto', only split the main window when a file has both staged and unstaged changes
   splitDiff: auto
 
-  # Default size for focused window. Window size can be changed from within Lazygit with '+' and '_' (but this won't change the default).
+  # Default size for focused window. Can be changed from within Lazygit with '+' and '_' (but this won't change the default).
   # One of: 'normal' (default) | 'half' | 'full'
-  windowSize: normal
+  screenMode: normal
 
   # Window border style.
   # One of 'rounded' (default) | 'single' | 'double' | 'hidden'
@@ -251,6 +259,9 @@ gui:
 
   # If true, jump to the Files panel after applying a stash
   switchToFilesAfterStashApply: true
+
+  # If true, when using the panel jump keys (default 1 through 5) and target panel is already active, go to next tab instead
+  switchTabsWithPanelJumpKeys: false
 
 # Config relating to git
 git:
@@ -321,7 +332,7 @@ git:
   branchLogCmd: git log --graph --color=always --abbrev-commit --decorate --date=relative --pretty=medium {{branchName}} --
 
   # Command used to display git log of all branches in the main window.
-  # Deprecated: User `allBranchesLogCmds` instead.
+  # Deprecated: Use `allBranchesLogCmds` instead.
   allBranchesLogCmd: git log --graph --all --color=always --abbrev-commit --decorate --date=relative  --pretty=medium
 
   # If true, do not spawn a separate process when using GPG
@@ -648,6 +659,13 @@ os:
   open: 'open {{filename}}'
 ```
 
+## Custom Command for Opening a Link
+```yaml
+os:
+  openLink: 'bash -C /path/to/your/shell-script.sh {{link}}'
+```
+Specify the external command to invoke when opening URL links (i.e. creating MR/PR in GitLab, BitBucket or GitHub). `{{link}}` will be replaced by the URL to be opened. A simple shell script can be used to further mangle the passed URL.
+
 ## Custom Command for Copying to and Pasting from Clipboard
 ```yaml
 os:
@@ -656,9 +674,26 @@ os:
 Specify an external command to invoke when copying to clipboard is requested. `{{text}` will be replaced by text to be copied. Default is to copy to system clipboard.
 
 If you are working on a terminal that supports OSC52, the following command will let you take advantage of it:
-```
+```yaml
 os:
-  copyToClipboardCmd: printf "\033]52;c;$(printf {{text}} | base64)\a" > /dev/tty
+  copyToClipboardCmd: printf "\033]52;c;$(printf {{text}} | base64 -w 0)\a" > /dev/tty
+```
+
+For tmux you need to wrap it with the [tmux escape sequence](https://github.com/tmux/tmux/wiki/FAQ#what-is-the-passthrough-escape-sequence-and-how-do-i-use-it), and enable passthrough in tmux config with `set -g allow-passthrough on`:
+```yaml
+os:
+  copyToClipboardCmd: printf "\033Ptmux;\033\033]52;c;$(printf {{text}} | base64 -w 0)\a\033\\" > /dev/tty
+```
+
+For the best of both worlds, we can let the command determine if we are running in a tmux session and send the correct sequence:
+```yaml
+os:
+  copyToClipboardCmd: >
+    if [[ "$TERM" =~ ^(screen|tmux) ]]; then
+      printf "\033Ptmux;\033\033]52;c;$(printf {{text}} | base64 -w 0)\a\033\\" > /dev/tty
+    else
+      printf "\033]52;c;$(printf {{text}} | base64 -w 0)\a" > /dev/tty
+    fi
 ```
 
 A custom command for reading from the clipboard can be set using
@@ -904,6 +939,14 @@ git:
       pattern: "^\\w+\\/(\\w+-\\w+).*"
       replace: '[$1] '
 ```
+
+> [!IMPORTANT]
+> The way golang regex works is when you use `$n` in the replacement string, where `n` is a number, it puts the nth captured subgroup at that place. If `n` is out of range because there aren't that many capture groups in the regex, it puts an empty string there.
+>
+> So make sure you are capturing group or groups in your regex.
+>
+> For example `^[A-Z]+-\d+$` won't work on branch name like BRANCH-1111
+> But `^([A-Z]+-\d+)$` will
 
 ## Predefined branch name prefix
 

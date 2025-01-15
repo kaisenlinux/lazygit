@@ -145,11 +145,11 @@ func (self *RebaseCommands) InteractiveRebase(commits []*models.Commit, startIdx
 
 	baseHashOrRoot := getBaseHashOrRoot(commits, baseIndex)
 
-	changes := lo.Map(commits[startIdx:endIdx+1], func(commit *models.Commit, _ int) daemon.ChangeTodoAction {
+	changes := lo.FilterMap(commits[startIdx:endIdx+1], func(commit *models.Commit, _ int) (daemon.ChangeTodoAction, bool) {
 		return daemon.ChangeTodoAction{
 			Hash:      commit.Hash,
 			NewAction: action,
-		}
+		}, !commit.IsMerge()
 	})
 
 	self.os.LogCommand(logTodoChanges(changes), false)
@@ -324,9 +324,9 @@ func (self *RebaseCommands) MoveFixupCommitDown(commits []*models.Commit, target
 
 func todoFromCommit(commit *models.Commit) utils.Todo {
 	if commit.Action == todo.UpdateRef {
-		return utils.Todo{Ref: commit.Name, Action: commit.Action}
+		return utils.Todo{Ref: commit.Name}
 	} else {
-		return utils.Todo{Hash: commit.Hash, Action: commit.Action}
+		return utils.Todo{Hash: commit.Hash}
 	}
 }
 
@@ -335,7 +335,6 @@ func (self *RebaseCommands) EditRebaseTodo(commits []*models.Commit, action todo
 	commitsWithAction := lo.Map(commits, func(commit *models.Commit, _ int) utils.TodoChange {
 		return utils.TodoChange{
 			Hash:      commit.Hash,
-			OldAction: commit.Action,
 			NewAction: action,
 		}
 	})
@@ -370,7 +369,7 @@ func (self *RebaseCommands) MoveTodosDown(commits []*models.Commit) error {
 		return todoFromCommit(commit)
 	})
 
-	return utils.MoveTodosDown(fileName, todosToMove, self.config.GetCoreCommentChar())
+	return utils.MoveTodosDown(fileName, todosToMove, true, self.config.GetCoreCommentChar())
 }
 
 func (self *RebaseCommands) MoveTodosUp(commits []*models.Commit) error {
@@ -379,7 +378,7 @@ func (self *RebaseCommands) MoveTodosUp(commits []*models.Commit) error {
 		return todoFromCommit(commit)
 	})
 
-	return utils.MoveTodosUp(fileName, todosToMove, self.config.GetCoreCommentChar())
+	return utils.MoveTodosUp(fileName, todosToMove, true, self.config.GetCoreCommentChar())
 }
 
 // SquashAllAboveFixupCommits squashes all fixup! commits above the given one
@@ -563,6 +562,13 @@ func (self *RebaseCommands) CherryPickCommitsDuringRebase(commits []*models.Comm
 	todo := daemon.TodoLinesToString(todoLines)
 	filePath := filepath.Join(self.repoPaths.worktreeGitDirPath, "rebase-merge/git-rebase-todo")
 	return utils.PrependStrToTodoFile(filePath, []byte(todo))
+}
+
+func (self *RebaseCommands) DropMergeCommit(commits []*models.Commit, commitIndex int) error {
+	return self.PrepareInteractiveRebaseCommand(PrepareInteractiveRebaseCommandOpts{
+		baseHashOrRoot: getBaseHashOrRoot(commits, commitIndex+1),
+		instruction:    daemon.NewDropMergeCommitInstruction(commits[commitIndex].Hash),
+	}).Run()
 }
 
 // we can't start an interactive rebase from the first commit without passing the
